@@ -2,9 +2,6 @@ cabal-version:      3.0
 name:               on-chain
 version:            0.1.0.0
 
-common base
-   build-depends: base >= 4.14 && < 4.15
-
 common lang
   ghc-options:
     -Werror -Wall -Wcompat -Wincomplete-uni-patterns
@@ -78,7 +75,7 @@ common lang
   default-language:   GHC2021
 
 library
-  import:          base, lang
+  import:          lang
   exposed-modules: 
     AlwaysSucceeds
 
@@ -89,12 +86,11 @@ library
     , plutus-tx-plugin
     , plutus-ledger-api
     , plutus-core
-    , cardano-api
 
   hs-source-dirs:  src
 
 executable on-chain
-  import:         base, lang
+  import:         lang
   main-is:        Main.hs
 
   build-depends:
