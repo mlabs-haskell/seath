@@ -1,7 +1,7 @@
 {
   inputs = {
     plutip.url = github:mlabs-haskell/plutip/8364c43ac6bc9ea140412af9a23c691adf67a18b;
-    cardano-transaction-lib.url = github:Plutonomicon/cardano-transaction-lib/fcdd234cfe71345990f09eb1d6b4e2274faa2405;
+    cardano-transaction-lib.url = github:Plutonomicon/cardano-transaction-lib/205f25b591656b825186d2187fdcba1e00c3df87;
     haskell-nix.follows = "plutip/haskell-nix";
   };
 
@@ -168,9 +168,8 @@
                 nodePackages.eslint
                 nodePackages.prettier
                 ogmios
-                ogmios-datum-cache
                 plutip-server
-                postgresql
+                kupo
               ];
               shellHook =
                 ''
