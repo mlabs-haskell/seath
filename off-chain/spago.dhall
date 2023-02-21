@@ -9,7 +9,10 @@ You can edit this file as you like.
   , "cardano-transaction-lib"
   , "datetime"
   , "effect"
+  , "maybe"
   , "mote"
+  , "newtype"
+  , "undefined"
   , "ordered-collections"
   , "posix-types"
   , "prelude"
@@ -17,5 +20,5 @@ You can edit this file as you like.
   , "uint"
   ]
 , packages = ./packages.dhall
-, sources = [ "src/**/*.purs", "exe/**/*.purs", "test/**/*.purs" ]
+, sources = [ "src/*/*.purs", "exe/**/*.purs", "test/**/*.purs" ]
 }
