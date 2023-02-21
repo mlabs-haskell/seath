@@ -27,6 +27,7 @@
           pkgs = nixpkgsFor system;
           pkgs' = nixpkgsFor' system;
           nativeBuildInputs = with pkgs'; [
+            fd
             git
             nixpkgs-fmt
             asy-ps.purs-tidy
@@ -41,7 +42,7 @@
               export FOURMOLU_EXTENSIONS="-o -XTypeApplications -o -XTemplateHaskell -o -XImportQualifiedPost -o -XPatternSynonyms -o -fplugin=RecordDotPreprocessor"
               set -x
               purs-tidy format-in-place $(fd -epurs)
-              fourmolu $FOURMOLU_EXTENSIONS --mode inplace --check-idempotence $(find on-chain/{exporter,src} -iregex ".*.hs")
+              fourmolu $FOURMOLU_EXTENSIONS --mode inplace --check-idempotence $(find on-chain/{script-export,src} -iregex ".*.hs")
               nixpkgs-fmt $(fd -enix)
               cabal-fmt --inplace $(fd -ecabal)
             '';
@@ -89,7 +90,7 @@
             ];
             modules = plutip.haskellModules;
             shell = {
-              withHoogle = false;
+              withHoogle = true;
               exactDeps = true;
               nativeBuildInputs = with pkgs'; [
                 git
@@ -114,36 +115,36 @@
             };
           };
 
-        script-exporter = system:
+        script-export = system:
           let
             pkgs' = nixpkgsFor' system;
-            exporter = ((projectFor system).flake { }).packages."seath:exe:exporter";
+            script-export = ((projectFor system).flake { }).packages."seath:exe:script-export";
           in
-          pkgs'.runCommandLocal "script-exporter" { }
+          pkgs'.runCommandLocal "script-export" { }
             ''
-              ln -s ${exporter}/bin/exporter $out
+              ln -s ${script-export}/bin/script-export $out
             '';
 
         exported-scripts = system:
           let
             pkgs' = nixpkgsFor' system;
-            exporter = ((projectFor system).flake { }).packages."seath:exe:exporter";
+            script-export = ((projectFor system).flake { }).packages."seath:exe:script-export";
           in
           pkgs'.runCommand "exported-scripts" { }
             ''
               set -e
               mkdir $out
-              ${exporter}/bin/exporter
+              ${script-export}/bin/script-export
             '';
       };
 
-      # OFFCHAIN / Testnet, Cardano, ...
+      # OFF-CHAIN part: CTL, Testnet, etc.
 
       off-chain = {
         projectFor = system:
           let
             pkgs = nixpkgsFor system;
-            exporter = ((on-chain.projectFor system).flake { }).packages."seath:exe:exporter";
+            script-export = ((on-chain.projectFor system).flake { }).packages."seath:exe:script-export";
           in
           pkgs.purescriptProject {
             inherit pkgs;
@@ -154,7 +155,7 @@
                 set -e
                 cp -r ${./off-chain} $out
                 chmod -R +w $out
-                ${exporter}/bin/exporter $out/src
+                ${script-export}/bin/script-export $out/src
               '';
             packageJson = ./off-chain/package.json;
             packageLock = ./off-chain/package-lock.json;
@@ -197,7 +198,7 @@
       packages = perSystem (system:
         self.on-chain.flake.${system}.packages
         // {
-          script-exporter = on-chain.script-exporter system;
+          script-export = on-chain.script-export system;
           exported-scripts = on-chain.exported-scripts system;
         }
       );
@@ -216,10 +217,10 @@
       apps = perSystem (system: {
         docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
         ctl-docs = cardano-transaction-lib.apps.${system}.docs;
-        script-exporter = {
-          # nix run .#script-exporter -- off-chain/src
+        script-export = {
+          # nix run .#script-export -- off-chain/src
           type = "app";
-          program = (on-chain.script-exporter system).outPath;
+          program = (on-chain.script-export system).outPath;
         };
         format = {
           type = "app";
