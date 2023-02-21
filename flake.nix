@@ -216,17 +216,17 @@
       });
 
       apps = perSystem (system: {
-        docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
-        ctl-docs = cardano-transaction-lib.apps.${system}.docs;
         script-export = {
           # nix run .#script-export -- off-chain/src
           type = "app";
           program = (on-chain.script-export system).outPath;
         };
-        format = {
-          type = "app";
-          program = (formatCheckFor system).format.outPath;
-        };
+        # docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
+        # ctl-docs = cardano-transaction-lib.apps.${system}.docs;
+        # format = {
+        #   type = "app";
+        #   program = (formatCheckFor system).format.outPath;
+        # };
       });
     };
 }
