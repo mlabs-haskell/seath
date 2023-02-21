@@ -27,7 +27,7 @@
           pkgs = nixpkgsFor system;
           pkgs' = nixpkgsFor' system;
           nativeBuildInputs = with pkgs'; [
-            pkgs.asy-ps.purs-tidy
+            pkgs.easy-ps.purs-tidy
             fd
             git
             nixpkgs-fmt
