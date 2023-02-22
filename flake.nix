@@ -220,6 +220,7 @@
           type = "app";
           program = (on-chain.script-export system).outPath;
         };
+        ctl-runtime = cardano-transaction-lib.apps.${system}.ctl-runtime; 
         # docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
         # ctl-docs = cardano-transaction-lib.apps.${system}.docs;
         # format = {
