@@ -1,5 +1,5 @@
 {
-  "name": "ctl-scaffold",
+  "name": "seath",
   "version": "0.1.0",
   "description": "",
   "main": "index.js",
@@ -8,7 +8,7 @@
   },
   "scripts": {
     "blockfrost-test": "source ./test/blockfrost.env && spago run --main Scaffold.Test.Blockfrost",
-    "test": "spago run --main Test.Scaffold.Main",
+    "test": "spago run --main Test.Seath.Main",
     "e2e-serve": "make e2e-serve",
     "e2e-test": "source ./test/e2e.env && spago test --main Scaffold.Test.E2E -a 'e2e-test run'",
     "e2e-test-debug": "source ./test/e2e.env && spago test --main Scaffold.Test.E2E -a 'e2e-test run --no-headless'",
