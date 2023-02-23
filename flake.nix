@@ -19,7 +19,8 @@
           cardano-transaction-lib.overlays.purescript
           cardano-transaction-lib.overlays.runtime
         ];
-        inherit (haskell-nix) config;
+      #TODO : this triggers a core dump but may be needed for plutip?
+      #  inherit (haskell-nix) config;
       };
       nixpkgsFor' = system: import nixpkgs { inherit system; };
 
