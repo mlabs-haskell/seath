@@ -27,7 +27,7 @@ cd off-chain
 ### To start default CTL runtime
 
 ```shell
-nix run default-ctl-runtime
+nix run .#default-ctl-runtime
 ```
 
 ### To start serving PureScript docs
