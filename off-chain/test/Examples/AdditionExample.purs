@@ -45,9 +45,9 @@ instance ToData AdditionRedeemer where
   toData (AdditionRedeemer {increaseAmount}) = toData increaseAmount
 
 action2UTxO :: UserAction AdditionAction -> TransactionHash -> Transaction
-action2UTxO userAction useUTxO = 
-  case (unwrap userAction).action of 
-      AddAmount amount -> undefined -- TODO create a transaction consuming useUTxO that 
+action2UTxO userAction useUTxO = undefined
+--  case (unwrap userAction).action of 
+--      AddAmount amount -> undefined -- TODO create a transaction consuming useUTxO that 
       -- need to be signed by leader and user
 
 executeExample :: Aff Unit

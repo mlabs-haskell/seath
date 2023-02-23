@@ -90,7 +90,7 @@ module.exports = {
       debug: true,
     }),
     new HtmlWebpackPlugin({
-      title: "seath",
+      title: "ctl-scaffold",
       template: "./index.html",
       inject: false, // See stackoverflow.com/a/38292765/3067181
     }),

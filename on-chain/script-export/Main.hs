@@ -10,4 +10,5 @@ main = do
 
 writeScriptTo :: String -> FilePath -> IO ()
 writeScriptTo s _path =
-  putStrLn $ "TODO: writing script\n" <> s
+  -- TODO: https://github.com/mlabs-haskell/seath/issues/8
+  putStrLn $ "Serialized script:\n" <> s

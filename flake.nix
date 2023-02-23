@@ -1,11 +1,12 @@
 {
   inputs = {
     plutip.url = github:mlabs-haskell/plutip/8364c43ac6bc9ea140412af9a23c691adf67a18b;
-    cardano-transaction-lib.url = github:Plutonomicon/cardano-transaction-lib/205f25b591656b825186d2187fdcba1e00c3df87;
+    cardano-transaction-lib.url = github:Plutonomicon/cardano-transaction-lib/v5.0.0;
+    nixpkgs.follows = "cardano-transaction-lib/nixpkgs";
     haskell-nix.follows = "plutip/haskell-nix";
   };
 
-  outputs = inputs@{ self, nixpkgs, haskell-nix, plutip, cardano-transaction-lib, ... }:
+  outputs = inputs@{ self, nixpkgs, haskell-nix, cardano-transaction-lib, plutip, ... }:
     let
       # COMMON
       supportedSystems = [ "x86_64-linux" ];
@@ -26,13 +27,13 @@
         let
           pkgs = nixpkgsFor system;
           pkgs' = nixpkgsFor' system;
-          nativeBuildInputs = with pkgs'; [
+          nativeBuildInputs = [
+            pkgs'.fd
+            pkgs'.git
+            pkgs'.nixpkgs-fmt
             pkgs.easy-ps.purs-tidy
-            fd
-            git
-            nixpkgs-fmt
-            haskell.packages.${on-chain.ghcVersion}.cabal-fmt
-            haskell.packages.${on-chain.ghcVersion}.fourmolu
+            pkgs'.haskell.packages.${on-chain.ghcVersion}.cabal-fmt
+            pkgs'.haskell.packages.${on-chain.ghcVersion}.fourmolu
           ];
           inherit (pkgs'.lib) concatStringsSep;
           otherBuildInputs = [ pkgs'.bash pkgs'.coreutils pkgs'.findutils pkgs'.gnumake pkgs'.nix ];
@@ -42,7 +43,7 @@
               export FOURMOLU_EXTENSIONS="-o -XTypeApplications -o -XTemplateHaskell -o -XImportQualifiedPost -o -XPatternSynonyms -o -fplugin=RecordDotPreprocessor"
               set -x
               purs-tidy format-in-place $(fd -epurs)
-              fourmolu $FOURMOLU_EXTENSIONS --mode inplace --check-idempotence $(find on-chain/{script-export,src} -iregex ".*.hs")
+              fourmolu $FOURMOLU_EXTENSIONS --mode inplace --check-idempotence $(find on-chain/{exporter,src} -iregex ".*.hs")
               nixpkgs-fmt $(fd -enix)
               cabal-fmt --inplace $(fd -ecabal)
             '';
@@ -52,7 +53,7 @@
         }
       ;
 
-      # ON-CHAIN part: plutus and plutus-apps
+      # ON-CHAIN: PlutusTx, Cardano.Api
 
       on-chain = rec {
         ghcVersion = "ghc8107";
@@ -95,6 +96,7 @@
               nativeBuildInputs = with pkgs'; [
                 git
                 haskellPackages.apply-refact
+                fd
                 cabal-install
                 hlint
                 haskellPackages.cabal-fmt
@@ -118,44 +120,44 @@
         script-export = system:
           let
             pkgs' = nixpkgsFor' system;
-            script-export = ((projectFor system).flake { }).packages."seath:exe:script-export";
+            exporter = ((projectFor system).flake { }).packages."seath:exe:script-export";
           in
           pkgs'.runCommandLocal "script-export" { }
             ''
-              ln -s ${script-export}/bin/script-export $out
+              ln -s ${exporter}/bin/script-export $out
             '';
 
         exported-scripts = system:
           let
             pkgs' = nixpkgsFor' system;
-            script-export = ((projectFor system).flake { }).packages."seath:exe:script-export";
+            exporter = ((projectFor system).flake { }).packages."seath:exe:script-export";
           in
           pkgs'.runCommand "exported-scripts" { }
             ''
               set -e
               mkdir $out
-              ${script-export}/bin/script-export
+              ${exporter}/bin/script-export
             '';
       };
 
-      # OFF-CHAIN part: CTL, Testnet, etc.
+      # OFF-CHAIN: CTL, Plutip
 
       off-chain = {
         projectFor = system:
           let
             pkgs = nixpkgsFor system;
-            script-export = ((on-chain.projectFor system).flake { }).packages."seath:exe:script-export";
+            exporter = ((on-chain.projectFor system).flake { }).packages."seath:exe:script-export";
           in
           pkgs.purescriptProject {
             inherit pkgs;
-            projectName = "seath";
+            projectName = "seath-off-chain";
             strictComp = false; # TODO: this should be eventually removed
             src = pkgs.runCommandLocal "generated-source" { }
               ''
                 set -e
                 cp -r ${./off-chain} $out
                 chmod -R +w $out
-                ${script-export}/bin/script-export $out/src
+                ${exporter}/bin/script-export $out/src
               '';
             packageJson = ./off-chain/package.json;
             packageLock = ./off-chain/package-lock.json;
@@ -169,7 +171,6 @@
                 nodePackages.prettier
                 ogmios
                 plutip-server
-                kupo
               ];
               shellHook =
                 ''
@@ -203,10 +204,9 @@
       );
       checks = perSystem (system:
         self.on-chain.flake.${system}.checks
-        # FIXME: lines below break `nix flake check`
-        # // {
-        #   seath = self.off-chain.project.${system}.runPlutipTest { testMain = "Test"; };
-        # }
+        // {
+          plutip-tests = self.off-chain.project.${system}.runPlutipTest { testMain = "PlutipCanary"; };
+        }
       );
 
       devShells = perSystem (system: {
@@ -215,14 +215,17 @@
       });
 
       apps = perSystem (system: {
+        default-ctl-runtime = (nixpkgsFor system).launchCtlRuntime { };
+        docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
+        ctl-docs = cardano-transaction-lib.apps.${system}.docs;
         script-export = {
           # nix run .#script-export -- off-chain/src
           type = "app";
           program = (on-chain.script-export system).outPath;
         };
-        ctl-runtime = cardano-transaction-lib.apps.${system}.ctl-runtime; 
-        # docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
-        # ctl-docs = cardano-transaction-lib.apps.${system}.docs;
+        # FIXME: fix formatting and add check to CI
+        # https://github.com/mlabs-haskell/seath/issues/7
+      
         # format = {
         #   type = "app";
         #   program = (formatCheckFor system).format.outPath;
