@@ -172,6 +172,7 @@
                 nodePackages.prettier
                 ogmios
                 plutip-server
+                easy-ps.purs-tidy
               ];
               shellHook =
                 ''
