@@ -1,6 +1,9 @@
 -- | This module is used to serve the E2E tests to the headless browser.
 module Seath.Test.E2E.Serve where
 
+a :: Int
+a = 1
+
 -- import Contract.Prelude
 -- 
 -- import Contract.Config
