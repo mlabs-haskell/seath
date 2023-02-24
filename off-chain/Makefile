@@ -1,6 +1,6 @@
-SHELL := bash	
-.ONESHELL:	
-.SHELLFLAGS := -eu -o pipefail -c	
+#SHELL := bash	
+#.ONESHELL:	
+#.SHELLFLAGS := -eu -o pipefail -c	
 
 ps-sources := $$(fd -epurs)	
 ps-entrypoint := Seath.Main	
