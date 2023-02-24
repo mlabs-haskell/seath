@@ -61,7 +61,6 @@ library
   exposed-modules: 
     AdditionValidator
     Serialize
-    TestScript
     
   other-modules:
   build-depends:
