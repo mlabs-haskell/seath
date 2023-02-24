@@ -1,12 +1,12 @@
 module Main (main) where
 
-import Serialize
-import TestScript
+import AdditionValidator (additionScript)
+import Serialize (toStringEnvelope)
 import Prelude
 
 main :: IO ()
 main = do
-  writeScriptTo (toStringEnvelope testScript) "todo"
+  writeScriptTo (toStringEnvelope additionScript) "todo"
 
 writeScriptTo :: String -> FilePath -> IO ()
 writeScriptTo s _path =
