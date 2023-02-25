@@ -9,6 +9,7 @@ You can edit this file as you like.
   , "cardano-transaction-lib"
   , "datetime"
   , "effect"
+  , "exceptions"
   , "maybe"
   , "mote"
   , "newtype"

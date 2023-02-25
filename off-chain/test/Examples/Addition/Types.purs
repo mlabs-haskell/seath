@@ -58,3 +58,4 @@ instance ToData AdditionRedeemer where
 instance FromData AdditionRedeemer where
   fromData dat = do
     increase <- fromData dat
+    pure $ AdditionRedeemer { increaseAmount: increase }
