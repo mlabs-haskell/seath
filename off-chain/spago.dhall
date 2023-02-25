@@ -5,6 +5,7 @@ You can edit this file as you like.
 { name = "seath"
 , dependencies =
   [ "aff"
+  , "arrays"
   , "bigints"
   , "cardano-transaction-lib"
   , "datetime"
@@ -17,6 +18,8 @@ You can edit this file as you like.
   , "posix-types"
   , "prelude"
   , "spec"
+  , "transformers"
+  , "tuples"
   , "uint"
   , "undefined"
   ]

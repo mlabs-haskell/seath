@@ -5,13 +5,11 @@ module PlutipCanary (main) where
 import Contract.Prelude
 
 import Contract.Config (emptyHooks)
-import Contract.Log (logInfo')
-import Contract.Monad (Contract, launchAff_)
-import Contract.Test.Plutip (runPlutipContract, PlutipConfig)
-import Data.BigInt (fromInt) as BigInt
+import Contract.Monad (launchAff_)
+import Contract.Test.Plutip (PlutipConfig)
 import Data.Time.Duration (Seconds(Seconds))
 import Data.UInt (fromInt) as UInt
-import Seath.Test.Exaxmles.Addition.Contract (simpleTest) as Addition.Contract
+import Seath.Test.Examples.Addition.Contract (simpleTest) as Addition.Contract
 
 main :: Effect Unit
 main = launchAff_ (Addition.Contract.simpleTest config)
