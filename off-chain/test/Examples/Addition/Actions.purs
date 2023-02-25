@@ -4,7 +4,7 @@ import Effect.Aff (Aff)
 import Prelude (Unit)
 import Undefined (undefined)
 
-import Test.Seath.Examples.Addition.Types
+import Seath.Test.Examples.Addition.Types
   ( AdditionAction
   , AdditionDatum
   , AdditionRedeemer
