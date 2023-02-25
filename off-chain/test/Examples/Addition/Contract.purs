@@ -6,12 +6,31 @@ import Contract.Monad (Aff, Contract, liftContractM, liftedE, liftedM)
 import Contract.PlutusData (toData)
 import Contract.Prelude (liftEffect)
 import Contract.ScriptLookups as ScriptLookups
-import Contract.Scripts (class DatumType, class RedeemerType, PlutusScript, Validator, ValidatorHash, applyArgs, validatorHash)
+import Contract.Scripts
+  ( class DatumType
+  , class RedeemerType
+  , PlutusScript
+  , Validator
+  , ValidatorHash
+  , applyArgs
+  , validatorHash
+  )
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (runPlutipContract, PlutipConfig)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Contract.Transaction (TransactionHash, TransactionInput, TransactionOutputWithRefScript, awaitTxConfirmed, submitTxFromConstraints)
-import Contract.TxConstraints (DatumPresence(DatumInline), mustIncludeDatum, mustPayToScript, mustSpendScriptOutput)
+import Contract.Transaction
+  ( TransactionHash
+  , TransactionInput
+  , TransactionOutputWithRefScript
+  , awaitTxConfirmed
+  , submitTxFromConstraints
+  )
+import Contract.TxConstraints
+  ( DatumPresence(DatumInline)
+  , mustIncludeDatum
+  , mustPayToScript
+  , mustSpendScriptOutput
+  )
 import Contract.Utxos (utxosAt)
 import Contract.Wallet (KeyWallet)
 import Control.Applicative (pure)
@@ -30,7 +49,11 @@ import Data.Unit (Unit, unit)
 import Effect.Aff (error)
 import Effect.Exception (throw)
 import Prelude (($), discard, (<<<), (==), (+))
-import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum), AdditionParams, AdditionRedeemer(AdditionRedeemer))
+import Seath.Test.Examples.Addition.Types
+  ( AdditionDatum(AdditionDatum)
+  , AdditionParams
+  , AdditionRedeemer(AdditionRedeemer)
+  )
 import Seath.Test.Exaxmles.Addition.Validator (validatorScript)
 
 data AdditionValidator
@@ -118,7 +141,10 @@ advanceStateContract txId datum increase = do
 getScriptOutputs
   :: ValidatorHash
   -> TransactionHash
-  -> Contract (TransactionInput /\ Map TransactionInput TransactionOutputWithRefScript)
+  -> Contract
+       ( TransactionInput /\
+           Map TransactionInput TransactionOutputWithRefScript
+       )
 getScriptOutputs hash txId = do
   netId <- getNetworkId
   validatorAddress <- liftContractM "cannot get validator address"
