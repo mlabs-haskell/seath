@@ -2,5 +2,5 @@
   cabal:
     - path: "./src"
       component: "lib:seath"
-    - path: "./exporter"
-      component: "exe:exporter"
+    - path: "./script-export"
+      component: "exe:script-export"
