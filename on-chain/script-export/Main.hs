@@ -15,7 +15,18 @@ writeScriptTo s name =
       validatorType = "validatorScript :: String"
       replacedS = concatMap (\x -> if x == '"' then "\\\"" else [x]) s
       validatorFunction = "validatorScript = \"" <> replacedS <> "\""
+      pursFilePath = "../off-chain/test/Examples/Addition/Validator.purs"
+      fileContent =
+        mconcat $
+          map
+            (++ "\n")
+            [ moduleHeader,
+              "",
+              validatorType,
+              validatorFunction
+            ]
    in do
+        writeFile pursFilePath fileContent
         putStrLn moduleHeader
         putStrLn ""
         putStrLn validatorType
