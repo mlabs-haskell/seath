@@ -131,7 +131,7 @@ advanceStateContract txId datum increase = do
         DatumInline
         mempty
         <> mustSpendScriptOutput txIn (wrap $ toData redeemer)
-        <> mustIncludeDatum (wrap $ toData datum)
+        -- <> mustIncludeDatum (wrap $ toData datum) -- FIXME: causes Tx submission error
   transactionId <- submitTxFromConstraints lookups constraints
   logInfo' $ "Tx ID: " <> show transactionId
   awaitTxConfirmed transactionId
