@@ -1,6 +1,6 @@
 module Main (main) where
 
-import AdditionValidator (additionScript)
+import AdditionValidator (additionScript, datum1, datum2, redeemer1)
 import Serialize (toStringEnvelope)
 import Prelude
 
@@ -31,3 +31,6 @@ writeScriptTo s name =
         putStrLn ""
         putStrLn validatorType
         putStrLn validatorFunction
+        putStrLn datum1
+        putStrLn datum2
+        putStrLn redeemer1

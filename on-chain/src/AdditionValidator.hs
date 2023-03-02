@@ -6,9 +6,16 @@ module AdditionValidator (
   additionScript,
   mkAdditionValidator,
   getAdditionValidator,
+  datum1,
+  datum2,
+  redeemer1,
 ) where
 
 import Data.Eq.Deriving (deriveEq)
+import Data.Kind (Type)
+
+--import Data.Result (foldResult)
+import Data.String (String)
 import GHC.Generics (Generic)
 import Ledger (Datum, scriptHashAddress)
 import Plutus.Script.Utils.V2.Typed.Scripts qualified as Scripts
@@ -16,18 +23,43 @@ import Plutus.Script.Utils.V2.Typed.Scripts.Validators qualified as Validators
 import Plutus.V2.Ledger.Api (
   Address,
   Datum (Datum),
-  OutputDatum (OutputDatum),
+  OutputDatum (NoOutputDatum, OutputDatum),
   Script,
   ScriptContext (ScriptContext),
+  ToData,
   TxInfo (TxInfo, txInfoOutputs),
   TxOut (TxOut),
   ValidatorHash,
+  fromBuiltinData,
   fromCompiledCode,
   toBuiltinData,
+  toData,
  )
+import Plutus.V2.Ledger.Contexts (findOwnInput)
 import PlutusTx qualified
+import PlutusTx.Bool (Bool (False, True))
 import PlutusTx.Integer (Integer)
-import PlutusTx.Prelude (Bool (False), Maybe (Just, Nothing), (+), (.), (==))
+import PlutusTx.Maybe (Maybe (Just, Nothing), maybe)
+import PlutusTx.Prelude (
+  Applicative,
+  BuiltinData,
+  BuiltinString,
+  Functor,
+  check,
+  filter,
+  fmap,
+  pure,
+  ($),
+  (&&),
+  (+),
+  (.),
+  (<),
+  (<$>),
+  (<*>),
+  (<=),
+  (<>),
+  (==),
+ )
 import PlutusTx.Trace qualified as Trace
 import Prelude qualified as Hask
 
@@ -44,6 +76,7 @@ PlutusTx.makeIsDataIndexed
 deriveEq ''AdditionDatum
 
 data AdditionRedeemer = AdditionRedeemer {increaseAmount :: Integer}
+  deriving stock (Generic, Hask.Show)
 
 PlutusTx.makeLift ''AdditionRedeemer
 PlutusTx.makeIsDataIndexed
@@ -51,6 +84,45 @@ PlutusTx.makeIsDataIndexed
   [('AdditionRedeemer, 0)]
 
 deriveEq ''AdditionRedeemer
+
+toDataString :: forall (a :: Type). (ToData a, Hask.Show a) => a -> String
+toDataString x = Hask.show $ toData x
+
+datum1 :: String
+datum1 = toDataString $ AdditionDatum 100
+
+datum2 :: String
+datum2 = toDataString $ AdditionDatum 300
+
+redeemer1 :: String
+redeemer1 = toDataString $ AdditionRedeemer 200
+
+data Result a
+  = Ok a
+  | Err BuiltinString
+
+instance Functor Result where
+  {-# INLINEABLE fmap #-}
+  fmap f (Ok x) = Ok (f x)
+  fmap _ (Err e) = Err e
+
+instance Applicative Result where
+  {-# INLINEABLE pure #-}
+  pure = Ok
+  {-# INLINEABLE (<*>) #-}
+  Ok f <*> Ok x = Ok (f x)
+  Err e <*> Ok _ = Err e
+  Ok _ <*> Err e = Err e
+  Err e1 <*> Err e2 = Err (e1 <> "; " <> e2)
+
+{-# INLINEABLE err #-}
+err :: BuiltinString -> Result a
+err = Err
+
+{-# INLINEABLE foldResult #-}
+foldResult :: (BuiltinString -> b) -> (a -> b) -> Result a -> b
+foldResult _ onOk (Ok x) = onOk x
+foldResult onErr _ (Err e) = onErr e
 
 {-# INLINEABLE mkAdditionValidator #-}
 mkAdditionValidator ::
@@ -60,13 +132,23 @@ mkAdditionValidator ::
   ScriptContext ->
   Bool
 mkAdditionValidator _ datum redeemer context =
-  case getOutputs context of
+  case filter hasOutputDatum $ getOutputs context of
     [getDatumHash -> Just datHash] ->
-      -- TODO : Check that the redeemer only contains positive values
-      Trace.traceIfFalse
-        "Datum is updated incorrectly"
-        (datumIsUpdated datum redeemer datHash)
-    _ -> Trace.trace "Only one Datum was expected" False
+      Trace.trace "Checking redeemer and Datum" $
+        Trace.traceIfFalse "Redeemer isn't updated" (0 < increaseAmount redeemer)
+          && Trace.traceIfFalse
+            "Datum is updated incorrectly"
+            (datumIsUpdated datum redeemer datHash)
+    others -> Trace.trace "Only one UTxO with attached Datum was expected" False
+
+mkAdditionValidator' :: BuiltinData -> BuiltinData -> BuiltinData -> BuiltinData -> ()
+mkAdditionValidator' params datum redeemer context =
+  foldResult Trace.traceError check $
+    mkAdditionValidator
+      <$> maybe (err "Failed to parse params") pure (fromBuiltinData params)
+      <*> maybe (err "Failed to parse datum") pure (fromBuiltinData datum)
+      <*> maybe (err "Failed to parse redeemer") pure (fromBuiltinData redeemer)
+      <*> maybe (err "Failed to parse context") pure (fromBuiltinData context)
 
 {-# INLINEABLE getOutputs #-}
 getOutputs :: ScriptContext -> [TxOut]
@@ -79,6 +161,10 @@ datumIsUpdated (AdditionDatum locked) (AdditionRedeemer toAdd) newDatum =
       expectedDatum :: Datum
       expectedDatum = (Datum . toBuiltinData . AdditionDatum) expectedLockedValue
    in expectedDatum == newDatum
+
+hasOutputDatum :: TxOut -> Bool
+hasOutputDatum (TxOut _ _ NoOutputDatum _) = False
+hasOutputDatum _ = True
 
 {-# INLINEABLE getDatumHash #-}
 -- we can use `import Plutus.V2.Ledger.Tx (outDatum)` instead
@@ -115,4 +201,4 @@ getAdditionValidatorAddress :: AdditionParams -> Address
 getAdditionValidatorAddress = scriptHashAddress . getAdditionValidatorHash
 
 additionScript :: Script
-additionScript = fromCompiledCode $$(PlutusTx.compile [||mkAdditionValidator||])
+additionScript = fromCompiledCode $$(PlutusTx.compile [||mkAdditionValidator'||])
