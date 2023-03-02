@@ -2,7 +2,7 @@
   "importSort": "ide",
   "importWrap": "auto",
   "indent": 2,
-  "operatorsFile": null,
+  "operatorsFile": ".tidyoperators",
   "ribbon": 1,
   "typeArrowPlacement": "first",
   "unicode": "source",
