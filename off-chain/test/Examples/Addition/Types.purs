@@ -11,13 +11,13 @@ import Contract.PlutusData
   , class HasPlutusSchema
   , class ToData
   , type (:+)
-  , type (@@)
   , type (:=)
+  , type (@@)
+  , I
   , PNil
   , Z
   , genericFromData
   , genericToData
-  , I
   )
 import Contract.Prelude (genericShow)
 import Data.BigInt (BigInt)

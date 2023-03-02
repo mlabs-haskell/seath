@@ -5,12 +5,28 @@ import Contract.Monad (Aff, Contract, liftedE, liftedM)
 import Contract.PlutusData (Datum, toData)
 import Contract.Prelude (liftEffect)
 import Contract.ScriptLookups as ScriptLookups
-import Contract.Scripts (class DatumType, class RedeemerType, PlutusScript, Validator, ValidatorHash, applyArgs, validatorHash)
+import Contract.Scripts
+  ( class DatumType
+  , class RedeemerType
+  , PlutusScript
+  , Validator
+  , ValidatorHash
+  , applyArgs
+  , validatorHash
+  )
 import Contract.Test (withKeyWallet)
-import Contract.Test.Plutip (runPlutipContract, PlutipConfig)
+import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Contract.Transaction (TransactionHash, awaitTxConfirmed, submitTxFromConstraints)
-import Contract.TxConstraints (DatumPresence(DatumInline), mustPayToScript, mustSpendScriptOutput)
+import Contract.Transaction
+  ( TransactionHash
+  , awaitTxConfirmed
+  , submitTxFromConstraints
+  )
+import Contract.TxConstraints
+  ( DatumPresence(DatumInline)
+  , mustPayToScript
+  , mustSpendScriptOutput
+  )
 import Contract.Wallet (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind, (>>=))
@@ -19,17 +35,25 @@ import Data.Array (head, tail)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Maybe (Maybe(Just, Nothing))
-import Data.Monoid ((<>), mempty)
+import Data.Monoid (mempty, (<>))
 import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Show (show)
-import Data.Tuple.Nested ((/\), type (/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit, unit)
 import Effect.Aff (error)
 import Effect.Exception (throw)
-import Prelude (($), discard, (<<<), (+))
-import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum), AdditionParams, AdditionRedeemer(AdditionRedeemer))
+import Prelude (discard, ($), (+), (<<<))
+import Seath.Test.Examples.Addition.Types
+  ( AdditionDatum(AdditionDatum)
+  , AdditionParams
+  , AdditionRedeemer(AdditionRedeemer)
+  )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
-import Seath.Test.Examples.Utils (genPlutipWalletConfig, getScriptInputAndUtxos, getScriptUtxos)
+import Seath.Test.Examples.Utils
+  ( genPlutipWalletConfig
+  , getScriptInputAndUtxos
+  , getScriptUtxos
+  )
 
 data AdditionValidator
 

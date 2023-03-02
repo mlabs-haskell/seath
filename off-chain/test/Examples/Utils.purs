@@ -11,7 +11,15 @@ import Contract.Monad (Contract, liftContractM, liftedE)
 import Contract.PlutusData (class IsData)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (class ValidatorTypes, ValidatorHash)
-import Contract.Transaction (TransactionHash, TransactionInput, _input, balanceTx, lookupTxHash, signTransaction, submit)
+import Contract.Transaction
+  ( TransactionHash
+  , TransactionInput
+  , _input
+  , balanceTx
+  , lookupTxHash
+  , signTransaction
+  , submit
+  )
 import Contract.TxConstraints (TxConstraints)
 import Contract.Utxos (UtxoMap, utxosAt)
 import Control.Applicative (pure)
@@ -23,8 +31,8 @@ import Data.Lens (view)
 import Data.Maybe (Maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
-import Data.Tuple.Nested ((/\), type (/\))
-import Prelude (($), discard)
+import Data.Tuple.Nested (type (/\), (/\))
+import Prelude (discard, ($))
 
 submitTxFromConstraintsWithLog
   :: forall (validator :: Type) (datum :: Type)
