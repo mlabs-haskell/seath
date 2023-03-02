@@ -6,9 +6,7 @@ import Contract.PlutusData (Datum, toData)
 import Contract.Prelude (liftEffect)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts
-  ( class DatumType
-  , class RedeemerType
-  , PlutusScript
+  ( PlutusScript
   , Validator
   , ValidatorHash
   , applyArgs
@@ -47,6 +45,7 @@ import Seath.Test.Examples.Addition.Types
   ( AdditionDatum(AdditionDatum)
   , AdditionParams
   , AdditionRedeemer(AdditionRedeemer)
+  , AdditionValidator
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
 import Seath.Test.Examples.Utils
@@ -55,10 +54,6 @@ import Seath.Test.Examples.Utils
   , getScriptUtxos
   )
 
-data AdditionValidator
-
-instance DatumType AdditionValidator AdditionDatum
-instance RedeemerType AdditionValidator AdditionRedeemer
 
 newtype ActionNumber = ActionNumber Int
 

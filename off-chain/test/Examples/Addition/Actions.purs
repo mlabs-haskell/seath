@@ -1,22 +1,26 @@
-module Test.Seath.Examples.Addition.Actions (executeExample) where
+module Seath.Test.Examples.Addition.Actions (action2ConstraintsAndLookup) where
 
-import Contract.Transaction (Transaction, TransactionHash)
-import Effect.Aff (Aff)
-import Prelude (Unit)
+import Contract.Monad (Contract)
+import Contract.ScriptLookups (ScriptLookups)
+import Contract.TxConstraints (TxConstraints)
+import Data.Newtype (unwrap)
+import Data.Tuple.Nested (type (/\))
+import Seath.Data (UserAction)
 import Seath.Test.Examples.Addition.Types
-  ( AdditionAction
+  ( AdditionAction(AddAmount)
   , AdditionDatum
   , AdditionRedeemer
+  , AdditionValidator
   )
-import SeathData (UserAction)
 import Undefined (undefined)
 
-action2UTxO :: UserAction AdditionAction -> TransactionHash -> Transaction
-action2UTxO userAction useUTxO = undefined
-
---  case (unwrap userAction).action of 
---      AddAmount amount -> undefined -- TODO create a transaction consuming useUTxO that 
--- need to be signed by leader and user
-
-executeExample :: Aff Unit
-executeExample = undefined
+-- TODO : How can we pass the old datum to this function? 
+action2ConstraintsAndLookup
+  :: UserAction AdditionAction
+  -> Contract
+       ( TxConstraints AdditionRedeemer AdditionDatum /\ ScriptLookups
+           AdditionValidator
+       )
+action2ConstraintsAndLookup userAction =
+  case (unwrap userAction).action of
+    AddAmount _ -> undefined
