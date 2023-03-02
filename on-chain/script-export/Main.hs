@@ -1,8 +1,13 @@
 module Main (main) where
 
-import AdditionValidator (additionScript, datum1, datum2, redeemer1)
+import AdditionValidator (additionScript)
+import Data.Eq ((==))
+import Data.Foldable (concatMap)
+import Data.List (unlines)
+import Data.Monoid ((<>))
+import Data.String (String)
 import Serialize (toStringEnvelope)
-import Prelude
+import System.IO (IO, putStrLn, writeFile)
 
 main :: IO ()
 main = do
@@ -17,20 +22,15 @@ writeScriptTo s name =
       validatorFunction = "validatorScript = \"" <> replacedS <> "\""
       pursFilePath = "off-chain/test/Examples/Addition/Validator.purs"
       fileContent =
-        mconcat $
-          map
-            (++ "\n")
-            [ moduleHeader
-            , ""
-            , validatorType
-            , validatorFunction
-            ]
+        unlines
+          [ moduleHeader
+          , ""
+          , validatorType
+          , validatorFunction
+          ]
    in do
         writeFile pursFilePath fileContent
         putStrLn moduleHeader
         putStrLn ""
         putStrLn validatorType
         putStrLn validatorFunction
-        putStrLn datum1
-        putStrLn datum2
-        putStrLn redeemer1

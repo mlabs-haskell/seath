@@ -17,8 +17,8 @@ common common
     -fno-omit-interface-pragmas -fno-specialize -fno-strictness
     -fno-warn-orphans -fobject-code -fplugin-opt
     PlutusTx.Plugin:defer-errors
-    -- -Wmissing-import-lists
-    -- -Werror 
+    -Wmissing-import-lists
+    -Werror 
 
   build-depends:      base ^>=4.14
   default-extensions:

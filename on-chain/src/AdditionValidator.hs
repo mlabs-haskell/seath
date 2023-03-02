@@ -6,16 +6,9 @@ module AdditionValidator (
   additionScript,
   mkAdditionValidator,
   getAdditionValidator,
-  datum1,
-  datum2,
-  redeemer1,
 ) where
 
 import Data.Eq.Deriving (deriveEq)
-import Data.Kind (Type)
-
---import Data.Result (foldResult)
-import Data.String (String)
 import GHC.Generics (Generic)
 import Ledger (Datum, scriptHashAddress)
 import Plutus.Script.Utils.V2.Typed.Scripts qualified as Scripts
@@ -26,16 +19,13 @@ import Plutus.V2.Ledger.Api (
   OutputDatum (NoOutputDatum, OutputDatum),
   Script,
   ScriptContext (ScriptContext),
-  ToData,
   TxInfo (TxInfo, txInfoOutputs),
   TxOut (TxOut),
   ValidatorHash,
   fromBuiltinData,
   fromCompiledCode,
   toBuiltinData,
-  toData,
  )
-import Plutus.V2.Ledger.Contexts (findOwnInput)
 import PlutusTx qualified
 import PlutusTx.Bool (Bool (False, True))
 import PlutusTx.Integer (Integer)
@@ -56,17 +46,15 @@ import PlutusTx.Prelude (
   (<),
   (<$>),
   (<*>),
-  (<=),
   (<>),
   (==),
  )
 import PlutusTx.Trace qualified as Trace
-import Prelude qualified as Hask
 
 type AdditionParams = ()
 
 data AdditionDatum = AdditionDatum {lockedAmount :: Integer}
-  deriving stock (Generic, Hask.Show)
+  deriving stock (Generic)
 
 PlutusTx.makeLift ''AdditionDatum
 PlutusTx.makeIsDataIndexed
@@ -76,7 +64,7 @@ PlutusTx.makeIsDataIndexed
 deriveEq ''AdditionDatum
 
 data AdditionRedeemer = AdditionRedeemer {increaseAmount :: Integer}
-  deriving stock (Generic, Hask.Show)
+  deriving stock (Generic)
 
 PlutusTx.makeLift ''AdditionRedeemer
 PlutusTx.makeIsDataIndexed
@@ -84,18 +72,6 @@ PlutusTx.makeIsDataIndexed
   [('AdditionRedeemer, 0)]
 
 deriveEq ''AdditionRedeemer
-
-toDataString :: forall (a :: Type). (ToData a, Hask.Show a) => a -> String
-toDataString x = Hask.show $ toData x
-
-datum1 :: String
-datum1 = toDataString $ AdditionDatum 100
-
-datum2 :: String
-datum2 = toDataString $ AdditionDatum 300
-
-redeemer1 :: String
-redeemer1 = toDataString $ AdditionRedeemer 200
 
 data Result a
   = Ok a
@@ -139,7 +115,7 @@ mkAdditionValidator _ datum redeemer context =
           && Trace.traceIfFalse
             "Datum is updated incorrectly"
             (datumIsUpdated datum redeemer datHash)
-    others -> Trace.trace "Only one UTxO with attached Datum was expected" False
+    _ -> Trace.trace "Only one UTxO with attached Datum was expected" False
 
 mkAdditionValidator' :: BuiltinData -> BuiltinData -> BuiltinData -> BuiltinData -> ()
 mkAdditionValidator' params datum redeemer context =
