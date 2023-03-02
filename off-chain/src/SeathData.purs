@@ -1,15 +1,24 @@
-module SeathData where
+module Seath.Data (UserAction(UserAction), LeaderData(LeaderData)) where
 
-import Actions (class SeathAction)
+import Contract.Prelude (class Newtype, Unit, undefined)
 import Contract.Transaction (PublicKey, TransactionHash)
-import Data.Newtype (class Newtype)
-import Undefined (undefined)
+import Data.Newtype (wrap)
 
-data UserAction a = UserAction
-  { publickKey :: PublicKey
+newtype UserAction a = UserAction
+  { publicKey :: PublicKey
   , action :: a
-  , userUTxos :: Array TransactionHash
+  , userUTxo :: TransactionHash
   }
 
-instance SeathAction a => SeathAction (UserAction a) where
-  seathToData = undefined
+instance
+  Newtype (UserAction a)
+    { publicKey :: PublicKey
+    , action :: a
+    , userUTxo :: TransactionHash
+    }
+
+newtype LeaderData = LeaderData
+  { publicKey :: PublicKey
+  }
+
+derive instance Newtype LeaderData _
