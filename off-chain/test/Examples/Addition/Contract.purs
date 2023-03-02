@@ -1,45 +1,87 @@
-module Seath.Test.Examples.Addition.Contract (simpleTest) where
+module Seath.Test.Examples.Addition.Contract (mainTest) where
 
-import Contract.Address (getNetworkId, validatorHashEnterpriseAddress)
 import Contract.Log (logInfo')
-import Contract.Monad (Aff, Contract, liftContractM, liftedE, liftedM)
-import Contract.PlutusData (class IsData, Datum(..), PlutusData, toData)
+import Contract.Monad (Aff, Contract, liftedE, liftedM)
+import Contract.PlutusData (Datum, toData)
 import Contract.Prelude (liftEffect)
-import Contract.ScriptLookups (mkUnbalancedTx)
 import Contract.ScriptLookups as ScriptLookups
-import Contract.Scripts (class DatumType, class RedeemerType, class ValidatorTypes, PlutusScript, Validator, ValidatorHash, applyArgs, validatorHash)
+import Contract.Scripts (class DatumType, class RedeemerType, PlutusScript, Validator, ValidatorHash, applyArgs, validatorHash)
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (runPlutipContract, PlutipConfig)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Contract.Transaction (Redeemer, TransactionHash, TransactionInput, TransactionOutputWithRefScript, awaitTxConfirmed
-    , balanceTx
-  , signTransaction, submit)
-import Contract.TxConstraints (DatumPresence(DatumInline), TxConstraints, mustIncludeDatum, mustPayToScript, mustSpendScriptOutput)
-import Contract.Utxos (utxosAt)
+import Contract.Transaction (TransactionHash, awaitTxConfirmed, submitTxFromConstraints)
+import Contract.TxConstraints (DatumPresence(DatumInline), mustPayToScript, mustSpendScriptOutput)
 import Contract.Wallet (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind, (>>=))
 import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (filter, head)
+import Data.Array (head, tail)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
-import Data.Map (Map)
-import Data.Map as Map
+import Data.Maybe (Maybe(Just, Nothing))
 import Data.Monoid ((<>), mempty)
-import Data.Newtype (unwrap, wrap)
+import Data.Newtype (class Newtype, unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple.Nested ((/\), type (/\))
 import Data.Unit (Unit, unit)
 import Effect.Aff (error)
 import Effect.Exception (throw)
-import Prelude (($), discard, (<<<), (==), (+))
+import Prelude (($), discard, (<<<), (+))
 import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum), AdditionParams, AdditionRedeemer(AdditionRedeemer))
-import Seath.Test.Exaxmles.Addition.Validator (validatorScript)
+import Seath.Test.Examples.Addition.Validator (validatorScript)
+import Seath.Test.Examples.Utils (genPlutipWalletConfig, getScriptInputAndUtxos, getScriptUtxos)
 
 data AdditionValidator
 
 instance DatumType AdditionValidator AdditionDatum
 instance RedeemerType AdditionValidator AdditionRedeemer
+
+newtype ActionNumber = ActionNumber Int
+
+derive instance Newtype ActionNumber _
+
+mainTest :: PlutipConfig -> Aff Unit
+mainTest config = runPlutipContract config distribution $ plutipAction increase
+  where
+  walletNumber :: Int
+  walletNumber = 10
+
+  distribution :: Array (Array BigInt)
+  distribution = genPlutipWalletConfig walletNumber
+
+  increase :: Int
+  increase = 200
+
+plutipAction
+  :: Int
+  -> Array KeyWallet
+  -> Contract Unit
+plutipAction increase wallets = do
+  _ /\ valHash <- getValidatorAndHash unit
+  case head wallets of
+    Just firstWallet -> do
+      txId /\ datum <- withKeyWallet firstWallet initialContract
+      logState valHash
+      _ <- loop valHash (tail wallets) txId datum
+      pure unit
+    Nothing -> liftEffect $ throw "Can't consume plutip configuration"
+  where
+  -- TODO: Maybe we can change this for a `traverse` with a environment? 
+  loop
+    :: ValidatorHash
+    -> Maybe (Array KeyWallet)
+    -> TransactionHash
+    -> AdditionDatum
+    -> Contract (TransactionHash /\ AdditionDatum)
+  loop valHash' (Just wallets') txId datum =
+    case head wallets' of
+      Just wallet -> do
+        (txId2 /\ datum2) <- withKeyWallet wallet
+          $ advanceStateContract txId datum increase
+        logState valHash'
+        loop valHash' (tail wallets') txId2 datum2
+      Nothing -> pure $ txId /\ datum
+  loop _ Nothing txId datum = pure $ txId /\ datum
 
 importValidator :: AdditionParams -> Contract PlutusScript
 importValidator params = do
@@ -55,25 +97,10 @@ getValidatorAndHash params = do
   let validator = wrap script
   pure $ validator /\ validatorHash validator
 
-simpleTest :: PlutipConfig -> Aff Unit
-simpleTest config = runPlutipContract config distribution onchainActions
-  where
-  distribution :: Array (Array BigInt)
-  distribution = [ [ BigInt.fromInt 1_000_000_000 ] ]
-
-  onchainActions :: Array KeyWallet -> Contract Unit
-  onchainActions [ onlyWallet ] = do
-    validator /\ hash <- getValidatorAndHash unit
-    (txId1 /\ datum1) <-
-      withKeyWallet onlyWallet initialContract
-    let increase = 200
-    (_ /\ afterFirstTransaction) <- getScriptOutputs hash txId1
-    logInfo' $ "afterFirstTransaction: " <> show afterFirstTransaction
-    (txId2 /\ _) <- withKeyWallet onlyWallet $ advanceStateContract txId1 datum1 increase
-    (_ /\ afterSecondTransaction) <- getScriptOutputs hash txId2
-    logInfo' $ "afterSecondTransaction: " <> show afterSecondTransaction
-    pure unit
-  onchainActions _ = liftEffect $ throw "Can't consume plutip configuration"
+logState :: ValidatorHash -> Contract Unit
+logState hash = do
+  state <- getScriptUtxos hash
+  logInfo' $ "State: " <> show state
 
 initialContract :: Contract (TransactionHash /\ AdditionDatum)
 initialContract = do
@@ -86,11 +113,9 @@ initialContract = do
       (wrap $ toData datum)
       DatumInline
       mempty
-  logInfo' $ "firstDatum: " <> (show :: Datum -> String) (wrap $ toData datum)
-  transactionId <- submitTxFromConstraintsWithLog lookups constraints
-  logInfo' $ "Tx ID: " <> show transactionId
+  logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
+  transactionId <- submitTxFromConstraints lookups constraints
   awaitTxConfirmed transactionId
-  logInfo' "Confirmed tx"
   pure $ transactionId /\ datum
 
 advanceStateContract
@@ -100,7 +125,10 @@ advanceStateContract
   -> Contract (TransactionHash /\ AdditionDatum)
 advanceStateContract txId datum increase = do
   (validator /\ hash) <- getValidatorAndHash unit
-  (txIn /\ scriptUtxos) <- getScriptOutputs hash txId
+  (maybeTxIn /\ scriptUtxos) <- getScriptInputAndUtxos hash txId
+  txIn <- liftMaybe
+    (error $ "Can't find UTxO " <> show txId <> " locked by the script.")
+    maybeTxIn
   let
     redeemer = AdditionRedeemer { increaseAmount: BigInt.fromInt increase }
     newDatum = AdditionDatum
@@ -115,46 +143,8 @@ advanceStateContract txId datum increase = do
         DatumInline
         mempty
         <> mustSpendScriptOutput txIn (wrap $ toData redeemer)
-        -- <> mustIncludeDatum (wrap $ toData datum) -- FIXME: causes Tx submission error
-  logInfo' $ "newDatum: " <> (show :: Datum -> String) (wrap $ toData newDatum)
+  logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData newDatum)
   logInfo' $ "redeemer: " <> show (toData redeemer)
-  transactionId <- submitTxFromConstraintsWithLog lookups constraints
-  logInfo' $ "Tx ID: " <> show transactionId
+  transactionId <- submitTxFromConstraints lookups constraints
   awaitTxConfirmed transactionId
-  logInfo' "Confirmed tx"
   pure $ transactionId /\ newDatum
-
-getScriptOutputs
-  :: ValidatorHash
-  -> TransactionHash
-  -> Contract
-       ( TransactionInput /\
-           Map TransactionInput TransactionOutputWithRefScript
-       )
-getScriptOutputs hash txId = do
-  netId <- getNetworkId
-  validatorAddress <- liftContractM "cannot get validator address"
-    (validatorHashEnterpriseAddress netId hash)
-  scriptUtxos <- utxosAt validatorAddress
-  (txIn /\ _) <- liftMaybe (error $ "cannot find transaction: " <> show txId)
-    $ head
-    $ filter (\(input /\ _) -> (unwrap input).transactionId == txId)
-    $ Map.toUnfoldable scriptUtxos
-  pure (txIn /\ scriptUtxos)
-
-submitTxFromConstraintsWithLog
-  :: forall (validator :: Type) (datum :: Type)
-       (redeemer :: Type)
-   . ValidatorTypes validator datum redeemer
-  => IsData datum
-  => IsData redeemer
-  => ScriptLookups.ScriptLookups validator
-  -> TxConstraints redeemer datum
-  -> Contract TransactionHash
-submitTxFromConstraintsWithLog lookups constraints = do
-  unbalancedTx <- liftedE $ mkUnbalancedTx lookups constraints
-  logInfo' $ "unbalancedTx: " <> show unbalancedTx
-  balancedTx <- liftedE $ balanceTx unbalancedTx
-  balancedSignedTx <- signTransaction balancedTx
-  txHash <- submit balancedSignedTx
-  pure txHash

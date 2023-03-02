@@ -1,9 +1,8 @@
-module ScriptLoading(loadScript,Path(Path)) where
+module ScriptLoading (loadScript, Path(Path)) where
 
 import Contract.Prelude (class Newtype)
 import Contract.Scripts (Validator)
 import Undefined (undefined)
-
 
 newtype Path = Path String
 
