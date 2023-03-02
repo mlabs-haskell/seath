@@ -203,7 +203,7 @@
         self.on-chain.flake.${system}.packages
         // {
           script-export = on-chain.script-export system;
-          exported-scripts = on-chain.exported-scripts system;
+          # exported-scripts = on-chain.exported-scripts system;
         }
       );
       checks = perSystem (system:
