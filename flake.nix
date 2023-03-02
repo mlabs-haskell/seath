@@ -19,8 +19,8 @@
           cardano-transaction-lib.overlays.purescript
           cardano-transaction-lib.overlays.runtime
         ];
-      #TODO : this triggers a core dump but may be needed for plutip?
-      #  inherit (haskell-nix) config;
+        #TODO : this triggers a core dump but may be needed for plutip?
+        #  inherit (haskell-nix) config;
       };
       nixpkgsFor' = system: import nixpkgs { inherit system; };
 
@@ -158,8 +158,10 @@
                 set -e
                 cp -r ${./off-chain} $out
                 chmod -R +w $out
-                ${exporter}/bin/script-export $out/src
               '';
+            # ${exporter}/bin/script-export $out/src
+            # ^^^ moved out from script above (it was last command in the script)
+            # as we have path argument hardcoded for now and module already generated
             packageJson = ./off-chain/package.json;
             packageLock = ./off-chain/package-lock.json;
             shell = {
@@ -207,7 +209,9 @@
       checks = perSystem (system:
         self.on-chain.flake.${system}.checks
         // {
-          plutip-tests = self.off-chain.project.${system}.runPlutipTest { testMain = "PlutipCanary"; };
+          plutip-tests = self.off-chain.project.${system}.runPlutipTest {
+            testMain = "Seath.Test.Main";
+          };
         }
       );
 
@@ -227,7 +231,6 @@
         };
         # FIXME: fix formatting and add check to CI
         # https://github.com/mlabs-haskell/seath/issues/7
-      
         # format = {
         #   type = "app";
         #   program = (formatCheckFor system).format.outPath;
