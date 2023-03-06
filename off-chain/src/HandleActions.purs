@@ -5,7 +5,12 @@ import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups as Lookups
 import Contract.Scripts (class DatumType, class RedeemerType)
-import Contract.Transaction (FinalizedTransaction, balanceTx, balanceTxWithConstraints, createAdditionalUtxos)
+import Contract.Transaction
+  ( FinalizedTransaction
+  , balanceTx
+  , balanceTxWithConstraints
+  , createAdditionalUtxos
+  )
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Data.Array (snoc, uncons)
@@ -19,25 +24,23 @@ import Seath.Types (StateReturn(StateReturn), UserAction)
 -- leader and user
 
 actions2UTxOChain
-  :: forall (a :: Type) (userType :: Type) (validatorType :: Type)
+  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
   => RedeemerType validatorType redeemerType
-  => ToData userType
-  => FromData userType
   => FromData datumType
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
   => ( UserAction a
-       -> userType
+       -> userStateType
        -> Contract
-            (StateReturn validatorType redeemerType datumType userType)
+            (StateReturn validatorType redeemerType datumType userStateType)
      )
   -> Array (UserAction a)
-  -> userType
-  -> Contract (Array FinalizedTransaction /\ userType)
+  -> userStateType
+  -> Contract (Array FinalizedTransaction /\ userStateType)
 actions2UTxOChain actionHandler actions state =
   case uncons actions of
     Just { head, tail } -> do
@@ -48,27 +51,25 @@ actions2UTxOChain actionHandler actions state =
     Nothing -> pure $ [] /\ state
 
 actions2UTxOChainFromFinalizedTx
-  :: forall (a :: Type) (userType :: Type) (validatorType :: Type)
+  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
   => RedeemerType validatorType redeemerType
-  => ToData userType
-  => FromData userType
   => FromData datumType
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
   => ( UserAction a
-       -> userType
+       -> userStateType
        -> Contract
-            (StateReturn validatorType redeemerType datumType userType)
+            (StateReturn validatorType redeemerType datumType userStateType)
      )
   -> FinalizedTransaction
   -> Array FinalizedTransaction
   -> Array (UserAction a)
-  -> userType
-  -> Contract (Array FinalizedTransaction /\ userType)
+  -> userStateType
+  -> Contract (Array FinalizedTransaction /\ userStateType)
 actions2UTxOChainFromFinalizedTx
   actionHandler
   oldUtxo
@@ -89,26 +90,24 @@ actions2UTxOChainFromFinalizedTx
     Nothing -> pure $ processed /\ state
 
 action2UTxOFromFinalizedTx
-  :: forall (a :: Type) (userType :: Type) (validatorType :: Type)
+  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
   => RedeemerType validatorType redeemerType
-  => ToData userType
-  => FromData userType
   => FromData datumType
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
   => ( UserAction a
-       -> userType
+       -> userStateType
        -> Contract
-            (StateReturn validatorType redeemerType datumType userType)
+            (StateReturn validatorType redeemerType datumType userStateType)
      )
   -> FinalizedTransaction
   -> UserAction a
-  -> userType
-  -> Contract (FinalizedTransaction /\ userType)
+  -> userStateType
+  -> Contract (FinalizedTransaction /\ userStateType)
 action2UTxOFromFinalizedTx actionHandler oldUTxO userAction state = do
   (StateReturn handlerResult) <- actionHandler userAction state
   additionalUtxos <- createAdditionalUtxos oldUTxO
@@ -120,27 +119,26 @@ action2UTxOFromFinalizedTx actionHandler oldUTxO userAction state = do
   pure $ balancedTx /\ handlerResult.userState
 
 action2UTxO
-  :: forall (a :: Type) (userType :: Type) (validatorType :: Type)
+  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
   => RedeemerType validatorType redeemerType
-  => ToData userType
-  => FromData userType
   => FromData datumType
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
   => ( UserAction a
-       -> userType
+       -> userStateType
        -> Contract
-            (StateReturn validatorType redeemerType datumType userType)
+            (StateReturn validatorType redeemerType datumType userStateType)
      )
   -> UserAction a
-  -> userType
-  -> Contract (FinalizedTransaction /\ userType)
-action2UTxO actionHandler userAction state= do
+  -> userStateType
+  -> Contract (FinalizedTransaction /\ userStateType)
+action2UTxO actionHandler userAction state = do
   (StateReturn handlerResult) <- actionHandler userAction state
-  unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups handlerResult.constraints
+  unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
+    handlerResult.constraints
   balancedTx <- liftedE $ balanceTx unbalancedTx
   pure $ balancedTx /\ handlerResult.userState

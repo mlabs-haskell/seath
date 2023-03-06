@@ -54,7 +54,6 @@ import Seath.Test.Examples.Utils
   , getScriptUtxos
   )
 
-
 newtype ActionNumber = ActionNumber Int
 
 derive instance Newtype ActionNumber _
