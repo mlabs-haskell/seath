@@ -10,7 +10,7 @@ import Contract.PlutusData (toData)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (Validator, ValidatorHash, applyArgs, validatorHash)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Contract.Transaction (TransactionHash)
+import Contract.Transaction (FinalizedTransaction(..), TransactionHash)
 import Contract.TxConstraints
   ( DatumPresence(DatumInline)
   , mustPayToScript
@@ -41,13 +41,13 @@ initialState = BigInt.fromInt 100
 action2ConstraintsAndLookup
   :: UserAction AdditionAction
   -> AdditionState
-  -> TransactionHash
+  -> FinalizedTransaction
   -> Contract
        ( Seath.Types.StateReturn AdditionValidator AdditionRedeemer
            AdditionDatum
            AdditionState
        )
-action2ConstraintsAndLookup userAction lockedValue txId =
+action2ConstraintsAndLookup userAction lockedValue oldTransaction =
   case (unwrap userAction).action of
     AddAmount increase -> do
       val <- fixedValidator
