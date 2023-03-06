@@ -5,12 +5,7 @@ import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups as Lookups
 import Contract.Scripts (class DatumType, class RedeemerType)
-import Contract.Transaction
-  ( FinalizedTransaction
-  , balanceTx
-  , balanceTxWithConstraints
-  , createAdditionalUtxos
-  )
+import Contract.Transaction (FinalizedTransaction, TransactionHash, balanceTx, balanceTxWithConstraints, createAdditionalUtxos)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Data.Array (snoc, uncons)
@@ -38,6 +33,7 @@ actions2UTxOChain
   => ToData redeemerType
   => ( UserAction a
        -> userStateType
+       -> TransactionHash
        -> Contract
             (StateReturn validatorType redeemerType datumType userStateType)
      )
@@ -65,6 +61,7 @@ actions2UTxOChainFromFinalizedTx
   => ToData redeemerType
   => ( UserAction a
        -> userStateType
+       -> TransactionHash
        -> Contract
             (StateReturn validatorType redeemerType datumType userStateType)
      )
@@ -104,6 +101,7 @@ action2UTxOFromFinalizedTx
   => ToData redeemerType
   => ( UserAction a
        -> userStateType
+       -> TransactionHash
        -> Contract
             (StateReturn validatorType redeemerType datumType userStateType)
      )
@@ -133,6 +131,7 @@ action2UTxO
   => ToData redeemerType
   => ( UserAction a
        -> userStateType
+       -> TransactionHash
        -> Contract
             (StateReturn validatorType redeemerType datumType userStateType)
      )
