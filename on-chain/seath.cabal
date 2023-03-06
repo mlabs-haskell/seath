@@ -13,11 +13,12 @@ common common
   ghc-options:
     -Wall -Wcompat -Wincomplete-uni-patterns -Wredundant-constraints
     -Wmissing-export-lists -Wmissing-deriving-strategies
-     -Werror -fno-ignore-interface-pragmas
+     -fno-ignore-interface-pragmas
     -fno-omit-interface-pragmas -fno-specialize -fno-strictness
     -fno-warn-orphans -fobject-code -fplugin-opt
     PlutusTx.Plugin:defer-errors
-    -- -Wmissing-import-lists
+    -Wmissing-import-lists
+    -Werror 
 
   build-depends:      base ^>=4.14
   default-extensions:

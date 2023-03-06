@@ -3,6 +3,7 @@
 - [Mini Dev Wiki](#mini-dev-wiki)
   - [To develop on-chain](#to-develop-on-chain)
   - [To develop off-chain](#to-develop-off-chain)
+    - [To run off-chain tests](#to-run-off-chain-tests)
     - [To start default CTL runtime](#to-start-default-ctl-runtime)
     - [To start serving PureScript docs](#to-start-serving-purescript-docs)
   - [To serialize and export scripts](#to-serialize-and-export-scripts)
@@ -24,6 +25,12 @@ nix develop .#off-chain
 cd off-chain
 ```
 
+### To run off-chain tests
+```shell
+make
+```
+
+
 ### To start default CTL runtime
 
 ```shell
@@ -43,12 +50,6 @@ nix run .#ctl-docs
 ```
 
 ## To serialize and export scripts
-
-⚠️ WARNING: export is under development, prints out script to terminal currently
-
-⚠️ see [exporter/Main.hs](./on-chain/script-export/Main.hs)
-
-⚠️ [GH issue](https://github.com/mlabs-haskell/seath/issues/8)
 
 ```shell
 nix run .#script-export

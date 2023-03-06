@@ -7,6 +7,9 @@ ps-entrypoint := Seath.Main
 e2e-entrypoint := Seath.Test.E2E.Serve	
 ps-bundle = spago bundle-module -m ${ps-entrypoint} --to output.js	
 
+run-test:
+	spago run --main Seath.Test.Main
+
 run-dev:	
 	@${ps-bundle} && BROWSER_RUNTIME=1 webpack-dev-server --progress	
 

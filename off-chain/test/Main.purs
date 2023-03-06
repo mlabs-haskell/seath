@@ -1,32 +1,24 @@
 -- | This is temporary canary test to make sure Plutip tests are runnable after environment updates.
 
-module PlutipCanary where
+module Seath.Test.Main (main) where
 
 import Contract.Prelude
 
-import Contract.Log (logInfo')
-import Contract.Monad (Contract, launchAff_)
-import Data.BigInt (fromInt) as BigInt
-import Data.UInt (fromInt) as UInt
-import Contract.Test.Plutip (runPlutipContract, PlutipConfig)
 import Contract.Config (emptyHooks)
+import Contract.Monad (launchAff_)
+import Contract.Test.Plutip (PlutipConfig)
 import Data.Time.Duration (Seconds(Seconds))
+import Data.UInt (fromInt) as UInt
+import Seath.Test.Examples.Addition.Contract (mainTest) as Addition.Contract
 
 main :: Effect Unit
-main = launchAff_ do
-  let
-    distribution =
-      [ BigInt.fromInt 1_000_000_000 ]
-        /\ [ BigInt.fromInt 1_000_000_000 ]
-        /\ [ BigInt.fromInt 1_000_000_000 ]
-  runPlutipContract config distribution \_ -> do
-    logInfo' "Test run"
+main = launchAff_ (Addition.Contract.mainTest config)
 
 config :: PlutipConfig
 config =
   { host: "127.0.0.1"
   , port: UInt.fromInt 8082
-  , logLevel: Trace
+  , logLevel: Info
   , ogmiosConfig:
       { port: UInt.fromInt 1338
       , host: "127.0.0.1"
