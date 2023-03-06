@@ -19,6 +19,9 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Prelude (($))
 import Seath.Types (StateReturn(StateReturn), UserAction)
 
+-- TODO : Add a function that can get the first state from the blockchain
+-- and then begin to process actions
+
 -- TODO: put the handler in a Env together with the leader pubkeyhas and 
 -- use it to add the constraint that transaction must be signed by both 
 -- leader and user
