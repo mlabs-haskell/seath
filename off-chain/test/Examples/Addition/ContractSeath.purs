@@ -18,7 +18,7 @@ import Test.Examples.Addition.SeathSetup as Setup
 mainTest :: PlutipConfig -> Aff Unit
 mainTest config = runPlutipContract config distribution $ \ws -> do
   let setup = Setup.mkSetup ws
-  actions <- Setup.genUserActions setup
+  actions <- Setup.genUserActions setup.participants
   _ <- logInfo' $ "test " <> show actions
 
   let

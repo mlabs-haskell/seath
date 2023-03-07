@@ -39,9 +39,9 @@ mkSetup (a /\ b /\ c) =
   }
 
 -- todo: pass action as param?
-genUserActions :: SeathSetup -> Contract (Array (UserAction AdditionAction))
-genUserActions setup =
-  traverse genAction setup.participants
+genUserActions :: Array Participant -> Contract (Array (UserAction AdditionAction))
+genUserActions ps =
+  traverse genAction ps
 
 genAction :: Participant -> Contract (UserAction AdditionAction)
 genAction (Participant p) =
