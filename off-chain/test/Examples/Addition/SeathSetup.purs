@@ -1,24 +1,25 @@
 module Test.Examples.Addition.SeathSetup
-  ( Leader
-  , Participant
+  ( Leader(..)
+  , Participant(..)
   , genAction
   , genUserActions
-  , mkSetup
   , submitChain
   ) where
 
 import Prelude
 
 import Contract.Monad (Contract, liftedM)
-import Contract.Prelude (Unit)
-import Contract.Transaction (FinalizedTransaction(..), PublicKey)
+import Contract.Transaction (FinalizedTransaction, PublicKey)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (PrivatePaymentKey(..), withKeyWallet)
-import Contract.Wallet.Key (KeyWallet, keyWalletPrivatePaymentKey, publicKeyFromPrivateKey)
+import Contract.Wallet.Key
+  ( KeyWallet
+  , keyWalletPrivatePaymentKey
+  , publicKeyFromPrivateKey
+  )
 import Ctl.Internal.Cardano.Types.Transaction (mkFromCslPubKey)
 import Data.BigInt as BigInt
 import Data.Traversable (traverse)
-import Data.Tuple.Nested (type (/\), (/\))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Types (UserAction(..))
 
@@ -27,19 +28,9 @@ newtype Leader = Leader KeyWallet
 
 newtype Participant = Participant KeyWallet
 
-type SeathSetup =
-  { leader :: Leader
-  , participants :: Array Participant
-  }
-
-mkSetup :: (KeyWallet /\ KeyWallet /\ KeyWallet) -> SeathSetup
-mkSetup (a /\ b /\ c) =
-  { leader: Leader a
-  , participants: map Participant [ b, c ]
-  }
-
 -- todo: pass action as param?
-genUserActions :: Array Participant -> Contract (Array (UserAction AdditionAction))
+genUserActions
+  :: Array Participant -> Contract (Array (UserAction AdditionAction))
 genUserActions ps =
   traverse genAction ps
 
@@ -60,9 +51,8 @@ getPubKey kw =
   in
     mkFromCslPubKey $ publicKeyFromPrivateKey prv
 
-
 -- todo
 submitChain :: Leader -> Array FinalizedTransaction -> Contract Unit
-submitChain (Leader w ) _txs = 
-    withKeyWallet w do
-      pure unit
+submitChain (Leader w) _txs =
+  withKeyWallet w do
+    pure unit
