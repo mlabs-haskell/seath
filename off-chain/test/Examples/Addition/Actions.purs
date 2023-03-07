@@ -4,6 +4,7 @@ module Seath.Test.Examples.Addition.Actions
   ) where
 
 import Prelude
+import Undefined
 
 import Contract.Monad (Contract, liftedE, liftedM)
 import Contract.PlutusData (toData)
@@ -22,7 +23,6 @@ import Data.BigInt as BigInt
 import Data.Newtype (unwrap, wrap)
 import Data.Tuple.Nested ((/\))
 import Effect.Aff (error)
-import Seath.Data (UserAction)
 import Seath.Test.Examples.Addition.Types
   ( AdditionAction(AddAmount)
   , AdditionDatum(AdditionDatum)
@@ -32,6 +32,7 @@ import Seath.Test.Examples.Addition.Types
 import Seath.Test.Examples.Addition.Validator (validatorScript)
 import Seath.Test.Examples.Utils (getScriptInputAndUtxos)
 import Seath.Types (StateReturn) as Seath.Types
+import Seath.Types (UserAction)
 
 type AdditionState = BigInt
 
@@ -52,8 +53,11 @@ action2ConstraintsAndLookup userAction lockedValue oldTransaction =
     AddAmount increase -> do
       val <- fixedValidator
       valHash <- fixedValidatorHash
-      (maybeTxIn /\ scriptUtxos) <- getScriptInputAndUtxos valHash
-        txId
+
+      let
+        txId :: TransactionHash
+        txId = undefined -- FIXME
+      (maybeTxIn /\ scriptUtxos) <- getScriptInputAndUtxos valHash txId
       txIn <- liftMaybe
         (error $ "Can't find UTxO " <> show txId <> " locked by the script.")
         maybeTxIn

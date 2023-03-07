@@ -1,11 +1,19 @@
 module Seath.HandleActions where
 
+import Undefined
+
 import Contract.BalanceTxConstraints (mustUseAdditionalUtxos)
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups as Lookups
 import Contract.Scripts (class DatumType, class RedeemerType)
-import Contract.Transaction (FinalizedTransaction, FinalizedTransaction, balanceTx, balanceTxWithConstraints, createAdditionalUtxos)
+import Contract.Transaction
+  ( FinalizedTransaction
+  , FinalizedTransaction
+  , balanceTx
+  , balanceTxWithConstraints
+  , createAdditionalUtxos
+  )
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Data.Array (snoc, uncons)
@@ -110,7 +118,7 @@ action2UTxOFromFinalizedTx
   -> userStateType
   -> Contract (FinalizedTransaction /\ userStateType)
 action2UTxOFromFinalizedTx actionHandler oldUTxO userAction state = do
-  (StateReturn handlerResult) <- actionHandler userAction state
+  (StateReturn handlerResult) <- actionHandler userAction state undefined -- FIXME
   additionalUtxos <- createAdditionalUtxos oldUTxO
   let balanceConstraints = mustUseAdditionalUtxos additionalUtxos
   unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
@@ -139,7 +147,7 @@ action2UTxO
   -> userStateType
   -> Contract (FinalizedTransaction /\ userStateType)
 action2UTxO actionHandler userAction state = do
-  (StateReturn handlerResult) <- actionHandler userAction state
+  (StateReturn handlerResult) <- actionHandler userAction state undefined -- FIXME
   unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
     handlerResult.constraints
   balancedTx <- liftedE $ balanceTx unbalancedTx
