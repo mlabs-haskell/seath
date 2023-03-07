@@ -4,22 +4,32 @@ module Seath.Types
   , StateReturn(StateReturn)
   ) where
 
+import Prelude
+
 import Contract.Prelude (class Newtype)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Transaction (PublicKey, TransactionHash)
 import Contract.TxConstraints (TxConstraints)
+import Contract.Utxos (UtxoMap)
 
 newtype UserAction a = UserAction
   { publicKey :: PublicKey
   , action :: a
-  , userUTxo :: TransactionHash
+  , userUTxo :: UtxoMap
   }
+
+instance showUserAction :: Show (UserAction a) where
+  show (UserAction a) = 
+    "UserAction { publicKey :: " 
+    <> show a.publicKey
+    <> ", userUTxo :: " <> show a.userUTxo
+    <> " }"
 
 instance
   Newtype (UserAction a)
     { publicKey :: PublicKey
     , action :: a
-    , userUTxo :: TransactionHash
+    , userUTxo :: UtxoMap
     }
 
 newtype LeaderData = LeaderData
