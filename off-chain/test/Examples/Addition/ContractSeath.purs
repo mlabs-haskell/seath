@@ -60,7 +60,7 @@ mainTest config = runPlutipContract config distribution $ \(a /\ b /\ c) ->
     (finalizedTxsAndActions /\ _) <- withKeyWallet a buildChain
     let finalizedTxs /\ _ = unzip finalizedTxsAndActions
     logInfo' $ "BuildChainResult: " <> show finalizedTxs
-    _ <- SeathSetup.submitChain leader finalizedTxs
+    _ <- SeathSetup.submitChain leader participants finalizedTxs
     logInfo' "end"
   where
 

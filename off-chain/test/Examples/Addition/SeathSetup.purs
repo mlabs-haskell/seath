@@ -7,28 +7,32 @@ module Seath.Test.Examples.Addition.SeathSetup
   , submitChain
   ) where
 
-import Prelude
-
-import Contract.Address
-  ( PubKeyHash
-  , getWalletAddresses
-  , toPubKeyHash
-  )
+import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
-import Contract.Transaction (FinalizedTransaction)
+import Contract.Transaction
+  ( BalancedSignedTransaction
+  , FinalizedTransaction
+  , TransactionHash
+  , awaitTxConfirmed
+  , signTransaction
+  , submit
+  )
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
-import Contract.Wallet.Key
-  ( KeyWallet
-  )
+import Contract.Wallet.Key (KeyWallet)
+import Control.Applicative (pure)
+import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (head)
+import Data.Array (head, zip)
 import Data.BigInt as BigInt
-import Data.Newtype (class Newtype)
+import Data.Functor ((<$>))
+import Data.Newtype (class Newtype, unwrap)
 import Data.Traversable (traverse)
+import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Aff (error)
+import Prelude (discard, flip, ($))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
-import Seath.Types (UserAction(..))
+import Seath.Types (UserAction(UserAction))
 
 newtype Leader = Leader KeyWallet
 
@@ -61,8 +65,25 @@ getPublicKeyHash kw = withKeyWallet kw do
     getWalletAddresses
   liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
 
--- todo
-submitChain :: Leader -> Array FinalizedTransaction -> Contract Unit
-submitChain (Leader w) _txs =
-  withKeyWallet w do
-    pure unit
+signTransactions
+  :: Leader
+  -> Array (Participant /\ FinalizedTransaction)
+  -> Contract (Array BalancedSignedTransaction)
+signTransactions leader toSign = flip traverse toSign \(participant /\ tx) -> do
+  signedByParticipant <- withKeyWallet (unwrap participant) $ signTransaction tx
+  withKeyWallet (unwrap leader) $ signTransaction signedByParticipant
+
+submitChain
+  :: Leader
+  -> Array Participant
+  -> Array FinalizedTransaction
+  -> Contract (Array TransactionHash)
+submitChain leader participants txs = do
+  allSigned <- signTransactions leader (zip participants txs)
+  withKeyWallet (unwrap leader) $ traverse submitAndWait allSigned
+  where
+  submitAndWait balancedAndSignedTransaction = do
+    transactionId <- submit balancedAndSignedTransaction
+    awaitTxConfirmed transactionId
+    pure $ transactionId
+
