@@ -1,32 +1,42 @@
-module Test.Examples.Addition.SeathSetup
-  ( Leader(..)
-  , Participant(..)
+module Seath.Test.Examples.Addition.SeathSetup
+  ( Leader(Leader)
+  , Participant(Participant)
   , genAction
   , genUserActions
+  , getPublicKeyHash
   , submitChain
   ) where
 
 import Prelude
 
+import Contract.Address
+  ( PubKeyHash
+  , getWalletAddresses
+  , toPubKeyHash
+  )
 import Contract.Monad (Contract, liftedM)
-import Contract.Transaction (FinalizedTransaction, PublicKey)
+import Contract.Transaction (FinalizedTransaction)
 import Contract.Utxos (getWalletUtxos)
-import Contract.Wallet (PrivatePaymentKey(..), withKeyWallet)
+import Contract.Wallet (withKeyWallet)
 import Contract.Wallet.Key
   ( KeyWallet
-  , keyWalletPrivatePaymentKey
-  , publicKeyFromPrivateKey
   )
-import Ctl.Internal.Cardano.Types.Transaction (mkFromCslPubKey)
+import Control.Monad.Error.Class (liftMaybe)
+import Data.Array (head)
 import Data.BigInt as BigInt
+import Data.Newtype (class Newtype)
 import Data.Traversable (traverse)
+import Effect.Aff (error)
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Types (UserAction(..))
 
 newtype Leader = Leader KeyWallet
--- derive instance Newtype Leader _
+
+derive instance Newtype Leader _
 
 newtype Participant = Participant KeyWallet
+
+derive instance Newtype Participant _
 
 -- todo: pass action as param?
 genUserActions
@@ -38,18 +48,18 @@ genAction :: Participant -> Contract (UserAction AdditionAction)
 genAction (Participant p) =
   withKeyWallet p $ do
     ownUtxos <- liftedM "no UTXOs found" getWalletUtxos
+    publicKeyHash <- getPublicKeyHash p
     pure $ UserAction
       { action: AddAmount (BigInt.fromInt 1) -- FIXME: hardcoded
-      , publicKey: getPubKey p
+      , publicKey: publicKeyHash
       , userUTxo: ownUtxos
       }
 
-getPubKey :: KeyWallet -> PublicKey
-getPubKey kw =
-  let
-    (PrivatePaymentKey prv) = keyWalletPrivatePaymentKey kw
-  in
-    mkFromCslPubKey $ publicKeyFromPrivateKey prv
+getPublicKeyHash :: KeyWallet -> Contract PubKeyHash
+getPublicKeyHash kw = withKeyWallet kw do
+  address <- liftedM "can't get the address of KeyWallet" $ head <$>
+    getWalletAddresses
+  liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
 
 -- todo
 submitChain :: Leader -> Array FinalizedTransaction -> Contract Unit

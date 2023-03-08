@@ -1,4 +1,4 @@
-module Seath.Test.Examples.Addition.Contract (mainTest) where
+module Seath.Test.Examples.Addition.Contract (mainTest, initialContract) where
 
 import Contract.Log (logInfo')
 import Contract.Monad (Aff, Contract, liftedE, liftedM)
