@@ -5,7 +5,7 @@ module Seath.Types
   , ChainBuilderState(ChainBuilderState)
   ) where
 
-import Contract.Address (PubKeyHash(..))
+import Contract.Address (PubKeyHash)
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups (ScriptLookups)
