@@ -5,25 +5,26 @@ module Seath.Types
   , ChainBuilderState(ChainBuilderState)
   ) where
 
+import Contract.Address (PubKeyHash(..))
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType)
-import Contract.Transaction (FinalizedTransaction, PublicKey, TransactionHash)
+import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Contract.TxConstraints (TxConstraints)
 import Data.Either (Either)
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
 
 newtype UserAction a = UserAction
-  { publicKey :: PublicKey
+  { publicKey :: PubKeyHash
   , action :: a
   , userUTxo :: TransactionHash
   }
 
 instance
   Newtype (UserAction a)
-    { publicKey :: PublicKey
+    { publicKey :: PubKeyHash
     , action :: a
     , userUTxo :: TransactionHash
     }
@@ -44,7 +45,7 @@ newtype SeathConfig
   (validatorType :: Type)
   (datumType :: Type)
   (redeemerType :: Type) = SeathConfig
-  { leader :: PublicKey
+  { leader :: PubKeyHash
   , finalizedTxHandler ::
       DatumType validatorType datumType
       => RedeemerType validatorType redeemerType
