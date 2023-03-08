@@ -5,7 +5,7 @@ module Seath.Types
   , ChainBuilderState(ChainBuilderState)
   ) where
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (AddressWithNetworkTag, PubKeyHash)
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups (ScriptLookups)
@@ -23,6 +23,7 @@ newtype UserAction a = UserAction
   { publicKey :: PubKeyHash
   , action :: a
   , userUTxo :: UtxoMap
+  , changeAddress :: AddressWithNetworkTag
   }
 
 instance showUserAction :: Show (UserAction a) where
@@ -38,6 +39,7 @@ instance
     { publicKey :: PubKeyHash
     , action :: a
     , userUTxo :: UtxoMap
+    , changeAddress :: AddressWithNetworkTag
     }
 
 newtype StateReturn validatorType datumType redeemerType stateType = StateReturn

@@ -131,7 +131,7 @@ initialContract = do
       (wrap $ toData datum)
       DatumInline
       mempty
-  logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
+  -- logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
   transactionId <- submitTxFromConstraints lookups constraints
   awaitTxConfirmed transactionId
   pure $ transactionId /\ datum

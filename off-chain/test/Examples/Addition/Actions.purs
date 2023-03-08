@@ -2,6 +2,8 @@ module Seath.Test.Examples.Addition.Actions
   ( handleActionFromFinalizedTransaction
   , initialState
   , handleActionFromBlockChain
+  , fixedValidator
+  , fixedValidatorHash
   ) where
 
 import Contract.Monad (Contract, liftedE, liftedM)

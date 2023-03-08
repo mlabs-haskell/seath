@@ -5,10 +5,18 @@ module Seath.Test.Examples.Addition.SeathSetup
   , genUserActions
   , getPublicKeyHash
   , submitChain
+  , logBlockchainState
   ) where
 
-import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
+import Contract.Address
+  ( PubKeyHash
+  , getWalletAddresses
+  , getWalletAddressesWithNetworkTag
+  , toPubKeyHash
+  )
+import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedM)
+import Contract.Scripts (ValidatorHash)
 import Contract.Transaction
   ( BalancedSignedTransaction
   , FinalizedTransaction
@@ -26,12 +34,16 @@ import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head, zip)
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
+import Data.Monoid ((<>))
 import Data.Newtype (class Newtype, unwrap)
-import Data.Traversable (traverse)
+import Data.Show (show)
+import Data.Traversable (traverse, traverse_)
 import Data.Tuple.Nested (type (/\), (/\))
+import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (discard, flip, ($))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
+import Seath.Test.Examples.Utils (getScriptUtxos)
 import Seath.Types (UserAction(UserAction))
 
 newtype Leader = Leader KeyWallet
@@ -53,10 +65,13 @@ genAction (Participant p) =
   withKeyWallet p $ do
     ownUtxos <- liftedM "no UTXOs found" getWalletUtxos
     publicKeyHash <- getPublicKeyHash p
+    changeAddress <- liftedM "can't get Change address" $ head <$>
+      getWalletAddressesWithNetworkTag
     pure $ UserAction
-      { action: AddAmount (BigInt.fromInt 1) -- FIXME: hardcoded
+      { action: AddAmount (BigInt.fromInt 100) -- FIXME: hardcoded
       , publicKey: publicKeyHash
       , userUTxo: ownUtxos
+      , changeAddress
       }
 
 getPublicKeyHash :: KeyWallet -> Contract PubKeyHash
@@ -77,13 +92,29 @@ submitChain
   :: Leader
   -> Array Participant
   -> Array FinalizedTransaction
+  -> Contract Unit
   -> Contract (Array TransactionHash)
-submitChain leader participants txs = do
+submitChain leader participants txs log = do
   allSigned <- signTransactions leader (zip participants txs)
   withKeyWallet (unwrap leader) $ traverse submitAndWait allSigned
   where
   submitAndWait balancedAndSignedTransaction = do
+    log
+    -- logInfo' $ "submiting: " <> show balancedAndSignedTransaction
     transactionId <- submit balancedAndSignedTransaction
     awaitTxConfirmed transactionId
+    -- logInfo' $ "submited: " <> show transactionId
     pure $ transactionId
 
+logBlockchainState
+  :: Array (KeyWallet /\ String) -> Contract ValidatorHash -> Contract Unit
+logBlockchainState users valHashW = do
+  valHash <- valHashW
+  logInfo' "------------------------- BlochainState -------------------------"
+  flip traverse_ users \(wallet /\ name) ->
+    ( do
+        autxos <- withKeyWallet wallet getWalletUtxos
+        logInfo' $ "utxosAt " <> name <> ": " <> show autxos
+    )
+  scriptUtxos <- getScriptUtxos valHash
+  logInfo' $ "utxosAt script: " <> show scriptUtxos
