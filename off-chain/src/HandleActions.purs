@@ -1,7 +1,5 @@
 module Seath.HandleActions where
 
-import Undefined
-
 import Contract.BalanceTxConstraints (mustUseAdditionalUtxos)
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
@@ -9,7 +7,7 @@ import Contract.ScriptLookups as Lookups
 import Contract.Scripts (class DatumType, class RedeemerType)
 import Contract.Transaction
   ( FinalizedTransaction
-  , FinalizedTransaction
+  , TransactionHash
   , balanceTx
   , balanceTxWithConstraints
   , createAdditionalUtxos
@@ -17,20 +15,19 @@ import Contract.Transaction
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Data.Array (snoc, uncons)
-import Data.Maybe (Maybe(Just, Nothing))
+import Data.Either (Either(..))
+import Data.Maybe (Maybe(..))
 import Data.Tuple.Nested (type (/\), (/\))
 import Prelude (($))
-import Seath.Types (StateReturn(StateReturn), UserAction)
+import Seath.Types
+  ( ChainBuilderState(..)
+  , SeathConfig(SeathConfig)
+  , StateReturn(StateReturn)
+  , UserAction
+  )
 
--- TODO : Add a function that can get the first state from the blockchain
--- and then begin to process actions
-
--- TODO: put the handler in a Env together with the leader pubkeyhas and 
--- use it to add the constraint that transaction must be signed by both 
--- leader and user
-
-actions2UTxOChain
-  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
+actions2TransactionsChain
+  :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
@@ -39,26 +36,43 @@ actions2UTxOChain
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => ( UserAction a
-       -> userStateType
-       -> FinalizedTransaction
-       -> Contract
-            (StateReturn validatorType redeemerType datumType userStateType)
-     )
-  -> Array (UserAction a)
-  -> userStateType
-  -> Contract (Array FinalizedTransaction /\ userStateType)
-actions2UTxOChain actionHandler actions state =
-  case uncons actions of
-    Just { head, tail } -> do
-      finalizedTx /\ newState <- action2UTxO actionHandler head state
-      actions2UTxOChainFromFinalizedTx actionHandler finalizedTx []
-        tail
-        newState
-    Nothing -> pure $ [] /\ state
+  => SeathConfig actionType userStateType validatorType datumType redeemerType
+  -> ChainBuilderState actionType userStateType
+  -> Contract
+       ( Array (FinalizedTransaction /\ UserAction actionType) /\ Either
+           TransactionHash
+           (FinalizedTransaction /\ userStateType)
+       )
+actions2TransactionsChain (SeathConfig config) (ChainBuilderState builderState) =
+  case uncons $ builderState.pendingActions of
+    Just { head: userAction, tail: pendingActions } -> do
+      (finalizedTransaction /\ newUserState) <- case builderState.lastResult of
+        Right (finalizedTransaction /\ userState) ->
+          action2TransactionFromFinalizedTransaction (SeathConfig config)
+            finalizedTransaction
+            userAction
+            userState
+        Left txId -> action2TransactionFromTransactionHash (SeathConfig config)
+          userAction
+          txId
+      let
+        ( finalizedTransactions
+            :: Array (FinalizedTransaction /\ UserAction actionType)
+        ) = snoc
+          builderState.finalizedTransactions
+          (finalizedTransaction /\ userAction)
+        (newBuilderState :: ChainBuilderState actionType userStateType) =
+          ChainBuilderState
+            { lastResult: Right (finalizedTransaction /\ newUserState)
+            , finalizedTransactions: finalizedTransactions
+            , pendingActions: pendingActions
+            }
+      actions2TransactionsChain (SeathConfig config) newBuilderState
+    Nothing -> pure $ builderState.finalizedTransactions /\
+      builderState.lastResult
 
-actions2UTxOChainFromFinalizedTx
-  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
+action2TransactionFromFinalizedTransaction
+  :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
@@ -67,38 +81,30 @@ actions2UTxOChainFromFinalizedTx
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => ( UserAction a
-       -> userStateType
-       -> FinalizedTransaction
-       -> Contract
-            (StateReturn validatorType redeemerType datumType userStateType)
-     )
+  => SeathConfig actionType userStateType validatorType datumType redeemerType
   -> FinalizedTransaction
-  -> Array FinalizedTransaction
-  -> Array (UserAction a)
+  -> UserAction actionType
   -> userStateType
-  -> Contract (Array FinalizedTransaction /\ userStateType)
-actions2UTxOChainFromFinalizedTx
-  actionHandler
-  oldUtxo
-  processed
-  unprocessed
+  -> Contract (FinalizedTransaction /\ userStateType)
+action2TransactionFromFinalizedTransaction
+  (SeathConfig config)
+  oldTransaction
+  userAction
   state =
-  case uncons unprocessed of
-    Just { head: action, tail: newUnprocessed } ->
-      do
-        tobeSigned /\ newState <- action2UTxOFromFinalizedTx actionHandler
-          oldUtxo
-          action
-          state
-        actions2UTxOChainFromFinalizedTx actionHandler tobeSigned
-          (snoc processed tobeSigned)
-          newUnprocessed
-          newState
-    Nothing -> pure $ processed /\ state
+  do
+    (StateReturn handlerResult) <- config.finalizedTxHandler userAction
+      state
+      oldTransaction
+    additionalUtxos <- createAdditionalUtxos oldTransaction
+    let balanceConstraints = mustUseAdditionalUtxos additionalUtxos
+    unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
+      handlerResult.constraints
+    balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
+      balanceConstraints
+    pure $ balancedTx /\ handlerResult.userState
 
-action2UTxOFromFinalizedTx
-  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
+action2TransactionFromTransactionHash
+  :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
    . DatumType validatorType datumType
@@ -107,47 +113,12 @@ action2UTxOFromFinalizedTx
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => ( UserAction a
-       -> userStateType
-       -> FinalizedTransaction
-       -> Contract
-            (StateReturn validatorType redeemerType datumType userStateType)
-     )
-  -> FinalizedTransaction
-  -> UserAction a
-  -> userStateType
+  => SeathConfig actionType userStateType validatorType datumType redeemerType
+  -> UserAction actionType
+  -> TransactionHash
   -> Contract (FinalizedTransaction /\ userStateType)
-action2UTxOFromFinalizedTx actionHandler oldUTxO userAction state = do
-  (StateReturn handlerResult) <- actionHandler userAction state undefined -- FIXME
-  additionalUtxos <- createAdditionalUtxos oldUTxO
-  let balanceConstraints = mustUseAdditionalUtxos additionalUtxos
-  unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
-    handlerResult.constraints
-  balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
-    balanceConstraints
-  pure $ balancedTx /\ handlerResult.userState
-
-action2UTxO
-  :: forall (a :: Type) (userStateType :: Type) (validatorType :: Type)
-       (redeemerType :: Type)
-       (datumType :: Type)
-   . DatumType validatorType datumType
-  => RedeemerType validatorType redeemerType
-  => FromData datumType
-  => ToData datumType
-  => FromData redeemerType
-  => ToData redeemerType
-  => ( UserAction a
-       -> userStateType
-       -> FinalizedTransaction
-       -> Contract
-            (StateReturn validatorType redeemerType datumType userStateType)
-     )
-  -> UserAction a
-  -> userStateType
-  -> Contract (FinalizedTransaction /\ userStateType)
-action2UTxO actionHandler userAction state = do
-  (StateReturn handlerResult) <- actionHandler userAction state undefined -- FIXME
+action2TransactionFromTransactionHash (SeathConfig config) userAction txId = do
+  (StateReturn handlerResult) <- config.onchainHandler userAction txId
   unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
     handlerResult.constraints
   balancedTx <- liftedE $ balanceTx unbalancedTx
