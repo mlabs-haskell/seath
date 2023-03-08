@@ -1,9 +1,11 @@
 module Seath.Test.Examples.Utils
   ( submitTxFromConstraintsWithLog
+  , getScriptInput
   , getScriptInputAndUtxos
   , getScriptUtxos
   , genPlutipWalletConfig
   , genScriptUTXoFromTransaction
+  , getFinalizedTransactionHash
   ) where
 
 import Contract.Address (getNetworkId, validatorHashEnterpriseAddress)
@@ -30,7 +32,7 @@ import Contract.Transaction
 import Contract.TxConstraints (TxConstraints)
 import Contract.Utxos (UtxoMap, utxosAt)
 import Control.Applicative (pure)
-import Control.Monad (bind, (>>=))
+import Control.Monad (bind)
 import Ctl.Internal.Plutus.Conversion (toPlutusTxOutputWithRefScript)
 import Ctl.Internal.Serialization as Ctl.Internal.Serialization
 import Data.Array (filter, head, replicate)
