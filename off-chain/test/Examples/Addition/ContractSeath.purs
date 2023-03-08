@@ -57,7 +57,7 @@ mainTest config = runPlutipContract config distribution $ \(a /\ b /\ c) ->
         actions2TransactionsChain
           seathConfig
           firstBuilderState
-    (finalizedTxsAndActions /\ _) <- buildChain
+    (finalizedTxsAndActions /\ _) <- withKeyWallet a buildChain
     let finalizedTxs /\ _ = unzip finalizedTxsAndActions
     logInfo' $ "BuildChainResult: " <> show finalizedTxs
     _ <- SeathSetup.submitChain leader finalizedTxs
