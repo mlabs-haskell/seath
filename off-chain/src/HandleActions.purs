@@ -12,15 +12,18 @@ import Contract.Transaction
   , balanceTxWithConstraints
   , createAdditionalUtxos
   )
+import Contract.TxConstraints (mustBeSignedBy)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Data.Array (snoc, uncons)
-import Data.Either (Either(..))
-import Data.Maybe (Maybe(..))
+import Data.Either (Either(Left, Right))
+import Data.Maybe (Maybe(Nothing, Just))
+import Data.Monoid ((<>))
+import Data.Newtype (unwrap, wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Prelude (($))
 import Seath.Types
-  ( ChainBuilderState(..)
+  ( ChainBuilderState(ChainBuilderState)
   , SeathConfig(SeathConfig)
   , StateReturn(StateReturn)
   , UserAction
@@ -96,9 +99,16 @@ action2TransactionFromFinalizedTransaction
       state
       oldTransaction
     additionalUtxos <- createAdditionalUtxos oldTransaction
-    let balanceConstraints = mustUseAdditionalUtxos additionalUtxos
+    let
+      balanceConstraints = mustUseAdditionalUtxos additionalUtxos
+      constraints = handlerResult.constraints
+        -- TODO : does we really need the signature of the leader?
+        -- It can be useful to have a track onchain of the leader 
+        -- actions.
+        <> mustBeSignedBy (wrap config.leader)
+        <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
     unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
-      handlerResult.constraints
+      constraints
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints
     pure $ balancedTx /\ handlerResult.userState
@@ -119,7 +129,14 @@ action2TransactionFromTransactionHash
   -> Contract (FinalizedTransaction /\ userStateType)
 action2TransactionFromTransactionHash (SeathConfig config) userAction txId = do
   (StateReturn handlerResult) <- config.onchainHandler userAction txId
+  let
+    constraints = handlerResult.constraints
+      -- TODO : does we really need the signature of the leader?
+      -- It can be useful to have a track onchain of the leader 
+      -- actions.
+      <> mustBeSignedBy (wrap config.leader)
+      <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
   unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx handlerResult.lookups
-    handlerResult.constraints
+    constraints
   balancedTx <- liftedE $ balanceTx unbalancedTx
   pure $ balancedTx /\ handlerResult.userState
