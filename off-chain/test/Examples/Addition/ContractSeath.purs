@@ -6,11 +6,15 @@ import Contract.PlutusData (Datum(..), fromData, toData)
 import Contract.Prelude (Maybe(..), map, maybe, when, (/=), (>>=))
 import Contract.Scripts (ValidatorHash)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
-import Contract.Transaction (TransactionOutputWithRefScript, outputDatumDatum)
+import Contract.Transaction
+  ( TransactionOutputWithRefScript
+  , awaitTxConfirmed
+  , outputDatumDatum
+  )
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
 import Ctl.Internal.Plutus.Types.Transaction (_datum, _output)
-import Data.Array (unzip)
+import Data.Array (last, unzip)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Either (Either(Left))
@@ -76,10 +80,16 @@ mainTest config = runPlutipContract config distribution $ \(a /\ b /\ c) ->
     (finalizedTxsAndActions /\ _) <- withKeyWallet a buildChain
     let finalizedTxs /\ _ = unzip finalizedTxsAndActions
     -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
-    _ <- SeathSetup.submitChain leader participants finalizedTxs $
-      logState
-    logState
-    _ <- checkFinalState leader participants vaildatorHash
+    txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+
+    case last txIds of
+      Nothing -> throwContractError
+        "No IDs vere received after chain submission. Something is wrong."
+      Just txId -> do
+        awaitTxConfirmed txId
+        logState
+        checkFinalState leader participants vaildatorHash
+
     logInfo' "end"
   where
 
