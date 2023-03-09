@@ -13,6 +13,7 @@ You can edit this file as you like.
   , "either"
   , "exceptions"
   , "foldable-traversable"
+  , "lists"
   , "maybe"
   , "mote"
   , "newtype"
