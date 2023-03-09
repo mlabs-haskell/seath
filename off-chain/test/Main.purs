@@ -10,9 +10,11 @@ import Contract.Test.Plutip (PlutipConfig)
 import Data.Time.Duration (Seconds(Seconds))
 import Data.UInt (fromInt) as UInt
 import Seath.Test.Examples.Addition.Contract (mainTest) as Addition.Contract
+import Seath.Test.Examples.Addition.ContractSeath (mainTest) as Addition.ContractSeath
 
 main :: Effect Unit
-main = launchAff_ (Addition.Contract.mainTest config)
+-- main = launchAff_ (Addition.Contract.mainTest config)
+main = launchAff_ (Addition.ContractSeath.mainTest config)
 
 config :: PlutipConfig
 config =

@@ -1,4 +1,4 @@
-module Seath.Test.Examples.Addition.Contract (mainTest) where
+module Seath.Test.Examples.Addition.Contract (mainTest, initialContract) where
 
 import Contract.Log (logInfo')
 import Contract.Monad (Aff, Contract, liftedE, liftedM)
@@ -131,7 +131,7 @@ initialContract = do
       (wrap $ toData datum)
       DatumInline
       mempty
-  logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
+  -- logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
   transactionId <- submitTxFromConstraints lookups constraints
   awaitTxConfirmed transactionId
   pure $ transactionId /\ datum

@@ -12,6 +12,7 @@ You can edit this file as you like.
   , "effect"
   , "either"
   , "exceptions"
+  , "foldable-traversable"
   , "maybe"
   , "mote"
   , "newtype"

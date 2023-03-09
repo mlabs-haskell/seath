@@ -5,28 +5,41 @@ module Seath.Types
   , ChainBuilderState(ChainBuilderState)
   ) where
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (AddressWithNetworkTag, PubKeyHash)
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType)
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Contract.TxConstraints (TxConstraints)
+import Contract.Utxos (UtxoMap)
 import Data.Either (Either)
+import Data.Monoid ((<>))
 import Data.Newtype (class Newtype)
+import Data.Show (class Show, show)
 import Data.Tuple.Nested (type (/\))
 
 newtype UserAction a = UserAction
   { publicKey :: PubKeyHash
   , action :: a
-  , userUTxo :: TransactionHash
+  , userUTxo :: UtxoMap
+  , changeAddress :: AddressWithNetworkTag
   }
+
+instance showUserAction :: Show (UserAction a) where
+  show (UserAction a) =
+    "UserAction { publicKey :: "
+      <> show a.publicKey
+      <> ", userUTxo :: "
+      <> show a.userUTxo
+      <> " }"
 
 instance
   Newtype (UserAction a)
     { publicKey :: PubKeyHash
     , action :: a
-    , userUTxo :: TransactionHash
+    , userUTxo :: UtxoMap
+    , changeAddress :: AddressWithNetworkTag
     }
 
 newtype StateReturn validatorType datumType redeemerType stateType = StateReturn
