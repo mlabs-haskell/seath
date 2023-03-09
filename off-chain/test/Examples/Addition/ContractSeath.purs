@@ -94,9 +94,8 @@ checkFinalState leader participants vaildatorHash = do
   (BlockhainState bchState) <- getBlockhainState leader participants
     vaildatorHash
 
-  checkScriptUtxos bchState
   checlLeaderUtxos bchState
-  checkSctipDatum bchState
+  checkScriptState bchState
 
   where
   checlLeaderUtxos bchState = do
@@ -107,13 +106,10 @@ checkFinalState leader participants vaildatorHash = do
     when (size leaderUtxos /= 1) $ throwContractError
       "Leader should have only 1 UTXO at the end of test run"
 
-  checkScriptUtxos bchState = do
+  checkScriptState bchState = do
     let scriptUxos = bchState.sctiptUTXOs
     when (size scriptUxos /= 1) $ throwContractError
       "Script should have only 1 UTXO at the end of test run"
-
-  checkSctipDatum bchState = do
-    let scriptUxos = bchState.sctiptUTXOs
     let
       (scriptDatum :: Maybe AdditionDatum) = ((values scriptUxos) !! 0) >>=
         getAdditionDatum
