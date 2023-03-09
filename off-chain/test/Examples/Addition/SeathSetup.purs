@@ -106,7 +106,7 @@ submitChain leader participants txs log = do
     log
     -- logInfo' $ "submiting: " <> show balancedAndSignedTransaction
     transactionId <- submit balancedAndSignedTransaction
-    awaitTxConfirmed transactionId
+    -- awaitTxConfirmed transactionId
     -- logInfo' $ "submited: " <> show transactionId
     pure $ transactionId
 
