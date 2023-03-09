@@ -24,7 +24,6 @@ import Contract.Transaction
   ( BalancedSignedTransaction
   , FinalizedTransaction
   , TransactionHash
-  , awaitTxConfirmed
   , signTransaction
   , submit
   )
@@ -34,8 +33,7 @@ import Contract.Wallet.Key (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (head, zip, zipWith, (..))
-import Data.Array (length)
+import Data.Array (head, length, zip, zipWith, (..))
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
 import Data.Monoid ((<>))

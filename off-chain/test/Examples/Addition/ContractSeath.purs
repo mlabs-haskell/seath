@@ -2,23 +2,16 @@ module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
 
 import Contract.Log (logInfo')
 import Contract.Monad (Aff, Contract, throwContractError)
-import Contract.PlutusData (Datum(..), fromData, toData)
 import Contract.Prelude (Maybe(..), map, maybe, when, (/=), (>>=))
 import Contract.Scripts (ValidatorHash)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
-import Contract.Transaction
-  ( TransactionOutputWithRefScript
-  , awaitTxConfirmed
-  , outputDatumDatum
-  )
+import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
-import Ctl.Internal.Plutus.Types.Transaction (_datum, _output)
 import Data.Array (last, unzip)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Either (Either(Left))
-import Data.Lens ((^.))
 import Data.List ((!!))
 import Data.Map (size, values)
 import Data.Monoid ((<>))
@@ -43,41 +36,45 @@ import Seath.Test.Examples.Addition.SeathSetup
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types (AdditionDatum(..))
+import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Types
   ( ChainBuilderState(ChainBuilderState)
   , SeathConfig(SeathConfig)
   )
 
 mainTest :: PlutipConfig -> Aff Unit
-mainTest config = runPlutipContract config distribution $ \(a /\ b /\ c) ->
-  do
-    leaderPublicKeyHash <- getPublicKeyHash a
+mainTest config = runPlutipContract config distribution $
+  \(admin /\ u1 /\ u2 /\ u3) -> do
+    -- contract initialization by some admin
+    firstTransactionId /\ _ <- withKeyWallet admin initialContract
+
+    -- Seath round logic
     vaildatorHash <- fixedValidatorHash
+    let leader = Leader u1
+    leaderPublicKeyHash <- getPublicKeyHash u1
     let
-      leader = Leader a
-      participants = map Participant [ b, c ]
+      participants = map Participant [ u2, u3 ]
       seathConfig = SeathConfig
         { leader: leaderPublicKeyHash
         , finalizedTxHandler: handleActionFromFinalizedTransaction
         , onchainHandler: handleActionFromBlockChain
         }
       logState = logBlockchainState leader participants vaildatorHash
-    logState
-    firstTransactionId /\ _ <- withKeyWallet a initialContract
-    logState
+
+    logState -- log state after initialisation
+
     actions <- SeathSetup.genUserActions participants
-    logInfo' $ "test " <> show actions
+    logInfo' $ "User actions: " <> show actions
+
     let
       firstBuilderState = ChainBuilderState
         { finalizedTransactions: []
         , lastResult: Left firstTransactionId
         , pendingActions: actions
         }
-      buildChain =
-        actions2TransactionsChain
-          seathConfig
-          firstBuilderState
-    (finalizedTxsAndActions /\ _) <- withKeyWallet a buildChain
+      buildChain = actions2TransactionsChain seathConfig firstBuilderState
+
+    (finalizedTxsAndActions /\ _) <- withKeyWallet u1 buildChain
     let finalizedTxs /\ _ = unzip finalizedTxsAndActions
     -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
     txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
@@ -93,9 +90,10 @@ mainTest config = runPlutipContract config distribution $ \(a /\ b /\ c) ->
     logInfo' "end"
   where
 
-  distribution :: Array BigInt /\ Array BigInt /\ Array BigInt
+  distribution :: Array BigInt /\ Array BigInt /\ Array BigInt /\ Array BigInt
   distribution =
     [ BigInt.fromInt 1_000_000_000 ]
+      /\ [ BigInt.fromInt 1_000_000_000 ]
       /\ [ BigInt.fromInt 1_000_000_000 ]
       /\ [ BigInt.fromInt 1_000_000_000 ]
 
@@ -121,8 +119,8 @@ checkFinalState leader participants vaildatorHash = do
     when (size scriptUxos /= 1) $ throwContractError
       "Script should have only 1 UTXO at the end of test run"
     let
-      (scriptDatum :: Maybe AdditionDatum) = ((values scriptUxos) !! 0) >>=
-        getAdditionDatum
+      (scriptDatum :: Maybe AdditionDatum) =
+        ((values scriptUxos) !! 0) >>= getTypedDatum
       expectedDatum = Just $ AdditionDatum { lockedAmount: BigInt.fromInt 1200 }
     when (scriptDatum /= expectedDatum)
       $ throwContractError
@@ -131,11 +129,3 @@ checkFinalState leader participants vaildatorHash = do
           <> " at the end of test run,  but has "
           <> show expectedDatum
 
-getAdditionDatum :: TransactionOutputWithRefScript -> Maybe AdditionDatum
-getAdditionDatum out =
-  let
-    datum = outputDatumDatum (out ^. _output ^. _datum)
-  in
-    case datum of
-      (Just (Datum d)) -> fromData $ toData d
-      Nothing -> Nothing

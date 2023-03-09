@@ -1,7 +1,10 @@
 module Seath.HandleActions where
 
 import Contract.Address (addressToBech32)
-import Contract.BalanceTxConstraints (mustSendChangeToAddress, mustUseAdditionalUtxos)
+import Contract.BalanceTxConstraints
+  ( mustSendChangeToAddress
+  , mustUseAdditionalUtxos
+  )
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
@@ -9,7 +12,13 @@ import Contract.Prelude (fst, liftEffect)
 import Contract.ScriptLookups (unspentOutputs)
 import Contract.ScriptLookups as Lookups
 import Contract.Scripts (class DatumType, class RedeemerType)
-import Contract.Transaction (FinalizedTransaction, TransactionHash, balanceTx, balanceTxWithConstraints, createAdditionalUtxos)
+import Contract.Transaction
+  ( FinalizedTransaction
+  , TransactionHash
+  , balanceTx
+  , balanceTxWithConstraints
+  , createAdditionalUtxos
+  )
 import Contract.TxConstraints (mustBeSignedBy, mustSpendPubKeyOutput)
 import Control.Applicative (pure)
 import Control.Monad (bind)
@@ -24,8 +33,13 @@ import Data.Monoid (mempty, (<>))
 import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
-import Prelude (($), (<<<), discard)
-import Seath.Types (ChainBuilderState(ChainBuilderState), SeathConfig(SeathConfig), StateReturn(StateReturn), UserAction)
+import Prelude (discard, ($), (<<<))
+import Seath.Types
+  ( ChainBuilderState(ChainBuilderState)
+  , SeathConfig(SeathConfig)
+  , StateReturn(StateReturn)
+  , UserAction
+  )
 
 actions2TransactionsChain
   :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)
@@ -98,7 +112,8 @@ action2TransactionFromFinalizedTransaction
       oldTransaction
     additionalUtxos <- createAdditionalUtxos oldTransaction
     let
-      balanceConstraints = mustUseAdditionalUtxos additionalUtxos <> mustSendChangeToAddress (unwrap userAction).changeAddress -- <> mustUseAdditionalUtxos (unwrap userAction).userUTxo
+      balanceConstraints = mustUseAdditionalUtxos additionalUtxos <>
+        mustSendChangeToAddress (unwrap userAction).changeAddress -- <> mustUseAdditionalUtxos (unwrap userAction).userUTxo
       constraints = handlerResult.constraints
         -- TODO : does we really need the signature of the leader?
         -- It can be useful to have a track onchain of the leader 
@@ -109,7 +124,8 @@ action2TransactionFromFinalizedTransaction
           )
         <> mustBeSignedBy (wrap config.leader)
         <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
-    unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
+    unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
+      (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
       constraints
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints
@@ -134,7 +150,8 @@ action2TransactionFromTransactionHash
 action2TransactionFromTransactionHash (SeathConfig config) userAction txId = do
   (StateReturn handlerResult) <- config.onchainHandler userAction txId
   let
-    balanceConstraints = mustSendChangeToAddress (unwrap userAction).changeAddress -- mustUseAdditionalUtxos (unwrap userAction).userUTxo
+    balanceConstraints = mustSendChangeToAddress
+      (unwrap userAction).changeAddress -- mustUseAdditionalUtxos (unwrap userAction).userUTxo
     constraints = handlerResult.constraints
       -- TODO : does we really need the signature of the leader?
       -- It can be useful to have a track onchain of the leader 
@@ -145,12 +162,13 @@ action2TransactionFromTransactionHash (SeathConfig config) userAction txId = do
         )
       <> mustBeSignedBy (wrap config.leader)
       <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
-  unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
+  unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
+    (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
     constraints
   balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
     balanceConstraints
   txId <- getFinalizedTransactionHash balancedTx
-  logInfo'$ "TxHash: "<>show txId
+  logInfo' $ "TxHash: " <> show txId
   pure $ balancedTx /\ handlerResult.userState
 
 getFinalizedTransactionHash :: FinalizedTransaction -> Contract TransactionHash
