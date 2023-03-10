@@ -4,6 +4,8 @@ module Seath.Test.Examples.Addition.Types
   , AdditionRedeemer(AdditionRedeemer)
   , AdditionParams
   , AdditionValidator
+  , AdditionState
+  , initialState
   ) where
 
 import Contract.PlutusData
@@ -26,6 +28,12 @@ import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.Unit (Unit)
 import Prelude (class Eq, class Show)
+import Data.BigInt as BigInt
+
+type AdditionState = BigInt
+
+initialState :: AdditionState
+initialState = BigInt.fromInt 1000
 
 type AdditionParams = Unit
 

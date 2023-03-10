@@ -22,10 +22,10 @@ import Prelude (discard, pure, ($))
 import Seath.HandleActions (actions2TransactionsChain)
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
-  , handleActionFromBlockChain
-  , handleActionFromFinalizedTransaction
+  , getScriptUtxosFromChain
+  , handleAction
   )
-import Seath.Test.Examples.Addition.Contract (initialContract)
+import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
   ( BlockhainState(..)
   , Leader(Leader)
@@ -44,20 +44,23 @@ import Seath.Types
 
 mainTest :: PlutipConfig -> Aff Unit
 mainTest config = runPlutipContract config distribution $
-  \(admin /\ u1 /\ u2 /\ u3) -> do
+  \(admin /\ u1 /\ u2 /\ u3 /\ u4 /\ u5) -> do
     -- contract initialization by some admin
-    firstTransactionId /\ _ <- withKeyWallet admin initialContract
+    firstState <- withKeyWallet admin initialSeathContract
+
+    logInfo' "----------------------- INIT DONE -------------------------"
 
     -- Seath round logic
     vaildatorHash <- fixedValidatorHash
     let leader = Leader u1
     leaderPublicKeyHash <- getPublicKeyHash u1
     let
-      participants = map Participant [ u2, u3 ]
+      participants = map Participant [ u2, u3, u4, u5 ]
       seathConfig = SeathConfig
         { leader: leaderPublicKeyHash
-        , finalizedTxHandler: handleActionFromFinalizedTransaction
-        , onchainHandler: handleActionFromBlockChain
+        , stateVaildatorHash: vaildatorHash
+        , chainStartStateUtxos: getScriptUtxosFromChain
+        , actionHandler: handleAction
         }
       logState = logBlockchainState leader participants vaildatorHash
 
@@ -69,7 +72,7 @@ mainTest config = runPlutipContract config distribution $
     let
       firstBuilderState = ChainBuilderState
         { finalizedTransactions: []
-        , lastResult: Left firstTransactionId
+        , lastResult: Left firstState
         , pendingActions: actions
         }
       buildChain = actions2TransactionsChain seathConfig firstBuilderState
@@ -90,9 +93,14 @@ mainTest config = runPlutipContract config distribution $
     logInfo' "end"
   where
 
-  distribution :: Array BigInt /\ Array BigInt /\ Array BigInt /\ Array BigInt
+  distribution
+    :: Array BigInt /\ Array BigInt /\ Array BigInt /\ Array BigInt
+         /\ Array BigInt
+         /\ Array BigInt
   distribution =
     [ BigInt.fromInt 1_000_000_000 ]
+      /\ [ BigInt.fromInt 1_000_000_000 ]
+      /\ [ BigInt.fromInt 1_000_000_000 ]
       /\ [ BigInt.fromInt 1_000_000_000 ]
       /\ [ BigInt.fromInt 1_000_000_000 ]
       /\ [ BigInt.fromInt 1_000_000_000 ]
@@ -121,7 +129,7 @@ checkFinalState leader participants vaildatorHash = do
     let
       (scriptDatum :: Maybe AdditionDatum) =
         ((values scriptUxos) !! 0) >>= getTypedDatum
-      expectedDatum = Just $ AdditionDatum { lockedAmount: BigInt.fromInt 1200 }
+      expectedDatum = Just $ AdditionDatum { lockedAmount: BigInt.fromInt 1400 }
     when (scriptDatum /= expectedDatum)
       $ throwContractError
       $

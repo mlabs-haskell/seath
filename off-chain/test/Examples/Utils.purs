@@ -1,15 +1,17 @@
 module Seath.Test.Examples.Utils
-  ( submitTxFromConstraintsWithLog
-  , getScriptInput
-  , getScriptInputAndUtxos
-  , getScriptUtxos
+  ( findOwnOutputs
   , genPlutipWalletConfig
   , genScriptUTXoFromTransaction
   , getFinalizedTransactionHash
+  , getScriptInput
+  , getScriptInputAndUtxos
+  , getScriptUtxos
   , getTypedDatum
-  ) where
+  , submitTxFromConstraintsWithLog
+  )
+  where
 
-import Contract.Address (getNetworkId, validatorHashEnterpriseAddress)
+import Contract.Address (Address, getNetworkId, validatorHashEnterpriseAddress)
 import Contract.Hashing as Ctl.Internal.Hashing
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftContractM, liftedE)
@@ -22,7 +24,7 @@ import Contract.PlutusData
   )
 import Contract.Prelude (Maybe(..), liftEffect, liftM, sequence)
 import Contract.ScriptLookups as ScriptLookups
-import Contract.Scripts (class ValidatorTypes, ValidatorHash)
+import Contract.Scripts (class ValidatorTypes, ValidatorHash(..))
 import Contract.Transaction
   ( FinalizedTransaction(FinalizedTransaction)
   , TransactionHash
@@ -142,3 +144,14 @@ getTypedDatum out =
     case datum of
       (Just (Datum d)) -> fromData $ toData d
       Nothing -> Nothing
+
+findOwnOutputs :: ValidatorHash -> UtxoMap -> Contract UtxoMap
+findOwnOutputs valHash utxos = do
+  netId <- getNetworkId
+  addr <- liftContractM "cannot get validator address" $
+    validatorHashEnterpriseAddress netId valHash
+  pure $ Map.filter (hasSameAddr addr) utxos
+  where
+  hasSameAddr :: Address -> TransactionOutputWithRefScript -> Boolean
+  hasSameAddr addr out = addr == (unwrap (out ^. _output)).address
+

@@ -1,4 +1,8 @@
-module Seath.Test.Examples.Addition.Contract (mainTest, initialContract) where
+module Seath.Test.Examples.Addition.Contract
+  ( mainTest
+  , initialContract
+  , initialSeathContract
+  ) where
 
 import Contract.Log (logInfo')
 import Contract.Monad (Aff, Contract, liftedE, liftedM)
@@ -45,7 +49,9 @@ import Seath.Test.Examples.Addition.Types
   ( AdditionDatum(AdditionDatum)
   , AdditionParams
   , AdditionRedeemer(AdditionRedeemer)
+  , AdditionState
   , AdditionValidator
+  , initialState
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
 import Seath.Test.Examples.Utils
@@ -135,6 +141,22 @@ initialContract = do
   transactionId <- submitTxFromConstraints lookups constraints
   awaitTxConfirmed transactionId
   pure $ transactionId /\ datum
+
+initialSeathContract :: Contract AdditionState
+initialSeathContract = do
+  validator /\ hash <- getValidatorAndHash unit
+  let
+    lookups :: ScriptLookups.ScriptLookups AdditionValidator
+    lookups = ScriptLookups.validator validator
+    datum = AdditionDatum $ { lockedAmount: initialState }
+    constraints = mustPayToScript hash
+      (wrap $ toData datum)
+      DatumInline
+      mempty
+  -- logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
+  transactionId <- submitTxFromConstraints lookups constraints
+  awaitTxConfirmed transactionId
+  pure initialState
 
 advanceStateContract
   :: TransactionHash
