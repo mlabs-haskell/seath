@@ -57,13 +57,11 @@ handleAction
 handleAction userAction lockedValue getScriptUtxo =
   case (unwrap userAction).action of
     AddAmount increase -> do
-      _ <- logInfo' $ "--------AddAmount increase "
       val <- fixedValidator
       valHash <- fixedValidatorHash
       scriptUtxos <- getScriptUtxo
       case toUnfoldable scriptUtxos of
         [ inp /\ _outp ] -> do
-          _ <- logInfo' $ "--------Found script input: " <> show inp
           let
             redeemer = AdditionRedeemer { increaseAmount: increase }
             newDatum = AdditionDatum
