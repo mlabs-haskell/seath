@@ -1,6 +1,5 @@
 module Seath.HandleActions where
 
-import Contract.Address (addressToBech32)
 import Contract.BalanceTxConstraints
   ( mustSendChangeToAddress
   , mustUseAdditionalUtxos
@@ -15,11 +14,11 @@ import Contract.Scripts (class DatumType, class RedeemerType)
 import Contract.Transaction
   ( FinalizedTransaction
   , TransactionHash
-  , balanceTx
   , balanceTxWithConstraints
   , createAdditionalUtxos
   )
 import Contract.TxConstraints (mustBeSignedBy, mustSpendPubKeyOutput)
+import Contract.Utxos (UtxoMap)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Ctl.Internal.Hashing as Ctl.Internal.Hashing
@@ -27,9 +26,9 @@ import Ctl.Internal.Serialization as Ctl.Internal.Serialization
 import Data.Array (fold, snoc, uncons)
 import Data.Either (Either(Left, Right))
 import Data.Functor ((<$>))
-import Data.Map (toUnfoldable)
+import Data.Map (empty, toUnfoldable)
 import Data.Maybe (Maybe(Nothing, Just))
-import Data.Monoid (mempty, (<>))
+import Data.Monoid ((<>))
 import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
@@ -62,14 +61,15 @@ actions2TransactionsChain (SeathConfig config) (ChainBuilderState builderState) 
   case uncons $ builderState.pendingActions of
     Just { head: userAction, tail: pendingActions } -> do
       (finalizedTransaction /\ newUserState) <- case builderState.lastResult of
-        Right (finalizedTransaction /\ userState) ->
-          action2TransactionFromFinalizedTransaction (SeathConfig config)
+        Right (finalizedTransaction /\ userState) -> do
+          state <- config.finalizedTxHandler userAction userState
             finalizedTransaction
+          additionalUtxos <- createAdditionalUtxos finalizedTransaction
+          action2Transaction (SeathConfig config) state additionalUtxos
             userAction
-            userState
-        Left txId -> action2TransactionFromTransactionHash (SeathConfig config)
-          userAction
-          txId
+        Left txId -> do
+          state <- config.onchainHandler userAction txId
+          action2Transaction (SeathConfig config) state empty userAction
       let
         ( finalizedTransactions
             :: Array (FinalizedTransaction /\ UserAction actionType)
@@ -86,7 +86,7 @@ actions2TransactionsChain (SeathConfig config) (ChainBuilderState builderState) 
     Nothing -> pure $ builderState.finalizedTransactions /\
       builderState.lastResult
 
-action2TransactionFromFinalizedTransaction
+action2Transaction
   :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)
        (redeemerType :: Type)
        (datumType :: Type)
@@ -97,21 +97,18 @@ action2TransactionFromFinalizedTransaction
   => FromData redeemerType
   => ToData redeemerType
   => SeathConfig actionType userStateType validatorType datumType redeemerType
-  -> FinalizedTransaction
+  -> StateReturn validatorType datumType redeemerType userStateType
+  -> UtxoMap
   -> UserAction actionType
-  -> userStateType
   -> Contract (FinalizedTransaction /\ userStateType)
-action2TransactionFromFinalizedTransaction
+action2Transaction
   (SeathConfig config)
-  oldTransaction
-  userAction
-  state =
+  stateReturn
+  additionalUtxos
+  userAction =
   do
-    (StateReturn handlerResult) <- config.finalizedTxHandler userAction
-      state
-      oldTransaction
-    additionalUtxos <- createAdditionalUtxos oldTransaction
     let
+      (StateReturn handlerResult) = stateReturn
       balanceConstraints = mustUseAdditionalUtxos additionalUtxos <>
         mustSendChangeToAddress (unwrap userAction).changeAddress -- <> mustUseAdditionalUtxos (unwrap userAction).userUTxo
       constraints = handlerResult.constraints
@@ -130,46 +127,8 @@ action2TransactionFromFinalizedTransaction
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints
     txId <- getFinalizedTransactionHash balancedTx
-    -- logInfo'$ "TxHash: "<>show txId
+    logInfo' $ "TxHash: " <> show txId
     pure $ balancedTx /\ handlerResult.userState
-
-action2TransactionFromTransactionHash
-  :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)
-       (redeemerType :: Type)
-       (datumType :: Type)
-   . DatumType validatorType datumType
-  => RedeemerType validatorType redeemerType
-  => FromData datumType
-  => ToData datumType
-  => FromData redeemerType
-  => ToData redeemerType
-  => SeathConfig actionType userStateType validatorType datumType redeemerType
-  -> UserAction actionType
-  -> TransactionHash
-  -> Contract (FinalizedTransaction /\ userStateType)
-action2TransactionFromTransactionHash (SeathConfig config) userAction txId = do
-  (StateReturn handlerResult) <- config.onchainHandler userAction txId
-  let
-    balanceConstraints = mustSendChangeToAddress
-      (unwrap userAction).changeAddress -- mustUseAdditionalUtxos (unwrap userAction).userUTxo
-    constraints = handlerResult.constraints
-      -- TODO : does we really need the signature of the leader?
-      -- It can be useful to have a track onchain of the leader 
-      -- actions.
-      <> fold
-        ( mustSpendPubKeyOutput <<< fst <$> toUnfoldable
-            (unwrap userAction).userUTxo
-        )
-      <> mustBeSignedBy (wrap config.leader)
-      <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
-  unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
-    (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
-    constraints
-  balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
-    balanceConstraints
-  txId <- getFinalizedTransactionHash balancedTx
-  logInfo' $ "TxHash: " <> show txId
-  pure $ balancedTx /\ handlerResult.userState
 
 getFinalizedTransactionHash :: FinalizedTransaction -> Contract TransactionHash
 getFinalizedTransactionHash fTx = do
