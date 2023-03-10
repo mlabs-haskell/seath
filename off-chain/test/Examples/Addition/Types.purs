@@ -24,11 +24,11 @@ import Contract.PlutusData
 import Contract.Prelude (genericShow)
 import Contract.Scripts (class DatumType, class RedeemerType)
 import Data.BigInt (BigInt)
+import Data.BigInt as BigInt
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.Unit (Unit)
 import Prelude (class Eq, class Show)
-import Data.BigInt as BigInt
 
 type AdditionState = BigInt
 

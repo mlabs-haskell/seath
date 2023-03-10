@@ -8,8 +8,7 @@ module Seath.Test.Examples.Utils
   , getScriptUtxos
   , getTypedDatum
   , submitTxFromConstraintsWithLog
-  )
-  where
+  ) where
 
 import Contract.Address (Address, getNetworkId, validatorHashEnterpriseAddress)
 import Contract.Hashing as Ctl.Internal.Hashing
