@@ -27,7 +27,7 @@ import Seath.Test.Examples.Addition.Actions
   )
 import Seath.Test.Examples.Addition.Contract (initialContract)
 import Seath.Test.Examples.Addition.SeathSetup
-  ( BlockhainState(..)
+  ( BlockhainState(BlockhainState)
   , Leader(Leader)
   , Participant(Participant)
   , getBlockhainState
@@ -121,7 +121,7 @@ checkFinalState leader participants vaildatorHash = do
     let
       (scriptDatum :: Maybe AdditionDatum) =
         ((values scriptUxos) !! 0) >>= getTypedDatum
-      expectedDatum = Just $ AdditionDatum { lockedAmount: BigInt.fromInt 1200 }
+      expectedDatum = Just $ AdditionDatum { lockedAmount: BigInt.fromInt 300 }
     when (scriptDatum /= expectedDatum)
       $ throwContractError
       $
