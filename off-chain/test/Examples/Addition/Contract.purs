@@ -132,7 +132,7 @@ initialContract = do
   let
     lookups :: ScriptLookups.ScriptLookups AdditionValidator
     lookups = ScriptLookups.validator validator
-    datum = AdditionDatum $ { lockedAmount: BigInt.fromInt 1000 }
+    datum = AdditionDatum $ { lockedAmount: BigInt.fromInt 100 }
     constraints = mustPayToScript hash
       (wrap $ toData datum)
       DatumInline

@@ -10,23 +10,12 @@ module Seath.Test.Examples.Addition.SeathSetup
   , BlockhainState(..)
   ) where
 
-import Contract.Address
-  ( PubKeyHash
-  , getWalletAddresses
-  , getWalletAddressesWithNetworkTag
-  , toPubKeyHash
-  )
+import Contract.Address (PubKeyHash, getWalletAddresses, getWalletAddressesWithNetworkTag, toPubKeyHash)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedM)
 import Contract.Prelude (Maybe, Tuple, for_)
 import Contract.Scripts (ValidatorHash)
-import Contract.Transaction
-  ( BalancedSignedTransaction
-  , FinalizedTransaction
-  , TransactionHash
-  , signTransaction
-  , submit
-  )
+import Contract.Transaction (BalancedSignedTransaction, FinalizedTransaction, TransactionHash, awaitTxConfirmed, signTransaction, submit)
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
 import Contract.Wallet.Key (KeyWallet)

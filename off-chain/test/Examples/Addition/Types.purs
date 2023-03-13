@@ -33,7 +33,7 @@ import Prelude (class Eq, class Show)
 type AdditionState = BigInt
 
 initialState :: AdditionState
-initialState = BigInt.fromInt 1000
+initialState = BigInt.fromInt 100
 
 type AdditionParams = Unit
 
