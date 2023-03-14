@@ -6,26 +6,35 @@ module Seath.Test.Examples.Utils
   , genPlutipWalletConfig
   , genScriptUTXoFromTransaction
   , getFinalizedTransactionHash
+  , getTypedDatum
   ) where
 
 import Contract.Address (getNetworkId, validatorHashEnterpriseAddress)
 import Contract.Hashing as Ctl.Internal.Hashing
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftContractM, liftedE)
-import Contract.PlutusData (class IsData)
-import Contract.Prelude (liftEffect, liftM, sequence)
+import Contract.PlutusData
+  ( class FromData
+  , class IsData
+  , Datum(Datum)
+  , fromData
+  , toData
+  )
+import Contract.Prelude (Maybe(..), liftEffect, liftM, sequence)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (class ValidatorTypes, ValidatorHash)
 import Contract.Transaction
   ( FinalizedTransaction(FinalizedTransaction)
   , TransactionHash
   , TransactionInput
+  , TransactionOutputWithRefScript
   , _body
   , _input
   , _inputs
   , _outputs
   , balanceTx
   , lookupTxHash
+  , outputDatumDatum
   , signTransaction
   , submit
   )
@@ -34,12 +43,13 @@ import Contract.Utxos (UtxoMap, utxosAt)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Ctl.Internal.Plutus.Conversion (toPlutusTxOutputWithRefScript)
+import Ctl.Internal.Plutus.Types.Transaction (_datum, _output)
 import Ctl.Internal.Serialization as Ctl.Internal.Serialization
 import Data.Array (filter, head, replicate)
 import Data.BigInt as BigInt
 import Data.Eq ((==))
 import Data.Functor ((<$>))
-import Data.Lens (view)
+import Data.Lens (view, (^.))
 import Data.Map as Map
 import Data.Maybe (Maybe, isJust)
 import Data.Monoid ((<>))
@@ -122,3 +132,13 @@ genScriptUTXoFromTransaction fTx@(FinalizedTransaction tx) valHash = do
     filter (\tx' -> (unwrap (unwrap tx').output).address == validatorAddress)
       txOutputsPlutus
   pure $ Map.singleton txInput txOutputPlutus
+
+getTypedDatum
+  :: forall a. FromData a => TransactionOutputWithRefScript -> Maybe a
+getTypedDatum out =
+  let
+    datum = outputDatumDatum (out ^. _output ^. _datum)
+  in
+    case datum of
+      (Just (Datum d)) -> fromData $ toData d
+      Nothing -> Nothing

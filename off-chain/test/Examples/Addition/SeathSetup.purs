@@ -6,6 +6,8 @@ module Seath.Test.Examples.Addition.SeathSetup
   , getPublicKeyHash
   , submitChain
   , logBlockchainState
+  , getBlockhainState
+  , BlockhainState(..)
   ) where
 
 import Contract.Address
@@ -16,28 +18,28 @@ import Contract.Address
   )
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedM)
+import Contract.Prelude (Maybe, Tuple, for_)
 import Contract.Scripts (ValidatorHash)
 import Contract.Transaction
   ( BalancedSignedTransaction
   , FinalizedTransaction
   , TransactionHash
-  , awaitTxConfirmed
   , signTransaction
   , submit
   )
-import Contract.Utxos (getWalletUtxos)
+import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
 import Contract.Wallet.Key (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (head, zip)
+import Data.Array (head, length, zip, zipWith, (..))
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
 import Data.Monoid ((<>))
 import Data.Newtype (class Newtype, unwrap)
 import Data.Show (show)
-import Data.Traversable (traverse, traverse_)
+import Data.Traversable (traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
 import Effect.Aff (error)
@@ -102,19 +104,40 @@ submitChain leader participants txs log = do
     log
     -- logInfo' $ "submiting: " <> show balancedAndSignedTransaction
     transactionId <- submit balancedAndSignedTransaction
-    awaitTxConfirmed transactionId
+    -- awaitTxConfirmed transactionId
     -- logInfo' $ "submited: " <> show transactionId
     pure $ transactionId
 
+newtype BlockhainState = BlockhainState
+  { leaderUTXOs :: Maybe UtxoMap
+  , usersUTXOs :: Array (Maybe UtxoMap)
+  , sctiptUTXOs :: UtxoMap
+
+  }
+
+getBlockhainState
+  :: Leader -> Array Participant -> ValidatorHash -> Contract BlockhainState
+getBlockhainState leader participants valHash = do
+  leaderUTXOs <- withKeyWallet (unwrap leader) $ getWalletUtxos
+  usersUTXOs :: _ <- traverse (\p -> withKeyWallet (unwrap p) getWalletUtxos)
+    participants
+  sctiptUTXOs <- getScriptUtxos valHash
+  pure $ BlockhainState { leaderUTXOs, usersUTXOs, sctiptUTXOs }
+
+-- getBlockhainState = 
 logBlockchainState
-  :: Array (KeyWallet /\ String) -> Contract ValidatorHash -> Contract Unit
-logBlockchainState users valHashW = do
-  valHash <- valHashW
+  :: Leader -> Array Participant -> ValidatorHash -> Contract Unit
+logBlockchainState leader participants valHash = do
+  (BlockhainState bchState) <- getBlockhainState leader participants valHash
   logInfo' "------------------------- BlochainState -------------------------"
-  flip traverse_ users \(wallet /\ name) ->
-    ( do
-        autxos <- withKeyWallet wallet getWalletUtxos
-        logInfo' $ "utxosAt " <> name <> ": " <> show autxos
-    )
-  scriptUtxos <- getScriptUtxos valHash
-  logInfo' $ "utxosAt script: " <> show scriptUtxos
+  logInfo' $ "utxosAt LEADER: " <> show bchState.leaderUTXOs
+  for_ (enumUsers bchState.usersUTXOs) $ \(i /\ us) ->
+    logInfo' $ "utxosAt " <> i <> ": " <> show us
+  logInfo' $ "utxosAt script: " <> show bchState.sctiptUTXOs
+  where
+  enumUsers :: Array (Maybe UtxoMap) -> Array (Tuple String (Maybe UtxoMap))
+  enumUsers ps = zipWith
+    (\p i -> (("user-" <> show i) /\ p))
+    ps
+    (1 .. (length participants))
+
