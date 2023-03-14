@@ -24,6 +24,7 @@ import Contract.Transaction
   ( BalancedSignedTransaction
   , FinalizedTransaction
   , TransactionHash
+  , awaitTxConfirmed
   , signTransaction
   , submit
   )

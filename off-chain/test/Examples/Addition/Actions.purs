@@ -1,149 +1,86 @@
 module Seath.Test.Examples.Addition.Actions
-  ( handleActionFromFinalizedTransaction
-  , initialState
-  , handleActionFromBlockChain
-  , fixedValidator
+  ( fixedValidator
   , fixedValidatorHash
+  , handleAction
+  , getScriptUtxosFromChain
   ) where
 
-import Contract.Monad (Contract, liftedE, liftedM)
-import Contract.PlutusData (OutputDatum(..), fromData, toData)
+import Contract.Log (logInfo')
+import Contract.Monad (Contract, liftedE, liftedM, throwContractError)
+import Contract.PlutusData (toData)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (Validator, ValidatorHash, applyArgs, validatorHash)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
-import Contract.Transaction
-  ( FinalizedTransaction
-  , TransactionHash
-  , createAdditionalUtxos
-  , lookupTxHash
-  )
 import Contract.TxConstraints
   ( DatumPresence(..)
   , mustPayToScript
   , mustSpendScriptOutput
   )
+import Contract.Utxos (UtxoMap)
 import Control.Applicative (pure)
 import Control.Monad (bind, (>>=))
-import Control.Monad.Error.Class (liftMaybe)
-import Ctl.Internal.Plutus.Types.Transaction (_datum, _output)
-import Data.Array (head)
-import Data.BigInt (BigInt)
-import Data.BigInt as BigInt
 import Data.Functor ((<$>))
-import Data.Lens (view)
+import Data.Map (toUnfoldable)
 import Data.Monoid (mempty, (<>))
 import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple.Nested ((/\))
 import Data.Unit (unit)
-import Effect.Aff (error)
-import Effect.Class (liftEffect)
-import Effect.Exception (throw)
 import Prelude (($), (+), (<<<))
 import Seath.Test.Examples.Addition.Types
   ( AdditionAction(AddAmount)
   , AdditionDatum(AdditionDatum)
   , AdditionRedeemer(AdditionRedeemer)
+  , AdditionState
   , AdditionValidator
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
-import Seath.Test.Examples.Utils
-  ( getFinalizedTransactionHash
-  , getScriptInput
-  , getScriptInputAndUtxos
-  )
+import Seath.Test.Examples.Utils (getScriptUtxos)
 import Seath.Types (StateReturn) as Seath.Types
 import Seath.Types (UserAction)
 
-type AdditionState = BigInt
+-- todo: maybe check here what we returning
+getScriptUtxosFromChain ∷ Contract UtxoMap
+getScriptUtxosFromChain = do
+  valHash <- fixedValidatorHash
+  getScriptUtxos valHash
 
-initialState :: AdditionState
-initialState = BigInt.fromInt 100
-
-handleActionFromFinalizedTransaction
+handleAction
   :: UserAction AdditionAction
   -> AdditionState
-  -> FinalizedTransaction
+  -> Contract UtxoMap
   -> Contract
        ( Seath.Types.StateReturn AdditionValidator AdditionDatum
            AdditionRedeemer
            AdditionState
        )
-handleActionFromFinalizedTransaction userAction lockedValue oldTransaction =
+handleAction userAction lockedValue getScriptUtxo =
   case (unwrap userAction).action of
     AddAmount increase -> do
       val <- fixedValidator
       valHash <- fixedValidatorHash
-      txId <- getFinalizedTransactionHash oldTransaction
-      scriptUtxos <- createAdditionalUtxos oldTransaction
-      txIn <-
-        liftMaybe
-          (error $ "Can't find UTxO " <> show txId <> " locked by the script.")
-          $ getScriptInput txId scriptUtxos
-      let
-        redeemer = AdditionRedeemer { increaseAmount: increase }
-        newDatum = AdditionDatum
-          { lockedAmount: lockedValue + increase
-          }
+      scriptUtxos <- getScriptUtxo
+      case toUnfoldable scriptUtxos of
+        [ inp /\ _outp ] -> do
+          let
+            redeemer = AdditionRedeemer { increaseAmount: increase }
+            newDatum = AdditionDatum
+              { lockedAmount: lockedValue + increase
+              }
 
-        lookups :: ScriptLookups.ScriptLookups AdditionValidator
-        lookups = ScriptLookups.validator val
-          <> ScriptLookups.unspentOutputs scriptUtxos
-        constraints =
-          mustPayToScript valHash (wrap <<< toData $ newDatum)
-            DatumInline
-            mempty
-            <> mustSpendScriptOutput txIn (wrap $ toData redeemer)
-      pure $ wrap
-        { constraints, lookups, userState: (unwrap newDatum).lockedAmount }
-
-handleActionFromBlockChain
-  :: UserAction AdditionAction
-  -> TransactionHash
-  -> Contract
-       ( Seath.Types.StateReturn AdditionValidator AdditionDatum
-           AdditionRedeemer
-           AdditionState
-       )
-handleActionFromBlockChain action txId =
-  case (unwrap action).action of
-    AddAmount increase ->
-      do
-        val <- fixedValidator
-        valHash <- fixedValidatorHash
-        (maybeTxIn /\ scriptUtxos) <- getScriptInputAndUtxos valHash txId
-        txIn <- liftMaybe
-          (error $ "Can't find UTxO " <> show txId <> " locked by the script.")
-          maybeTxIn
-        output <-
-          liftMaybe
-            ( error $ "Can't find old datum " <> show txId <>
-                " locked by the script."
-            )
-            $ head
-                (lookupTxHash txId scriptUtxos)
-        (oldDatum :: AdditionDatum) <-
-          case view _datum $ view _output (unwrap output).output of
-            OutputDatum d -> liftMaybe (error "can't decode datum") $ fromData
-              (unwrap d)
-            _ -> liftEffect $ throw "can't find old datum"
-        let
-          redeemer = AdditionRedeemer
-            { increaseAmount: increase }
-          newDatum = AdditionDatum
-            { lockedAmount: (unwrap oldDatum).lockedAmount + increase
-            }
-
-          lookups :: ScriptLookups.ScriptLookups AdditionValidator
-          lookups = ScriptLookups.validator val
-            <> ScriptLookups.unspentOutputs scriptUtxos
-          constraints =
-            mustPayToScript valHash (wrap <<< toData $ newDatum)
-              DatumInline
-              mempty
-              <> mustSpendScriptOutput txIn (wrap $ toData redeemer)
-        pure $ wrap
-          { constraints, lookups, userState: (unwrap newDatum).lockedAmount }
+            lookups :: ScriptLookups.ScriptLookups AdditionValidator
+            lookups = ScriptLookups.validator val
+              <> ScriptLookups.unspentOutputs scriptUtxos
+            constraints =
+              mustPayToScript valHash (wrap <<< toData $ newDatum)
+                DatumInline
+                mempty
+                <> mustSpendScriptOutput inp (wrap $ toData redeemer)
+          pure $ wrap
+            { constraints, lookups, userState: (unwrap newDatum).lockedAmount }
+        _ -> throwContractError $
+          "Unexpected set of UTXOs at script addres. Should be only one UTXO, but got:\n"
+            <> show scriptUtxos
 
 fixedValidator :: Contract Validator
 fixedValidator = do
