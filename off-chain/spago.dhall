@@ -6,6 +6,7 @@ You can edit this file as you like.
 , dependencies =
   [ "aff"
   , "arrays"
+  , "bifunctors"
   , "bigints"
   , "cardano-transaction-lib"
   , "datetime"

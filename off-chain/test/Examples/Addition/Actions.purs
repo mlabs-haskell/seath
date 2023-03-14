@@ -7,7 +7,8 @@ module Seath.Test.Examples.Addition.Actions
   ) where
 
 import Contract.Monad (Contract, liftedE, liftedM, throwContractError)
-import Contract.PlutusData (OutputDatum(OutputDatum), fromData, toData)
+import Contract.PlutusData (toData)
+import Contract.Prelude (liftEither)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (Validator, ValidatorHash, applyArgs, validatorHash)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
@@ -20,10 +21,9 @@ import Contract.Utxos (UtxoMap)
 import Control.Applicative (pure)
 import Control.Monad (bind, (>>=))
 import Control.Monad.Error.Class (liftMaybe)
-import Ctl.Internal.Plutus.Types.Transaction (_datum, _output)
 import Data.Array (head)
+import Data.Bifunctor (lmap)
 import Data.Functor ((<$>))
-import Data.Lens (view)
 import Data.Map (toUnfoldable)
 import Data.Monoid (mempty, (<>))
 import Data.Newtype (unwrap, wrap)
@@ -31,8 +31,6 @@ import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (unit)
 import Effect.Aff (error)
-import Effect.Class (liftEffect)
-import Effect.Exception (throw)
 import Prelude (($), (+), (<<<))
 import Seath.Test.Examples.Addition.Types
   ( AdditionAction(AddAmount)
@@ -42,7 +40,7 @@ import Seath.Test.Examples.Addition.Types
   , AdditionValidator
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
-import Seath.Test.Examples.Utils (getScriptUtxos)
+import Seath.Test.Examples.Utils (getScriptUtxos, getTypedDatum)
 import Seath.Types (StateReturn) as Seath.Types
 import Seath.Types (UserAction)
 
@@ -96,11 +94,7 @@ queryBlockchainState = do
     liftMaybe
       (error "can't find a single utxo in the script")
       $ head (toUnfoldable scriptUtxos)
-  (AdditionDatum record) <-
-    case view _datum $ view _output output of
-      OutputDatum d -> liftMaybe (error "can't decode datum") $ fromData
-        (unwrap d)
-      _ -> liftEffect $ throw "can't find old datum"
+  (AdditionDatum record) <- liftEither $ lmap error $ getTypedDatum output
   pure $ scriptUtxos /\ record.lockedAmount
 
 fixedValidator :: Contract Validator
