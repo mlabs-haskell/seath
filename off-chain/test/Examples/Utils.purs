@@ -17,7 +17,7 @@ import Contract.Monad (Contract, liftContractM, liftedE)
 import Contract.PlutusData
   ( class FromData
   , class IsData
-  , Datum(..)
+  , Datum(Datum)
   , fromData
   , toData
   )

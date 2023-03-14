@@ -29,7 +29,7 @@ import Seath.Test.Examples.Addition.Actions
   )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
-  ( BlockhainState(..)
+  ( BlockhainState(BlockhainState)
   , Leader(Leader)
   , Participant(Participant)
   , getBlockhainState
