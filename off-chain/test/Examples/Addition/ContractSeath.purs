@@ -1,10 +1,8 @@
 module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
 
-import Undefined
-
 import Contract.Log (logInfo')
 import Contract.Monad (Aff, Contract, throwContractError)
-import Contract.Prelude (Maybe(..), map, maybe, when, (/=), (>>=))
+import Contract.Prelude (when, (/=), (>>=))
 import Contract.Scripts (ValidatorHash)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Transaction (awaitTxConfirmed)
@@ -13,19 +11,20 @@ import Control.Monad (bind)
 import Data.Array (last, length, replicate, unzip)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
-import Data.Either (Either(Left))
+import Data.Functor (map)
 import Data.List ((!!))
 import Data.Map (size, values)
+import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
-import Seath.HandleActions (actions2TransactionsChain)
+import Seath.HandleActions (buildChain)
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
-  , getScriptUtxosFromChain
   , handleAction
+  , queryBlockchainState
   )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
@@ -39,16 +38,13 @@ import Seath.Test.Examples.Addition.SeathSetup
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types (AdditionDatum(..))
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Types
-  ( ChainBuilderState(ChainBuilderState)
-  , SeathConfig(SeathConfig)
-  )
+import Seath.Types (SeathConfig(SeathConfig))
 
 mainTest :: PlutipConfig -> Aff Unit
 mainTest config = runPlutipContract config distribution $
   \((admin /\ leader') /\ participants') -> do
     -- contract initialization by some admin
-    firstState <- withKeyWallet admin initialSeathContract
+    _ <- withKeyWallet admin initialSeathContract
 
     logInfo' "----------------------- INIT DONE -------------------------"
 
@@ -62,8 +58,8 @@ mainTest config = runPlutipContract config distribution $
       seathConfig = SeathConfig
         { leader: leaderPublicKeyHash
         , stateVaildatorHash: vaildatorHash
-        , chainStartStateUtxos: getScriptUtxosFromChain
         , actionHandler: handleAction
+        , queryBlockchainState: queryBlockchainState
         }
       logState = logBlockchainState leader participants vaildatorHash
 
@@ -72,15 +68,10 @@ mainTest config = runPlutipContract config distribution $
     actions <- SeathSetup.genUserActions participants
     logInfo' $ "User actions: " <> show actions
 
-    let
-      firstBuilderState = ChainBuilderState
-        { finalizedTransactions: []
-        , lastResult: Left firstState
-        , pendingActions: actions
-        }
-      buildChain = actions2TransactionsChain seathConfig firstBuilderState
-
-    (finalizedTxsAndActions /\ _) <- withKeyWallet leader' buildChain
+    (finalizedTxsAndActions /\ _) <- withKeyWallet leader' $ buildChain
+      seathConfig
+      actions
+      Nothing
     let finalizedTxs /\ _ = unzip finalizedTxsAndActions
     -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
     txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
@@ -100,7 +91,7 @@ mainTest config = runPlutipContract config distribution $
     :: (Array BigInt /\ Array BigInt) /\ (Array (Array BigInt))
   distribution =
     ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ]) /\
-      replicate 50 [ BigInt.fromInt 1_000_000_000 ]
+      replicate 4 [ BigInt.fromInt 1_000_000_000 ]
 
 checkFinalState :: Leader -> Array Participant -> ValidatorHash -> Contract Unit
 checkFinalState leader participants vaildatorHash = do
