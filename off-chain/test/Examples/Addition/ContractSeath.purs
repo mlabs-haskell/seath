@@ -22,13 +22,27 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
 import Seath.HandleActions (actions2TransactionsChain)
-import Seath.Test.Examples.Addition.Actions (fixedValidatorHash, getScriptUtxosFromChain, handleAction)
+import Seath.Test.Examples.Addition.Actions
+  ( fixedValidatorHash
+  , getScriptUtxosFromChain
+  , handleAction
+  )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
-import Seath.Test.Examples.Addition.SeathSetup (BlockhainState(..), Leader(Leader), Participant(Participant), getBlockhainState, getPublicKeyHash, logBlockchainState)
+import Seath.Test.Examples.Addition.SeathSetup
+  ( BlockhainState(..)
+  , Leader(Leader)
+  , Participant(Participant)
+  , getBlockhainState
+  , getPublicKeyHash
+  , logBlockchainState
+  )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types (AdditionDatum(..))
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Types (ChainBuilderState(ChainBuilderState), SeathConfig(SeathConfig))
+import Seath.Types
+  ( ChainBuilderState(ChainBuilderState)
+  , SeathConfig(SeathConfig)
+  )
 
 mainTest :: PlutipConfig -> Aff Unit
 mainTest config = runPlutipContract config distribution $
@@ -83,11 +97,10 @@ mainTest config = runPlutipContract config distribution $
   where
 
   distribution
-    ::(Array BigInt /\ Array BigInt) /\ (Array (Array BigInt))
-  distribution = 
-    ([ BigInt.fromInt 1_000_000_000] /\ [ BigInt.fromInt 1_000_000_000]) /\
-     replicate 50 [ BigInt.fromInt 1_000_000_000 ]
-    
+    :: (Array BigInt /\ Array BigInt) /\ (Array (Array BigInt))
+  distribution =
+    ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ]) /\
+      replicate 50 [ BigInt.fromInt 1_000_000_000 ]
 
 checkFinalState :: Leader -> Array Participant -> ValidatorHash -> Contract Unit
 checkFinalState leader participants vaildatorHash = do
