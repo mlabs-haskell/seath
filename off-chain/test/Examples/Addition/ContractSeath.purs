@@ -11,8 +11,9 @@ import Control.Monad (bind)
 import Data.Array (last, length, replicate, unzip)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
+import Data.Either (Either, note)
 import Data.Functor (map)
-import Data.List ((!!))
+import Data.List (head)
 import Data.Map (size, values)
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
@@ -36,7 +37,7 @@ import Seath.Test.Examples.Addition.SeathSetup
   , logBlockchainState
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
-import Seath.Test.Examples.Addition.Types (AdditionDatum(..))
+import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Types (SeathConfig(SeathConfig))
 
@@ -95,29 +96,30 @@ mainTest config = runPlutipContract config distribution $
 
 checkFinalState :: Leader -> Array Participant -> ValidatorHash -> Contract Unit
 checkFinalState leader participants vaildatorHash = do
-  (BlockhainState bchState) <- getBlockhainState leader participants
+  (BlockhainState blockchainState) <- getBlockhainState leader participants
     vaildatorHash
 
-  checlLeaderUtxos bchState
-  checkScriptState bchState
+  checlLeaderUtxos blockchainState
+  checkScriptState blockchainState
 
   where
-  checlLeaderUtxos bchState = do
+  checlLeaderUtxos blockchainState = do
     leaderUtxos <- maybe
       (throwContractError "Leader should have UTXOs at the end of test run")
       pure
-      bchState.leaderUTXOs
+      blockchainState.leaderUTXOs
     when (size leaderUtxos /= 1) $ throwContractError
       "Leader should have only 1 UTXO at the end of test run"
 
-  checkScriptState bchState = do
-    let scriptUxos = bchState.sctiptUTXOs
+  checkScriptState blockchainState = do
+    let scriptUxos = blockchainState.sctiptUTXOs
     when (size scriptUxos /= 1) $ throwContractError
       "Script should have only 1 UTXO at the end of test run"
     let
-      (scriptDatum :: Maybe AdditionDatum) =
-        ((values scriptUxos) !! 0) >>= getTypedDatum
-      expectedDatum = Just $ AdditionDatum { lockedAmount: BigInt.fromInt 5100 }
+      (scriptDatum :: Either String AdditionDatum) =
+        note "scriptUtxos is empty!" (head $ values scriptUxos) >>=
+          getTypedDatum
+      expectedDatum = pure $ AdditionDatum { lockedAmount: BigInt.fromInt 5100 }
     when (scriptDatum /= expectedDatum)
       $ throwContractError
       $

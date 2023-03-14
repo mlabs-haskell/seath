@@ -24,7 +24,6 @@ import Contract.Utxos (UtxoMap)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Ctl.Internal.Hashing as Ctl.Internal.Hashing
-import Ctl.Internal.Plutus.Types.Transaction (_output)
 import Ctl.Internal.Serialization as Ctl.Internal.Serialization
 import Data.Array (fold, snoc, uncons)
 import Data.Eq ((==))
@@ -44,6 +43,7 @@ import Seath.Types
   , StateReturn(StateReturn)
   , UserAction
   )
+import Seath.Utils (findOwnOutputs, getFinalizedTransactionHash)
 
 -- | Use this function to run Seath chain generation
 buildChain
@@ -175,17 +175,3 @@ action2Transaction
     logInfo' $ "TxHash: " <> show txId
     pure $ balancedTx /\ handlerResult.userState
 
-getFinalizedTransactionHash :: FinalizedTransaction -> Contract TransactionHash
-getFinalizedTransactionHash fTx = do
-  liftEffect $ Ctl.Internal.Hashing.transactionHash <$>
-    Ctl.Internal.Serialization.convertTransaction (unwrap fTx)
-
-findOwnOutputs :: ValidatorHash -> UtxoMap -> Contract UtxoMap
-findOwnOutputs valHash utxos = do
-  netId <- getNetworkId
-  addr <- liftContractM "cannot get validator address" $
-    validatorHashEnterpriseAddress netId valHash
-  pure $ Map.filter (hasSameAddr addr) utxos
-  where
-  hasSameAddr :: Address -> TransactionOutputWithRefScript -> Boolean
-  hasSameAddr addr out = addr == (unwrap (out ^. _output)).address
