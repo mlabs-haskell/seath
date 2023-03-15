@@ -22,7 +22,7 @@ import Seath.Test.Setup.ShareContract as Share
 main :: Effect Unit
 main = launchAff_ $ do
   (faucet /\ seathKeys) <-
-    mkKeys "./wallet-setup/keys/faucet" "./wallet-setup/keys/seath_keys"
+    mkKeys "./test/Setup/keys/faucet" "./test/Setup/keys/seath_keys"
 
   withContractEnv config $ \env -> do
     runContractInEnv env (Share.payTo faucet faucet 500)
