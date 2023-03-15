@@ -1,21 +1,18 @@
 module Seath.HandleActions (buildChain) where
 
-import Contract.Address (Address, getNetworkId, validatorHashEnterpriseAddress)
 import Contract.BalanceTxConstraints
   ( mustSendChangeToAddress
   , mustUseAdditionalUtxos
   )
 import Contract.Log (logInfo')
-import Contract.Monad (Contract, liftContractM, liftedE)
+import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
-import Contract.Prelude (fst, liftEffect)
+import Contract.Prelude (fst)
 import Contract.ScriptLookups (unspentOutputs)
 import Contract.ScriptLookups as Lookups
-import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
+import Contract.Scripts (class DatumType, class RedeemerType)
 import Contract.Transaction
   ( FinalizedTransaction
-  , TransactionHash
-  , TransactionOutputWithRefScript
   , balanceTxWithConstraints
   , createAdditionalUtxos
   )
@@ -23,14 +20,10 @@ import Contract.TxConstraints (mustBeSignedBy, mustSpendPubKeyOutput)
 import Contract.Utxos (UtxoMap)
 import Control.Applicative (pure)
 import Control.Monad (bind)
-import Ctl.Internal.Hashing as Ctl.Internal.Hashing
-import Ctl.Internal.Serialization as Ctl.Internal.Serialization
 import Data.Array (fold, snoc, uncons)
 import Data.Eq ((==))
 import Data.Functor ((<$>))
-import Data.Lens ((^.))
-import Data.Map (toUnfoldable)
-import Data.Map as Map
+import Data.Map (empty, toUnfoldable)
 import Data.Maybe (Maybe(Nothing, Just))
 import Data.Monoid ((<>))
 import Data.Newtype (unwrap, wrap)
@@ -153,11 +146,18 @@ action2Transaction
       getUtxosInScript
     scriptUtxos <- getUtxosInScript
     let
+      -- Using directly `additionalUtxos` makes the first transaction in the 
+      -- chain to fail with "AdditionalUtxoOverlap"  pointing to the 
+      -- TransactionInput used in the Script.
+      -- Using the differene between `additionalUtxos` and `scriptUtxos` 
+      -- makes the redeemer unspendable in the second tranaction
+      realAdditionalUtxos =
+        if additionalUtxos == scriptUtxos then empty else additionalUtxos
       balanceConstraints =
-        mustUseAdditionalUtxos (Map.difference additionalUtxos scriptUtxos) <>
-          mustSendChangeToAddress (unwrap userAction).changeAddress -- <> mustUseAdditionalUtxos (unwrap userAction).userUTxo
+        mustUseAdditionalUtxos realAdditionalUtxos <>
+          mustSendChangeToAddress (unwrap userAction).changeAddress
       constraints = handlerResult.constraints
-        -- TODO : does we really need the signature of the leader?
+        -- TODO : do we really need the signature of the leader?
         -- It can be useful to have a track onchain of the leader 
         -- actions.
         <> fold
@@ -169,10 +169,9 @@ action2Transaction
     unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
       (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
       constraints
-    logInfo' $ "UnbalancedTx: " <> show unbalancedTx
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints
-    txId <- getFinalizedTransactionHash balancedTx
-    logInfo' $ "TxHash: " <> show txId
+    _ <- getFinalizedTransactionHash balancedTx
+    -- logInfo' $ "TxHash: " <> show txId
     pure $ balancedTx /\ handlerResult.userState
 

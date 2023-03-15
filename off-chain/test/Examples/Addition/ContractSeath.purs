@@ -119,7 +119,7 @@ checkFinalState leader participants vaildatorHash = do
       (scriptDatum :: Either String AdditionDatum) =
         note "scriptUtxos is empty!" (head $ values scriptUxos) >>=
           getTypedDatum
-      expectedDatum = pure $ AdditionDatum { lockedAmount: BigInt.fromInt 5100 }
+      expectedDatum = pure $ AdditionDatum { lockedAmount: BigInt.fromInt 500 }
     when (scriptDatum /= expectedDatum)
       $ throwContractError
       $
