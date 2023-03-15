@@ -154,8 +154,8 @@ action2Transaction
     scriptUtxos <- getUtxosInScript
     let
       balanceConstraints =
-        -- mustUseAdditionalUtxos (Map.difference additionalUtxos scriptUtxos) <>
-        mustSendChangeToAddress (unwrap userAction).changeAddress -- <> mustUseAdditionalUtxos (unwrap userAction).userUTxo
+        mustUseAdditionalUtxos (Map.difference additionalUtxos scriptUtxos) <>
+          mustSendChangeToAddress (unwrap userAction).changeAddress -- <> mustUseAdditionalUtxos (unwrap userAction).userUTxo
       constraints = handlerResult.constraints
         -- TODO : does we really need the signature of the leader?
         -- It can be useful to have a track onchain of the leader 
@@ -169,6 +169,7 @@ action2Transaction
     unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
       (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
       constraints
+    logInfo' $ "UnbalancedTx: " <> show unbalancedTx
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints
     txId <- getFinalizedTransactionHash balancedTx

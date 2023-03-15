@@ -13,7 +13,6 @@ import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)
 import Contract.TxConstraints (TxConstraints)
 import Contract.Utxos (UtxoMap)
-import Data.Maybe (Maybe)
 import Data.Monoid ((<>))
 import Data.Newtype (class Newtype)
 import Data.Show (class Show, show)
@@ -26,12 +25,12 @@ newtype UserAction a = UserAction
   , changeAddress :: AddressWithNetworkTag
   }
 
-instance showUserAction :: Show (UserAction a) where
+instance showUserAction :: Show a => Show (UserAction a) where
   show (UserAction a) =
-    "UserAction { publicKey :: "
+    "UserAction { publicKey: "
       <> show a.publicKey
-      <> ", userUTxo :: "
-      <> show a.userUTxo
+      <> ", action: "
+      <> show a.action
       <> " }"
 
 instance
