@@ -4,33 +4,15 @@ module Seath.Test.Setup.ShareContract
 
 import Contract.Prelude
 
-import Contract.Address (getNetworkId, getWalletAddress, getWalletAddresses)
-import Contract.Chain (getTip)
+import Contract.Address (getNetworkId)
 import Contract.Log (logInfo')
-import Contract.Monad (Contract, liftContractM, liftedM)
-import Contract.Utxos (utxosAt)
+import Contract.Monad (Contract)
 import Contract.Wallet (getWalletUtxos, withKeyWallet)
 import Control.Monad (bind)
-import Ctl.Internal.Plutus.Types.Address (getAddress)
 import Ctl.Internal.Serialization.Address (addressBech32)
-import Ctl.Internal.Wallet.Key (KeyWallet(..))
-import Data.Newtype (class Newtype)
+import Ctl.Internal.Wallet.Key (KeyWallet)
 import Data.Unit (Unit)
 
-{-
-
-
-
-- genreate keys, probably with staking
-
-DONE
-- use one as faucet
-  - make faucet key
--}
-
-type ShareConf = {
-  faucet :: KeyWallet
-}
 
 payTo :: KeyWallet -> KeyWallet -> Int -> Contract Unit
 payTo from to adaAmount = do
@@ -42,3 +24,8 @@ payTo from to adaAmount = do
     utxos <- getWalletUtxos
     logInfo' $ "Wallet UTXOs: " <> show utxos
     
+{-
+[INFO] 2023-03-15T10:24:54.617Z NetId: TestnetId
+[INFO] 2023-03-15T10:24:54.621Z Faucet addr: addr_test1qzl8xfarvp90k605ppgpcqltfr62qahgd3pgy0jkal6zq5p8kp6hs4d6gdytf20gjqdfqzsl6vg04d5yfesyeeltyyfszsd4ph
+[INFO] 2023-03-15T10:24:54.646Z Faucet UTXOs: Nothing
+-}
