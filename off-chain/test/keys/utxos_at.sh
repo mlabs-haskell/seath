@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 
-# Query UTXOs at address using runtime container  
+# Query UTXOs at address using node runtime container id or name
+# E.g.: ./utxos_at.sh e55a855a479d addr_test1wrq4307pceuulya9xzyflpfg8pngwhlx33wmyvla8gvc3us63un8l 
 
 set -euo pipefail
 
