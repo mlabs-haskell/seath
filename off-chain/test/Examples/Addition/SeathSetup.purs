@@ -106,7 +106,7 @@ submitChain leader participants txs log = do
     -- logInfo' $ "submiting: " <> show balancedAndSignedTransaction
     transactionId <- submit balancedAndSignedTransaction
     -- awaitTxConfirmed transactionId
-    -- logInfo' $ "submited: " <> show transactionId
+    logInfo' $ "Submited chaned Tx ID: " <> show transactionId
     pure $ transactionId
 
 newtype BlockhainState = BlockhainState
