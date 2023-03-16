@@ -7,7 +7,7 @@ module Seath.Test.Examples.Addition.SeathSetup
   , submitChain
   , logBlockchainState
   , getBlockhainState
-  , BlockhainState(..)
+  , BlockhainState(BlockhainState)
   ) where
 
 import Contract.Address
@@ -24,7 +24,6 @@ import Contract.Transaction
   ( BalancedSignedTransaction
   , FinalizedTransaction
   , TransactionHash
-  , awaitTxConfirmed
   , signTransaction
   , submit
   )
@@ -34,7 +33,7 @@ import Contract.Wallet.Key (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (head, length, zip, zipWith, (..))
+import Data.Array (head, length, range, zip, zipWith)
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
 import Data.Monoid ((<>))
@@ -140,5 +139,5 @@ logBlockchainState leader participants valHash = do
   enumUsers ps = zipWith
     (\p i -> (("user-" <> show i) /\ p))
     ps
-    (1 .. (length participants))
+    (range 1 (length participants))
 

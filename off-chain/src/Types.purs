@@ -13,7 +13,6 @@ import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)
 import Contract.TxConstraints (TxConstraints)
 import Contract.Utxos (UtxoMap)
-import Data.Either (Either)
 import Data.Monoid ((<>))
 import Data.Newtype (class Newtype)
 import Data.Show (class Show, show)
@@ -26,12 +25,12 @@ newtype UserAction a = UserAction
   , changeAddress :: AddressWithNetworkTag
   }
 
-instance showUserAction :: Show (UserAction a) where
+instance showUserAction :: Show a => Show (UserAction a) where
   show (UserAction a) =
-    "UserAction { publicKey :: "
+    "UserAction { publicKey: "
       <> show a.publicKey
-      <> ", userUTxo :: "
-      <> show a.userUTxo
+      <> ", action: "
+      <> show a.action
       <> " }"
 
 instance
@@ -60,9 +59,6 @@ newtype SeathConfig
   (redeemerType :: Type) = SeathConfig
   { leader :: PubKeyHash
   , stateVaildatorHash :: ValidatorHash
-  -- used for the first transaction in chain
-  -- on next iteration hadler swithched to one that gets script utxos from previous transaction
-  , chainStartStateUtxos :: Contract UtxoMap
   , actionHandler ::
       DatumType validatorType datumType
       => RedeemerType validatorType redeemerType
@@ -76,31 +72,7 @@ newtype SeathConfig
            -> Contract
                 (StateReturn validatorType datumType redeemerType userStateType)
          )
-  -- , finalizedTxHandler ::
-  --     DatumType validatorType datumType
-  --     => RedeemerType validatorType redeemerType
-  --     => FromData datumType
-  --     => ToData datumType
-  --     => FromData redeemerType
-  --     => ToData redeemerType
-  --     => ( UserAction actionType
-  --          -> userStateType
-  --          -> FinalizedTransaction
-  --          -> Contract
-  --               (StateReturn validatorType datumType redeemerType userStateType)
-  --        )
-  -- , onchainHandler ::
-  --     DatumType validatorType datumType
-  --     => RedeemerType validatorType redeemerType
-  --     => FromData datumType
-  --     => ToData datumType
-  --     => FromData redeemerType
-  --     => ToData redeemerType
-  --     => ( UserAction actionType
-  --          -> TransactionHash
-  --          -> Contract
-  --               (StateReturn validatorType datumType redeemerType userStateType)
-  --        )
+  , queryBlockchainState :: Contract (UtxoMap /\ userStateType)
   }
 
 newtype ChainBuilderState actionType userStateType = ChainBuilderState
@@ -108,7 +80,7 @@ newtype ChainBuilderState actionType userStateType = ChainBuilderState
       Array (UserAction actionType)
   , finalizedTransactions ::
       Array (FinalizedTransaction /\ UserAction actionType)
-  , lastResult :: Either userStateType (FinalizedTransaction /\ userStateType)
+  , lastResult :: UtxoMap /\ userStateType
   }
 
 instance
@@ -117,6 +89,5 @@ instance
         Array (UserAction actionType)
     , finalizedTransactions ::
         Array (FinalizedTransaction /\ UserAction actionType)
-    , lastResult ::
-        Either userStateType (FinalizedTransaction /\ userStateType)
+    , lastResult :: UtxoMap /\ userStateType
     }

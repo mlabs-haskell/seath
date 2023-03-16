@@ -1,5 +1,5 @@
 #SHELL := bash	
-#.ONESHELL:	
+.ONESHELL:	
 #.SHELLFLAGS := -eu -o pipefail -c	
 
 ps-sources := $$(fd -epurs)	
@@ -20,8 +20,16 @@ e2e-serve:
 run-build:	
 	@${ps-bundle} && BROWSER_RUNTIME=1 webpack --mode=production	
 
-check-format:	
+check-format:	check-explicit-exports-imports
 	@purs-tidy check ${ps-sources}	
 
 format:	
 	@purs-tidy format-in-place ${ps-sources}	
+
+check-explicit-exports-imports:
+	@if grep -rn '(\.\.)' ${ps-sources}; then
+		echo "Use explicit imports/exports ^"
+		exit 1
+	else
+		echo "All imports/exports are explicit"
+	fi

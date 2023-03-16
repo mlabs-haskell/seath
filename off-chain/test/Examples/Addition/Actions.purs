@@ -2,30 +2,35 @@ module Seath.Test.Examples.Addition.Actions
   ( fixedValidator
   , fixedValidatorHash
   , handleAction
+  , queryBlockchainState
   , getScriptUtxosFromChain
   ) where
 
-import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedE, liftedM, throwContractError)
 import Contract.PlutusData (toData)
+import Contract.Prelude (liftEither)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (Validator, ValidatorHash, applyArgs, validatorHash)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
 import Contract.TxConstraints
-  ( DatumPresence(..)
+  ( DatumPresence(DatumInline)
   , mustPayToScript
   , mustSpendScriptOutput
   )
 import Contract.Utxos (UtxoMap)
 import Control.Applicative (pure)
 import Control.Monad (bind, (>>=))
+import Control.Monad.Error.Class (liftMaybe)
+import Data.Array (head)
+import Data.Bifunctor (lmap)
 import Data.Functor ((<$>))
 import Data.Map (toUnfoldable)
 import Data.Monoid (mempty, (<>))
 import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (unit)
+import Effect.Aff (error)
 import Prelude (($), (+), (<<<))
 import Seath.Test.Examples.Addition.Types
   ( AdditionAction(AddAmount)
@@ -35,7 +40,7 @@ import Seath.Test.Examples.Addition.Types
   , AdditionValidator
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
-import Seath.Test.Examples.Utils (getScriptUtxos)
+import Seath.Test.Examples.Utils (getScriptUtxos, getTypedDatum)
 import Seath.Types (StateReturn) as Seath.Types
 import Seath.Types (UserAction)
 
@@ -54,12 +59,12 @@ handleAction
            AdditionRedeemer
            AdditionState
        )
-handleAction userAction lockedValue getScriptUtxo =
+handleAction userAction lockedValue getScriptUtxos =
   case (unwrap userAction).action of
     AddAmount increase -> do
       val <- fixedValidator
       valHash <- fixedValidatorHash
-      scriptUtxos <- getScriptUtxo
+      scriptUtxos <- getScriptUtxos
       case toUnfoldable scriptUtxos of
         [ inp /\ _outp ] -> do
           let
@@ -81,6 +86,16 @@ handleAction userAction lockedValue getScriptUtxo =
         _ -> throwContractError $
           "Unexpected set of UTXOs at script addres. Should be only one UTXO, but got:\n"
             <> show scriptUtxos
+
+queryBlockchainState :: Contract (UtxoMap /\ AdditionState)
+queryBlockchainState = do
+  scriptUtxos <- getScriptUtxosFromChain
+  (_ /\ output) <-
+    liftMaybe
+      (error "can't find a single utxo in the script")
+      $ head (toUnfoldable scriptUtxos)
+  (AdditionDatum record) <- liftEither $ lmap error $ getTypedDatum output
+  pure $ scriptUtxos /\ record.lockedAmount
 
 fixedValidator :: Contract Validator
 fixedValidator = do

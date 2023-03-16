@@ -44,6 +44,13 @@ instance RedeemerType AdditionValidator AdditionRedeemer
 
 newtype AdditionAction = AddAmount BigInt
 
+derive instance Eq AdditionAction
+derive instance Generic AdditionAction _
+derive instance Newtype AdditionAction _
+
+instance Show AdditionAction where
+  show = genericShow
+
 newtype AdditionDatum = AdditionDatum { lockedAmount :: BigInt }
 
 derive instance Eq AdditionDatum
