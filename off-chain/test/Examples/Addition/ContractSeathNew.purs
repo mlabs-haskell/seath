@@ -47,10 +47,10 @@ mainTest :: RunnerConfig -> Contract Unit
 mainTest (RunnerConfig config) = do
   logInfo' $ "Running with " <> runnerConfInfo (RunnerConfig config)
 
-  unless (config.alreadyInitiated) $ do
+  -- unless (config.alreadyInitiated) $ do -- FIXME
     -- contract initialization by some admin
-    firstState <- withKeyWallet (config.admin) initialSeathContract
-    logInfo' "----------------------- INIT DONE -------------------------"
+  firstState <- withKeyWallet (config.admin) initialSeathContract
+  logInfo' "----------------------- INIT DONE -------------------------"
 
   -- Seath round logic
   vaildatorHash <- fixedValidatorHash
