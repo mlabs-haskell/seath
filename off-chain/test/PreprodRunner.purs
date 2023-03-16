@@ -19,7 +19,8 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
-import Seath.Test.Examples.Addition.ContractSeathNew as SeathAddition
+import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
+import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
 import Seath.Test.TestSetup (RunnerConfig(..), makeKeyWallet)
 
 run :: Effect Unit
@@ -46,7 +47,8 @@ run = launchAff_ $ do
         , seathLeader: leader
         , seathParticipants: participants
         , minAdaRequired: BigInt.fromInt 200
-        , alreadyInitiated: true
+        , alreadyInitialized: true
+        , expectedFinalState: AdditionDatum { lockedAmount: BigInt.fromInt 900 }
         }
 
 config :: ContractParams

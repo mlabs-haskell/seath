@@ -1,16 +1,14 @@
 module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
 
 import Contract.Log (logInfo')
-import Contract.Monad (Aff, Contract, throwContractError)
-import Contract.Prelude (when, (/=), (>>=))
+import Contract.Monad (Contract, throwContractError)
+import Contract.Prelude (unless, unwrap, when, (/=), (>>=))
 import Contract.Scripts (ValidatorHash)
-import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
-import Data.Array (last, length, replicate, unzip)
-import Data.BigInt (BigInt)
-import Data.BigInt as BigInt
+import Data.Array (last, unzip)
+import Data.Array.NonEmpty as NE
 import Data.Either (Either, note)
 import Data.Functor (map)
 import Data.List (head)
@@ -18,7 +16,7 @@ import Data.Map (size, values)
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
-import Data.Tuple.Nested (type (/\), (/\))
+import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
 import Seath.HandleActions (buildChain)
@@ -37,65 +35,69 @@ import Seath.Test.Examples.Addition.SeathSetup
   , logBlockchainState
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
-import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
+import Seath.Test.Examples.Addition.Types (AdditionDatum)
 import Seath.Test.Examples.Utils (getTypedDatum)
+import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
 import Seath.Types (SeathConfig(SeathConfig))
 
-mainTest :: PlutipConfig -> Aff Unit
-mainTest config = runPlutipContract config distribution $
-  \((admin /\ leader') /\ participants') -> do
-    -- contract initialization by some admin
-    _ <- withKeyWallet admin initialSeathContract
+mainTest :: RunnerConfig -> Contract Unit
+mainTest config = do
+  logInfo' $ "Running with " <> runnerConfInfo config
 
+  let
+    leaderKeyWallet = (unwrap config).seathLeader
+    leader = Leader leaderKeyWallet
+
+  unless ((unwrap config).alreadyInitialized) $ do
+    -- contract initialization by some admin
+    _ <- withKeyWallet leaderKeyWallet initialSeathContract
     logInfo' "----------------------- INIT DONE -------------------------"
 
-    -- Seath round logic
-    vaildatorHash <- fixedValidatorHash
-    let leader = Leader leader'
-    leaderPublicKeyHash <- getPublicKeyHash leader'
-    logInfo' $ "@@ participants: " <> show (length participants')
-    let
-      participants = map Participant participants'
-      seathConfig = SeathConfig
-        { leader: leaderPublicKeyHash
-        , stateVaildatorHash: vaildatorHash
-        , actionHandler: handleAction
-        , queryBlockchainState: queryBlockchainState
-        }
-      logState = logBlockchainState leader participants vaildatorHash
+  -- Seath round logic
+  vaildatorHash <- fixedValidatorHash
 
-    logState -- log state after initialisation
+  leaderPublicKeyHash <- getPublicKeyHash leaderKeyWallet
+  let
+    participants = NE.toArray $ map Participant
+      (unwrap config).seathParticipants
+    seathConfig = SeathConfig
+      { leader: leaderPublicKeyHash
+      , stateVaildatorHash: vaildatorHash
+      , actionHandler: handleAction
+      , queryBlockchainState: queryBlockchainState
+      }
+    logState = logBlockchainState leader participants vaildatorHash
 
-    actions <- SeathSetup.genUserActions participants
-    logInfo' $ "User actions: " <> show actions
+  logState -- log state after initialisation
 
-    (finalizedTxsAndActions /\ _) <- withKeyWallet leader' $ buildChain
-      seathConfig
-      actions
-      Nothing
-    let finalizedTxs /\ _ = unzip finalizedTxsAndActions
-    -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
-    txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+  actions <- SeathSetup.genUserActions participants
+  logInfo' $ "User actions: " <> show actions
 
-    case last txIds of
-      Nothing -> throwContractError
-        "No IDs vere received after chain submission. Something is wrong."
-      Just txId -> do
-        awaitTxConfirmed txId
-        logState
-        checkFinalState leader participants vaildatorHash
+  (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
+    seathConfig
+    actions
+    Nothing
+  let finalizedTxs /\ _ = unzip finalizedTxsAndActions
+  -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
+  txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
 
-    logInfo' "end"
-  where
+  case last txIds of
+    Nothing -> throwContractError
+      "No IDs vere received after chain submission. Something is wrong."
+    Just txId -> do
+      awaitTxConfirmed txId
+      logState
+      checkFinalState config leader participants vaildatorHash
 
-  distribution
-    :: (Array BigInt /\ Array BigInt) /\ (Array (Array BigInt))
-  distribution =
-    ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ]) /\
-      replicate 4 [ BigInt.fromInt 1_000_000_000 ]
+  logInfo' "end"
 
-checkFinalState :: Leader -> Array Participant -> ValidatorHash -> Contract Unit
-checkFinalState leader participants vaildatorHash = do
+checkFinalState
+  :: RunnerConfig
+  -> Leader
+  -> Array Participant
+  -> ValidatorHash
+  -> Contract Unit
+checkFinalState (RunnerConfig config) leader participants vaildatorHash = do
   (BlockhainState blockchainState) <- getBlockhainState leader participants
     vaildatorHash
 
@@ -119,7 +121,7 @@ checkFinalState leader participants vaildatorHash = do
       (scriptDatum :: Either String AdditionDatum) =
         note "scriptUtxos is empty!" (head $ values scriptUxos) >>=
           getTypedDatum
-      expectedDatum = pure $ AdditionDatum { lockedAmount: BigInt.fromInt 500 }
+      expectedDatum = pure $ config.expectedFinalState
     when (scriptDatum /= expectedDatum)
       $ throwContractError
       $

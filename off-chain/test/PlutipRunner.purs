@@ -17,6 +17,7 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (($))
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
+import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
 import Seath.Test.TestSetup (RunnerConfig(..))
 
 run :: Effect Unit
@@ -27,13 +28,16 @@ run = launchAff_
       participants' <- liftMaybe (error "No participants found")
         (NE.fromArray participants)
       let
-        runnerConf = RunnerConfig
-          { admin: admin
-          , seathLeader: leader
-          , seathParticipants: participants'
-          , minAdaRequired: BigInt.fromInt 200
-          , alreadyInitiated: false
-          }
+        runnerConf =
+          RunnerConfig
+            { admin: admin
+            , seathLeader: leader
+            , seathParticipants: participants'
+            , minAdaRequired: BigInt.fromInt 200
+            , alreadyInitialized: false
+            , expectedFinalState: AdditionDatum
+                { lockedAmount: BigInt.fromInt 500 }
+            }
 
       SeathAddition.mainTest runnerConf
 
@@ -43,7 +47,7 @@ run = launchAff_
     :: (Array BigInt /\ Array BigInt) /\ (Array (Array BigInt))
   distribution =
     ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ]) /\
-      replicate 50 [ BigInt.fromInt 1_000_000_000 ]
+      replicate 4 [ BigInt.fromInt 1_000_000_000 ]
 
 config :: PlutipConfig
 config =
