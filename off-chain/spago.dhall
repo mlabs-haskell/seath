@@ -20,6 +20,7 @@ You can edit this file as you like.
   , "newtype"
   , "node-fs-aff"
   , "node-path"
+  , "node-process"
   , "ordered-collections"
   , "posix-types"
   , "prelude"

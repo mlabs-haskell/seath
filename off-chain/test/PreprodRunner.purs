@@ -1,4 +1,4 @@
-module Seath.Test.PreprodRunner (main, mainTest) where
+module Seath.Test.PreprodRunner (run) where
 
 import Contract.Prelude
 
@@ -19,15 +19,11 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
-import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
+import Seath.Test.Examples.Addition.ContractSeathNew as SeathAddition
 import Seath.Test.TestSetup (RunnerConfig(..), makeKeyWallet)
-import Undefined (undefined)
 
-main :: Effect Unit
-main = mainTest
-
-mainTest :: Effect Unit
-mainTest = launchAff_ $ do
+run :: Effect Unit
+run = launchAff_ $ do
   seathKeys <- mekeSeathKeys "./test/keys/seath_keys"
   runnerConf <- liftMaybe (error "Could not build runner config") $ mkRunnerConf
     seathKeys
@@ -50,6 +46,7 @@ mainTest = launchAff_ $ do
         , seathLeader: leader
         , seathParticipants: participants
         , minAdaRequired: BigInt.fromInt 200
+        , alreadyInitiated: true
         }
 
 config :: ContractParams

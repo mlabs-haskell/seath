@@ -15,7 +15,9 @@ newtype RunnerConfig = RunnerConfig
   { admin :: KeyWallet -- wallet that will run init contract
   , seathLeader :: KeyWallet
   , seathParticipants :: NonEmptyArray KeyWallet
+  -- todo: check that parties participants have enough funds
   , minAdaRequired :: BigInt
+  , alreadyInitiated :: Boolean
   }
 
 derive instance Newtype RunnerConfig _
