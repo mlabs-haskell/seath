@@ -36,7 +36,7 @@ run = launchAff_ $ do
     keyDirs <- readdir keysDir
     for keyDirs $ \keyDir -> makeKeyWallet $ Path.concat [ keysDir, keyDir ]
 
-  mkRunnerConf :: Array KeyWallet -> Maybe RunnerConfig
+  mkRunnerConf :: Array KeyWallet -> Maybe (RunnerConfig AdditionDatum)
   mkRunnerConf keys = do
     admin <- keys !! 0
     leader <- keys !! 1

@@ -13,21 +13,19 @@ import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Node.Path as Path
-import Seath.Test.Examples.Addition.Types (AdditionDatum)
 
--- todo: check that parties participants have enough funds
-newtype RunnerConfig = RunnerConfig
+newtype RunnerConfig (s :: Type) = RunnerConfig
   { admin :: KeyWallet -- wallet that will run init contract
   , seathLeader :: KeyWallet
   , seathParticipants :: NonEmptyArray KeyWallet
   , minAdaRequired :: BigInt
   , alreadyInitialized :: Boolean
-  , expectedFinalState :: AdditionDatum
+  , expectedFinalState :: s
   }
 
-derive instance Newtype RunnerConfig _
+derive instance Newtype (RunnerConfig s) _
 
-runnerConfInfo :: RunnerConfig -> String
+runnerConfInfo :: forall s. RunnerConfig s -> String
 runnerConfInfo conf =
   "RunnerConfig { participants = "
     <> show (NE.length (unwrap conf).seathParticipants)
