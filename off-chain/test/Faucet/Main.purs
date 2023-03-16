@@ -1,40 +1,57 @@
--- | This is temporary canary test to make sure Plutip tests are runnable after environment updates.
+module Seath.Test.Faucet.Main (main) where
 
-module Seath.Test.Setup.Main (main) where
-
+import Contract.Config
+  ( ContractParams
+  , defaultOgmiosWsConfig
+  , mkCtlBackendParams
+  , testnetConfig
+  )
+import Contract.Monad (launchAff_, runContractInEnv, withContractEnv)
 import Contract.Prelude
-import Data.Time.Duration
-import Undefined
-
-import Contract.Config (PrivatePaymentKeySource(..), PrivateStakeKeySource(..), WalletSpec(..), defaultOgmiosWsConfig, emptyHooks, mkCtlBackendParams, testnetConfig)
-import Contract.Monad (launchAff_, runContract, runContractInEnv, withContractEnv)
-import Contract.Test.Plutip (PlutipConfig)
-import Contract.Wallet (PrivatePaymentKey(..), PrivateStakeKey(..), privateKeysToKeyWallet, withKeyWallet)
-import Contract.Wallet.Key (KeyWallet(..), keyWalletPrivatePaymentKey)
-import Contract.Wallet.KeyFile (privatePaymentKeyFromFile, privateStakeKeyFromFile)
-import Control.Monad.Error.Class (liftMaybe, try)
-import Data.Array (head)
+  ( type (/\)
+  , Aff
+  , Effect
+  , Maybe(..)
+  , Unit
+  , bind
+  , discard
+  , for
+  , for_
+  , hush
+  , pure
+  , show
+  , ($)
+  , (/\)
+  , (<$>)
+  )
+import Contract.Wallet (privateKeysToKeyWallet, withKeyWallet)
+import Contract.Wallet.Key (KeyWallet, keyWalletPrivatePaymentKey)
+import Contract.Wallet.KeyFile
+  ( privatePaymentKeyFromFile
+  , privateStakeKeyFromFile
+  )
+import Control.Monad.Error.Class (try)
 import Data.UInt (fromInt) as UInt
 import Effect.Class.Console (log)
-import Effect.Exception (error)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
-import Seath.Test.Setup.ShareContract as Share
+import Seath.Test.Faucet.Contract as Faucet
 
 main :: Effect Unit
 main = launchAff_ $ do
-  (faucet /\ seathKeys) <-
-    mkKeys "./test/Setup/keys/faucet" "./test/Setup/keys/seath_keys"
+  let
+    faucetPath = "./test/keys/faucet"
+    targetsPath = "./test/keys/seath_keys"
+    adaToPay = 500
 
-  w0 <- liftMaybe (error "No wallet?") (head seathKeys)
+  (faucet /\ seathKeys) <- mkKeys faucetPath targetsPath
 
   withContractEnv config $ \env -> do
-    runContractInEnv env (withKeyWallet faucet $ Share.payTo w0 500)
+    for_ seathKeys $ \seathWallet ->
+      runContractInEnv env
+        (withKeyWallet faucet $ Faucet.payTo seathWallet adaToPay)
+  log "Funds seding end"
 
-  log "end"
-
-
--- mkShareConf :: Aff ShareConf
 mkKeys :: String -> String -> Aff (KeyWallet /\ Array KeyWallet)
 mkKeys faucetPath targetKeys = do
   faucet <- makeFaucetWallet
@@ -58,6 +75,7 @@ mkKeys faucetPath targetKeys = do
       )
     pure $ privateKeysToKeyWallet payment mbStake
 
+config :: ContractParams
 config = testnetConfig
   { backendParams = mkCtlBackendParams
       { ogmiosConfig: defaultOgmiosWsConfig
