@@ -20,9 +20,20 @@ import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
 import Seath.HandleActions (buildChain)
-import Seath.Test.Examples.Addition.Actions (fixedValidatorHash, handleAction, queryBlockchainState)
+import Seath.Test.Examples.Addition.Actions
+  ( fixedValidatorHash
+  , handleAction
+  , queryBlockchainState
+  )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
-import Seath.Test.Examples.Addition.SeathSetup (BlockhainState(BlockhainState), Leader(Leader), Participant(Participant), getBlockhainState, getPublicKeyHash, logBlockchainState)
+import Seath.Test.Examples.Addition.SeathSetup
+  ( BlockhainState(BlockhainState)
+  , Leader(Leader)
+  , Participant(Participant)
+  , getBlockhainState
+  , getPublicKeyHash
+  , logBlockchainState
+  )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types (AdditionDatum)
 import Seath.Test.Examples.Utils (getTypedDatum)

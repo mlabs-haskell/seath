@@ -14,6 +14,7 @@ import Contract.Prelude
   , (<>)
   )
 import Data.Array ((!!))
+import Effect.Exception (throw)
 import Node.Process (argv)
 import Seath.Test.PlutipRunner as PlutipRunner
 import Seath.Test.PreprodRunner as PreprodRunner
@@ -25,4 +26,5 @@ main = do
   case args !! 2 of
     Just "preprod" -> PreprodRunner.run
     Just "plutip" -> PlutipRunner.run
-    other -> log $ "Unknown args: " <> show other
+    Nothing -> PlutipRunner.run -- run plutip test as default in CI
+    other -> throw $ "Unknown args: " <> show other
