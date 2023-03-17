@@ -3,9 +3,11 @@ module Seath.Test.Examples.Addition.Types
   , AdditionDatum(AdditionDatum)
   , AdditionRedeemer(AdditionRedeemer)
   , AdditionParams
+  , AdditionValidator
+  , AdditionState
+  , initialState
   ) where
 
-import Actions (class SeathAction)
 import Contract.PlutusData
   ( class FromData
   , class HasPlutusSchema
@@ -20,19 +22,27 @@ import Contract.PlutusData
   , genericToData
   )
 import Contract.Prelude (genericShow)
+import Contract.Scripts (class DatumType, class RedeemerType)
 import Data.BigInt (BigInt)
+import Data.BigInt as BigInt
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.Unit (Unit)
 import Prelude (class Eq, class Show)
-import Undefined (undefined)
+
+type AdditionState = BigInt
+
+initialState :: AdditionState
+initialState = BigInt.fromInt 100
 
 type AdditionParams = Unit
 
-newtype AdditionAction = AddAmount BigInt
+data AdditionValidator
 
-instance SeathAction AdditionAction where
-  seathToData = undefined
+instance DatumType AdditionValidator AdditionDatum
+instance RedeemerType AdditionValidator AdditionRedeemer
+
+newtype AdditionAction = AddAmount BigInt
 
 newtype AdditionDatum = AdditionDatum { lockedAmount :: BigInt }
 

@@ -1,4 +1,8 @@
-module Seath.Test.Examples.Addition.Contract (mainTest) where
+module Seath.Test.Examples.Addition.Contract
+  ( mainTest
+  , initialContract
+  , initialSeathContract
+  ) where
 
 import Contract.Log (logInfo')
 import Contract.Monad (Aff, Contract, liftedE, liftedM)
@@ -6,9 +10,7 @@ import Contract.PlutusData (Datum, toData)
 import Contract.Prelude (liftEffect)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts
-  ( class DatumType
-  , class RedeemerType
-  , PlutusScript
+  ( PlutusScript
   , Validator
   , ValidatorHash
   , applyArgs
@@ -47,6 +49,9 @@ import Seath.Test.Examples.Addition.Types
   ( AdditionDatum(AdditionDatum)
   , AdditionParams
   , AdditionRedeemer(AdditionRedeemer)
+  , AdditionState
+  , AdditionValidator
+  , initialState
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
 import Seath.Test.Examples.Utils
@@ -54,11 +59,6 @@ import Seath.Test.Examples.Utils
   , getScriptInputAndUtxos
   , getScriptUtxos
   )
-
-data AdditionValidator
-
-instance DatumType AdditionValidator AdditionDatum
-instance RedeemerType AdditionValidator AdditionRedeemer
 
 newtype ActionNumber = ActionNumber Int
 
@@ -137,10 +137,26 @@ initialContract = do
       (wrap $ toData datum)
       DatumInline
       mempty
-  logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
+  -- logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
   transactionId <- submitTxFromConstraints lookups constraints
   awaitTxConfirmed transactionId
   pure $ transactionId /\ datum
+
+initialSeathContract :: Contract AdditionState
+initialSeathContract = do
+  validator /\ hash <- getValidatorAndHash unit
+  let
+    lookups :: ScriptLookups.ScriptLookups AdditionValidator
+    lookups = ScriptLookups.validator validator
+    datum = AdditionDatum $ { lockedAmount: initialState }
+    constraints = mustPayToScript hash
+      (wrap $ toData datum)
+      DatumInline
+      mempty
+  -- logInfo' $ "datum: " <> (show :: Datum -> String) (wrap $ toData datum)
+  transactionId <- submitTxFromConstraints lookups constraints
+  awaitTxConfirmed transactionId
+  pure initialState
 
 advanceStateContract
   :: TransactionHash
