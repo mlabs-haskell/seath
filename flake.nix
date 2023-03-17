@@ -209,9 +209,9 @@
       checks = perSystem (system:
         self.on-chain.flake.${system}.checks
         // {
-          # plutip-tests = self.off-chain.project.${system}.runPlutipTest {
-          #   testMain = "Seath.Test.Main";
-          # };
+          plutip-tests = self.off-chain.project.${system}.runPlutipTest {
+            testMain = "Seath.Test.Main";
+          };
 
           formatting = (nixpkgsFor system).runCommand "formatting-check"
               {
