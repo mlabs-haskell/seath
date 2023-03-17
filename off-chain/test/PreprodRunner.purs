@@ -21,7 +21,7 @@ import Node.FS.Aff (readdir)
 import Node.Path as Path
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
-import Seath.Test.TestSetup (RunnerConfig(..), makeKeyWallet)
+import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), makeKeyWallet)
 
 run :: Effect Unit
 run = launchAff_ $ do

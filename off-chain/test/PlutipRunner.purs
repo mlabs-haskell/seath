@@ -1,8 +1,8 @@
 module Seath.Test.PlutipRunner (run) where
 
-import Contract.Config (LogLevel(..), emptyHooks)
+import Contract.Config (LogLevel(Info), emptyHooks)
 import Contract.Monad (launchAff_)
-import Contract.Prelude (Effect, Maybe(..))
+import Contract.Prelude (Effect, Maybe(Nothing))
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
@@ -18,7 +18,7 @@ import Effect.Aff (error)
 import Prelude (($))
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
-import Seath.Test.TestSetup (RunnerConfig(..))
+import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
 
 run :: Effect Unit
 run = launchAff_

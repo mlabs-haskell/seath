@@ -4,7 +4,7 @@ module Seath.Test.Main (main) where
 
 import Contract.Prelude
   ( Effect
-  , Maybe(..)
+  , Maybe(Just, Nothing)
   , Unit
   , bind
   , discard
