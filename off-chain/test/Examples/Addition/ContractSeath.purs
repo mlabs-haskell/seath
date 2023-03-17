@@ -40,7 +40,7 @@ mainTest config = do
 
   unless ((unwrap config).alreadyInitialized) $ do
     -- contract initialization by some admin
-    _ <- withKeyWallet leaderKeyWallet initialSeathContract
+    _ <- withKeyWallet (unwrap config).admin initialSeathContract
     logInfo' "----------------------- INIT DONE -------------------------"
 
   -- Seath round logic
