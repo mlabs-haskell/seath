@@ -11,11 +11,10 @@ import Seath.Network.Types
   , Response
   , SeathMonad
   , SignatureRequestContent
+  , SignedTransaction
   )
 import Type.Function (type ($))
 import Undefined (undefined)
-
-type SignedTransaction = Int
 
 -- | Used by Leader to send a built chain for signatures.
 sendChainToUsersForSignature

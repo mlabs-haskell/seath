@@ -6,11 +6,16 @@ module Seath.Network.Types
   , NetworkConfiguration(NetworkConfiguration)
   , SeathMonad
   , SeathHandlers(RealNetworkHandlers, PlutipNetworkHandlers)
-  , NetworkError
+  , NetworkError(SubmitError)
+  , SignedTransaction(SignedTransaction)
   ) where
 
 import Contract.Transaction (FinalizedTransaction)
 import Control.Monad.Reader.Trans (ReaderT)
+import Data.Generic.Rep (class Generic)
+import Data.Newtype (class Newtype)
+import Data.Show (class Show)
+import Data.Show.Generic (genericShow)
 import Effect.Aff (Aff)
 
 newtype Request a = Request
@@ -19,16 +24,25 @@ newtype Request a = Request
   , body :: a
   }
 
+derive instance Newtype (Request a) _
+
 newtype Response a = Response
   { controlNumber :: Int
   , ip :: String
   , body :: a
   }
 
+derive instance Newtype (Response a) _
+
 -- TODO: Define Handler types
 data SeathHandlers = RealNetworkHandlers | PlutipNetworkHandlers
 
 data NetworkError = SubmitError
+
+derive instance Generic NetworkError _
+
+instance Show NetworkError where
+  show = genericShow
 
 newtype SignatureRequestContent = SignatureRequestContent
   {
@@ -56,3 +70,7 @@ newtype NetworkConfiguration = NetworkConfiguration
   }
 
 type SeathMonad a = ReaderT NetworkConfiguration Aff a
+
+newtype SignedTransaction = SignedTransaction FinalizedTransaction
+
+derive instance Newtype SignedTransaction _
