@@ -29,6 +29,7 @@ You can edit this file as you like.
   , "spec"
   , "transformers"
   , "tuples"
+  , "typelevel-prelude"
   , "uint"
   , "undefined"
   ]
