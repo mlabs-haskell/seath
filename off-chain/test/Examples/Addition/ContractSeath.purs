@@ -3,7 +3,7 @@ module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, throwContractError)
 import Contract.Prelude
-  ( type (/\)
+  ( either
   , hush
   , isJust
   , unless
@@ -13,15 +13,14 @@ import Contract.Prelude
   , (<$>)
   , (>>=)
   )
-import Contract.Scripts (ValidatorHash)
 import Contract.Transaction (awaitTxConfirmed)
-import Contract.Utxos (UtxoMap)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
 import Data.Array (last, unzip)
 import Data.Array.NonEmpty as NE
-import Data.Either (Either, note)
+import Data.BigInt (BigInt)
+import Data.Either (note)
 import Data.Functor (map)
 import Data.List (head)
 import Data.Map (size, values)
@@ -47,12 +46,15 @@ import Seath.Test.Examples.Addition.SeathSetup
   , logBlockchainState
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
-import Seath.Test.Examples.Addition.Types (AdditionDatum, AdditionState)
+import Seath.Test.Examples.Addition.Types
+  ( AdditionDatum(AdditionDatum)
+  , AdditionState
+  )
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
 import Seath.Types (SeathConfig(SeathConfig))
 
-mainTest :: RunnerConfig AdditionDatum -> Contract Unit
+mainTest :: RunnerConfig AdditionState -> Contract Unit
 mainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
   logInfo' $ "Running with " <> runnerConfInfo config
@@ -71,9 +73,10 @@ mainTest config = do
       , actionHandler: handleAction
       , queryBlockchainState: queryBlockchainState
       }
-    logState = logBlockchainState leader participants vaildatorHash
+    getState = getBlockhainState leader participants queryBlockchainState
+    logState = getState >>= logBlockchainState
 
-  exestingState <- findExistingState seathConfig
+  exestingState <- hush <$> try getState
 
   unless (isJust exestingState) $ do
     logInfo' "No initialized state found - running initialization"
@@ -82,7 +85,8 @@ mainTest config = do
     logInfo' "Initialization - DONE"
 
   -- Seath round logic
-  logState -- state before Seath execution
+  startState <- getState
+  logBlockchainState startState -- state before Seath execution
 
   actions <- SeathSetup.genUserActions participants
   logInfo' $ "User actions: " <> show actions
@@ -100,54 +104,59 @@ mainTest config = do
       "No IDs vere received after chain submission. Something is wrong."
     Just txId -> do
       awaitTxConfirmed txId
-      logState
-      checkFinalState config leader participants vaildatorHash
+      endState <- getState
+      logBlockchainState endState
+      checkFinalState config startState endState
 
   logInfo' "end"
 
-findExistingState
-  :: forall a b c d
-   . SeathConfig a AdditionState b c d
-  -> Contract (Maybe (UtxoMap /\ AdditionState))
-findExistingState (SeathConfig seathConfig) = do
-  res <- hush <$> try seathConfig.queryBlockchainState
-  pure res
-
 checkFinalState
-  :: RunnerConfig AdditionDatum
-  -> Leader
-  -> Array Participant
-  -> ValidatorHash
+  :: RunnerConfig AdditionState
+  -> BlockhainState AdditionState
+  -> BlockhainState AdditionState
   -> Contract Unit
-checkFinalState (RunnerConfig config) leader participants vaildatorHash = do
-  (BlockhainState blockchainState) <- getBlockhainState leader participants
-    vaildatorHash
+checkFinalState
+  (RunnerConfig config)
+  (BlockhainState startState)
+  (BlockhainState endState) = do
 
-  checlLeaderUtxos blockchainState
-  checkScriptState blockchainState
+  checlLeaderUtxos
+  checkScriptState
 
   where
-  checlLeaderUtxos blockchainState = do
+  checlLeaderUtxos = do
     leaderUtxos <- maybe
       (throwContractError "Leader should have UTXOs at the end of test run")
       pure
-      blockchainState.leaderUTXOs
+      endState.leaderUTXOs
     when (size leaderUtxos /= 1) $ throwContractError
       "Leader should have only 1 UTXO at the end of test run"
 
-  checkScriptState blockchainState = do
-    let scriptUxos = blockchainState.sctiptUTXOs
-    when (size scriptUxos /= 1) $ throwContractError
+  checkScriptState = do
+    let (endUxos /\ _) = endState.sctiptState
+    when (size endUxos /= 1) $ throwContractError
       "Script should have only 1 UTXO at the end of test run"
+
+    (AdditionDatum endDatum) <-
+      either throwContractError pure $
+        ( note "scriptUtxos is empty!" (head $ values endUxos) >>=
+            getTypedDatum
+        )
+
+    let (startUxos /\ _) = startState.sctiptState
+    (AdditionDatum startDatum) <-
+      either throwContractError pure $
+        ( note "scriptUtxos is empty!" (head $ values startUxos) >>=
+            getTypedDatum
+        )
     let
-      (scriptDatum :: Either String AdditionDatum) =
-        note "scriptUtxos is empty!" (head $ values scriptUxos) >>=
-          getTypedDatum
-      expectedDatum = pure $ config.expectedFinalState
-    when (scriptDatum /= expectedDatum)
+      (currentAmount :: BigInt) = endDatum.lockedAmount
+      (expectedAmount :: BigInt) = config.expectedStateChange
+        (startDatum.lockedAmount)
+    when (currentAmount /= expectedAmount)
       $ throwContractError
       $
-        "Script should have " <> show expectedDatum
+        "Script should have " <> show expectedAmount
           <> " at the end of test run,  but has "
-          <> show scriptDatum
+          <> show currentAmount
 
