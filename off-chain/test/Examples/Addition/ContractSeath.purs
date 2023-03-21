@@ -2,11 +2,23 @@ module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
 
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, throwContractError)
-import Contract.Prelude (unless, unwrap, when, (/=), (>>=))
+import Contract.Prelude
+  ( type (/\)
+  , hush
+  , isJust
+  , unless
+  , unwrap
+  , when
+  , (/=)
+  , (<$>)
+  , (>>=)
+  )
 import Contract.Scripts (ValidatorHash)
 import Contract.Transaction (awaitTxConfirmed)
+import Contract.Utxos (UtxoMap)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
+import Control.Monad.Error.Class (try)
 import Data.Array (last, unzip)
 import Data.Array.NonEmpty as NE
 import Data.Either (Either, note)
@@ -35,7 +47,7 @@ import Seath.Test.Examples.Addition.SeathSetup
   , logBlockchainState
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
-import Seath.Test.Examples.Addition.Types (AdditionDatum)
+import Seath.Test.Examples.Addition.Types (AdditionDatum, AdditionState)
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
 import Seath.Types (SeathConfig(SeathConfig))
@@ -48,15 +60,7 @@ mainTest config = do
   let
     leaderKeyWallet = (unwrap config).seathLeader
     leader = Leader leaderKeyWallet
-
-  unless ((unwrap config).alreadyInitialized) $ do
-    -- contract initialization by some admin
-    _ <- withKeyWallet (unwrap config).admin initialSeathContract
-    logInfo' "----------------------- INIT DONE -------------------------"
-
-  -- Seath round logic
   vaildatorHash <- fixedValidatorHash
-
   leaderPublicKeyHash <- getPublicKeyHash leaderKeyWallet
   let
     participants = NE.toArray $ map Participant
@@ -69,7 +73,16 @@ mainTest config = do
       }
     logState = logBlockchainState leader participants vaildatorHash
 
-  logState -- log state after initialisation
+  exestingState <- findExistingState seathConfig
+
+  unless (isJust exestingState) $ do
+    logInfo' "No initialized state found - running initialization"
+    -- contract initialization by some admin
+    _ <- withKeyWallet (unwrap config).admin initialSeathContract
+    logInfo' "Initialization - DONE"
+
+  -- Seath round logic
+  logState -- state before Seath execution
 
   actions <- SeathSetup.genUserActions participants
   logInfo' $ "User actions: " <> show actions
@@ -91,6 +104,14 @@ mainTest config = do
       checkFinalState config leader participants vaildatorHash
 
   logInfo' "end"
+
+findExistingState
+  :: forall a b c d
+   . SeathConfig a AdditionState b c d
+  -> Contract (Maybe (UtxoMap /\ AdditionState))
+findExistingState (SeathConfig seathConfig) = do
+  res <- hush <$> try seathConfig.queryBlockchainState
+  pure res
 
 checkFinalState
   :: RunnerConfig AdditionDatum

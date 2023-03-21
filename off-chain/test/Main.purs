@@ -22,7 +22,6 @@ import Seath.Test.PreprodRunner as PreprodRunner
 main :: Effect Unit
 main = do
   args <- argv
-  log $ show args
   case args !! 2 of
     Just "preprod" -> PreprodRunner.run
     Just "plutip" -> PlutipRunner.run
