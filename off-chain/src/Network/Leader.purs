@@ -4,6 +4,7 @@ import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
 import Data.Tuple.Nested (type (/\))
 import Data.Unit (Unit)
+import Seath.Core.Types (UserAction)
 import Seath.Network.Types
   ( NetworkError
   , Request
@@ -11,7 +12,6 @@ import Seath.Network.Types
   , SeathMonad
   , SignatureRequestContent
   )
-import Seath.Core.Types (UserAction)
 import Type.Function (type ($))
 import Undefined (undefined)
 

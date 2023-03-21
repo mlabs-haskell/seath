@@ -45,8 +45,8 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (discard, flip, ($))
-import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Core.Types (UserAction(UserAction))
+import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 
 newtype Leader = Leader KeyWallet
 
