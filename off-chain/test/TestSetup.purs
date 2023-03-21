@@ -19,7 +19,6 @@ newtype RunnerConfig (s :: Type) = RunnerConfig
   , seathLeader :: KeyWallet
   , seathParticipants :: NonEmptyArray KeyWallet
   , minAdaRequired :: BigInt
-  , alreadyInitialized :: Boolean
   , expectedStateChange :: s -> s
   }
 

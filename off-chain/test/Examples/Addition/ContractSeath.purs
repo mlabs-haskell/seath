@@ -76,9 +76,9 @@ mainTest config = do
     getState = getBlockhainState leader participants queryBlockchainState
     logState = getState >>= logBlockchainState
 
-  exestingState <- hush <$> try getState
+  existingState <- hush <$> try getState
 
-  unless (isJust exestingState) $ do
+  unless (isJust existingState) $ do
     logInfo' "No initialized state found - running initialization"
     -- contract initialization by some admin
     _ <- withKeyWallet (unwrap config).admin initialSeathContract

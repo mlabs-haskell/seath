@@ -48,7 +48,6 @@ run = launchAff_ $ do
         , seathLeader: leader
         , seathParticipants: participants
         , minAdaRequired: BigInt.fromInt 200
-        , alreadyInitialized: true
         , expectedStateChange: (+) (length participants * stateChangePerAction)
         }
 
@@ -63,4 +62,5 @@ config = testnetConfig
           , path: Nothing
           }
       }
+  , logLevel = Info
   }

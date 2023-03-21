@@ -33,7 +33,6 @@ run = launchAff_
             , seathLeader: leader
             , seathParticipants: participants'
             , minAdaRequired: BigInt.fromInt 200
-            , alreadyInitialized: false
             , expectedStateChange: const $ BigInt.fromInt 500
             }
 
