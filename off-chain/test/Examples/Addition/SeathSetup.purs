@@ -8,6 +8,7 @@ module Seath.Test.Examples.Addition.SeathSetup
   , logBlockchainState
   , getBlockhainState
   , BlockhainState(BlockhainState)
+  , stateChangePerAction
   ) where
 
 import Contract.Address
@@ -18,8 +19,7 @@ import Contract.Address
   )
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedM)
-import Contract.Prelude (Maybe, Tuple, for_)
-import Contract.Scripts (ValidatorHash)
+import Contract.Prelude (class Show, Maybe, Tuple, for_)
 import Contract.Transaction
   ( BalancedSignedTransaction
   , FinalizedTransaction
@@ -34,6 +34,7 @@ import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head, length, range, zip, zipWith)
+import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
 import Data.Monoid ((<>))
@@ -45,7 +46,6 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (discard, flip, ($))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
-import Seath.Test.Examples.Utils (getScriptUtxos)
 import Seath.Core.Types (UserAction(UserAction))
 
 newtype Leader = Leader KeyWallet
@@ -62,6 +62,9 @@ genUserActions
 genUserActions ps =
   traverse genAction ps
 
+stateChangePerAction ∷ BigInt
+stateChangePerAction = BigInt.fromInt 100
+
 genAction :: Participant -> Contract (UserAction AdditionAction)
 genAction (Participant p) =
   withKeyWallet p $ do
@@ -70,7 +73,7 @@ genAction (Participant p) =
     changeAddress <- liftedM "can't get Change address" $ head <$>
       getWalletAddressesWithNetworkTag
     pure $ UserAction
-      { action: AddAmount (BigInt.fromInt 100) -- FIXME: hardcoded
+      { action: AddAmount stateChangePerAction
       , publicKey: publicKeyHash
       , userUTxo: ownUtxos
       , changeAddress
@@ -108,36 +111,39 @@ submitChain leader participants txs log = do
     logInfo' $ "Submited chaned Tx ID: " <> show transactionId
     pure $ transactionId
 
-newtype BlockhainState = BlockhainState
+newtype BlockhainState s = BlockhainState
   { leaderUTXOs :: Maybe UtxoMap
   , usersUTXOs :: Array (Maybe UtxoMap)
-  , sctiptUTXOs :: UtxoMap
+  , sctiptState :: UtxoMap /\ s
 
   }
 
 getBlockhainState
-  :: Leader -> Array Participant -> ValidatorHash -> Contract BlockhainState
-getBlockhainState leader participants valHash = do
+  :: forall s
+   . Leader
+  -> Array Participant
+  -> Contract (UtxoMap /\ s)
+  -> Contract (BlockhainState s)
+getBlockhainState leader participants stateQuery = do
   leaderUTXOs <- withKeyWallet (unwrap leader) $ getWalletUtxos
   usersUTXOs :: _ <- traverse (\p -> withKeyWallet (unwrap p) getWalletUtxos)
     participants
-  sctiptUTXOs <- getScriptUtxos valHash
-  pure $ BlockhainState { leaderUTXOs, usersUTXOs, sctiptUTXOs }
+  (sctiptState :: UtxoMap /\ s) <- withKeyWallet (unwrap leader) $ stateQuery
+  pure $ BlockhainState { leaderUTXOs, usersUTXOs, sctiptState }
 
 -- getBlockhainState = 
 logBlockchainState
-  :: Leader -> Array Participant -> ValidatorHash -> Contract Unit
-logBlockchainState leader participants valHash = do
-  (BlockhainState bchState) <- getBlockhainState leader participants valHash
+  :: forall s. Show s => BlockhainState s -> Contract Unit
+logBlockchainState (BlockhainState bchState) = do
   logInfo' "------------------------- BlochainState -------------------------"
   logInfo' $ "utxosAt LEADER: " <> show bchState.leaderUTXOs
   for_ (enumUsers bchState.usersUTXOs) $ \(i /\ us) ->
     logInfo' $ "utxosAt " <> i <> ": " <> show us
-  logInfo' $ "utxosAt script: " <> show bchState.sctiptUTXOs
+  logInfo' $ "utxosAt script: " <> show bchState.sctiptState
   where
   enumUsers :: Array (Maybe UtxoMap) -> Array (Tuple String (Maybe UtxoMap))
   enumUsers ps = zipWith
     (\p i -> (("user-" <> show i) /\ p))
     ps
-    (range 1 (length participants))
+    (range 1 (length bchState.usersUTXOs))
 

@@ -1,10 +1,10 @@
 module Seath.Test.Examples.Addition.Types
   ( AdditionAction(AddAmount)
-  , AdditionDatum(AdditionDatum)
-  , AdditionRedeemer(AdditionRedeemer)
   , AdditionParams
-  , AdditionValidator
+  , AdditionRedeemer(AdditionRedeemer)
   , AdditionState
+  , AdditionValidator
+  , AdditionDatum(AdditionDatum)
   , initialState
   ) where
 

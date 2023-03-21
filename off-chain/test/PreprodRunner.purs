@@ -20,7 +20,8 @@ import Effect.Aff (error)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
-import Seath.Test.Examples.Addition.Types (AdditionDatum(AdditionDatum))
+import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
+import Seath.Test.Examples.Addition.Types (AdditionState)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), makeKeyWallet)
 
 run :: Effect Unit
@@ -36,7 +37,7 @@ run = launchAff_ $ do
     keyDirs <- readdir keysDir
     for keyDirs $ \keyDir -> makeKeyWallet $ Path.concat [ keysDir, keyDir ]
 
-  mkRunnerConf :: Array KeyWallet -> Maybe (RunnerConfig AdditionDatum)
+  mkRunnerConf :: Array KeyWallet -> Maybe (RunnerConfig AdditionState)
   mkRunnerConf keys = do
     admin <- keys !! 0
     leader <- keys !! 1
@@ -47,8 +48,7 @@ run = launchAff_ $ do
         , seathLeader: leader
         , seathParticipants: participants
         , minAdaRequired: BigInt.fromInt 200
-        , alreadyInitialized: true
-        , expectedFinalState: AdditionDatum { lockedAmount: BigInt.fromInt 900 }
+        , expectedStateChange: (+) (length participants * stateChangePerAction)
         }
 
 config :: ContractParams
@@ -62,4 +62,5 @@ config = testnetConfig
           , path: Nothing
           }
       }
+  , logLevel = Info
   }

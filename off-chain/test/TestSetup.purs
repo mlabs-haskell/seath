@@ -19,8 +19,7 @@ newtype RunnerConfig (s :: Type) = RunnerConfig
   , seathLeader :: KeyWallet
   , seathParticipants :: NonEmptyArray KeyWallet
   , minAdaRequired :: BigInt
-  , alreadyInitialized :: Boolean
-  , expectedFinalState :: s
+  , expectedStateChange :: s -> s
   }
 
 derive instance Newtype (RunnerConfig s) _
