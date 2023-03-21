@@ -41,8 +41,8 @@ import Seath.Test.Examples.Addition.Types
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
 import Seath.Test.Examples.Utils (getScriptUtxos, getTypedDatum)
-import Seath.Types (StateReturn) as Seath.Types
-import Seath.Types (UserAction)
+import Seath.Core.Types (StateReturn) as Seath.Core.Types
+import Seath.Core.Types (UserAction)
 
 -- todo: maybe check here what we returning
 getScriptUtxosFromChain ∷ Contract UtxoMap
@@ -55,7 +55,7 @@ handleAction
   -> AdditionState
   -> Contract UtxoMap
   -> Contract
-       ( Seath.Types.StateReturn AdditionValidator AdditionDatum
+       ( Seath.Core.Types.StateReturn AdditionValidator AdditionDatum
            AdditionRedeemer
            AdditionState
        )

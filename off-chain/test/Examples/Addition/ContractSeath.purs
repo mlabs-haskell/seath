@@ -19,7 +19,7 @@ import Data.Show (show)
 import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
-import Seath.HandleActions (buildChain)
+import Seath.Core.HandleActions (buildChain)
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
   , handleAction
@@ -38,7 +38,7 @@ import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types (AdditionDatum)
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
-import Seath.Types (SeathConfig(SeathConfig))
+import Seath.Core.Types (SeathConfig(SeathConfig))
 
 mainTest :: RunnerConfig AdditionDatum -> Contract Unit
 mainTest config = do

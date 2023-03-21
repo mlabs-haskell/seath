@@ -1,4 +1,4 @@
-module Seath.Utils (findOwnOutputs, getFinalizedTransactionHash) where
+module Seath.Core.Utils (findOwnOutputs, getFinalizedTransactionHash) where
 
 import Contract.Address (Address, getNetworkId, validatorHashEnterpriseAddress)
 import Contract.Monad (Contract, liftContractM)

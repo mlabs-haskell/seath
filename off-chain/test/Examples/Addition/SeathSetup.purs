@@ -46,7 +46,7 @@ import Effect.Aff (error)
 import Prelude (discard, flip, ($))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Test.Examples.Utils (getScriptUtxos)
-import Seath.Types (UserAction(UserAction))
+import Seath.Core.Types (UserAction(UserAction))
 
 newtype Leader = Leader KeyWallet
 

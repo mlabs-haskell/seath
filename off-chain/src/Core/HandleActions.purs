@@ -1,4 +1,4 @@
-module Seath.HandleActions (buildChain) where
+module Seath.Core.HandleActions (buildChain) where
 
 import Contract.BalanceTxConstraints
   ( mustSendChangeToAddress
@@ -30,13 +30,13 @@ import Data.Newtype (unwrap, wrap)
 import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
 import Prelude (discard, ($), (<<<))
-import Seath.Types
+import Seath.Core.Types
   ( ChainBuilderState(ChainBuilderState)
   , SeathConfig(SeathConfig)
   , StateReturn(StateReturn)
   , UserAction
   )
-import Seath.Utils (findOwnOutputs, getFinalizedTransactionHash)
+import Seath.Core.Utils (findOwnOutputs, getFinalizedTransactionHash)
 
 -- | Use this function to run Seath chain generation
 buildChain

@@ -1,4 +1,4 @@
-module Seath.Types
+module Seath.Core.Types
   ( UserAction(UserAction)
   , StateReturn(StateReturn)
   , SeathConfig(SeathConfig)
