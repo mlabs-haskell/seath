@@ -4,11 +4,10 @@ import Contract.Prelude
 
 import Contract.Prim.ByteArray (byteArrayToHex)
 import Contract.Transaction
-  ( TransactionHash(TransactionHash)
-  , TransactionInput(TransactionInput)
+  ( TransactionHash
+  , TransactionInput(..)
   , TransactionOutputWithRefScript
   )
-import Contract.Utxos (UtxoMap)
 import Contract.Value (valueToCoin')
 import Ctl.Internal.Plutus.Types.Transaction (_amount)
 import Data.Array as Arr
@@ -17,10 +16,10 @@ import Data.BigInt as BigInt
 import Data.Lens ((^.))
 import Data.Map as Map
 import Data.UInt (toInt)
-import Seath.Test.Examples.Addition.SeathSetup (BlockhainState(BlockhainState))
 import Seath.Test.Examples.Addition.Types (AdditionDatum)
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
+import Seath.Types (BlockhainState(BlockhainState), UserAction)
 
 class DemoShow a where
   dShow :: a -> String
@@ -37,7 +36,7 @@ instance blockChainState :: Show s => DemoShow (BlockhainState s) where
     , "\nScript state:" <> showScript
     ]
     where
-    showUsers = (flip foldMap) enumUsers $
+    showUsers = (flip foldMap) (enumUsers st.usersUTXOs "UTXOs") $
       \(s /\ utxos) -> "\n" <> s <> showUtxos utxos
 
     showScript = "\n  " <> "protocol state: " <> show (snd st.sctiptState)
@@ -54,18 +53,12 @@ instance blockChainState :: Show s => DemoShow (BlockhainState s) where
     showTuple :: (TransactionInput /\ TransactionOutputWithRefScript) -> String
     showTuple (inp /\ outp) = "\n  - " <> dShow inp <> "\n    " <> dShow outp
 
-    enumUsers :: Array (Tuple String (Maybe UtxoMap))
-    enumUsers = Arr.zipWith
-      (\p i -> (("user-" <> show i <> " UTXOs:") /\ p))
-      st.usersUTXOs
-      (Arr.range 1 (Arr.length st.usersUTXOs))
-
 instance txInput :: DemoShow TransactionInput where
   dShow (TransactionInput txInp) =
-    let
-      (TransactionHash hash) = txInp.transactionId
-    in
-      byteArrayToHex hash <> " - " <> show (toInt txInp.index)
+    dShow txInp.transactionId <> " - " <> show (toInt txInp.index)
+
+instance transactionHash :: DemoShow TransactionHash where
+  dShow txHash = byteArrayToHex (unwrap txHash)
 
 instance outRef :: DemoShow TransactionOutputWithRefScript where
   dShow to =
@@ -78,3 +71,18 @@ instance outRef :: DemoShow TransactionOutputWithRefScript where
     datum = case getTypedDatum to of
       Left _ -> "Nothing"
       Right (d :: AdditionDatum) -> show d
+
+instance userActions :: Show a => DemoShow (Array (UserAction a)) where
+  dShow actions = "\n--- Users actions---" <> actions'
+    where
+    actions' = (flip foldMap) (enumUsers actions "wants to perform") $
+      \(u /\ a) -> "\n  " <> u <> show (unwrap a).action
+
+instance txChain :: DemoShow (Array TransactionHash) where
+  dShow txs = "\nTransactions chain:\n" <> intercalate "\n-> " (map dShow txs)
+
+enumUsers :: forall a. Array a -> String -> Array (String /\ a)
+enumUsers items tag = Arr.zipWith
+  (\p i -> (("user-" <> show i <> " " <> tag <> ": ") /\ p))
+  items
+  (Arr.range 1 (Arr.length items))

@@ -14,10 +14,12 @@ import Contract.Prelude
   , (<<<)
   , (>>=)
   )
+import Contract.Transaction (awaitTxConfirmed)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
+import Data.Array (last, length, unzip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.Either (note)
@@ -31,6 +33,7 @@ import Data.Show (show)
 import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
+import Seath.HandleActions (buildChain)
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
   , handleAction
@@ -38,12 +41,10 @@ import Seath.Test.Examples.Addition.Actions
   )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
-  ( BlockhainState(BlockhainState)
-  , Leader(Leader)
+  ( Leader(Leader)
   , Participant(Participant)
   , getBlockhainState
   , getPublicKeyHash
-  , logBlockchainState
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types
@@ -52,8 +53,8 @@ import Seath.Test.Examples.Addition.Types
   )
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
-import Seath.Types (SeathConfig(SeathConfig))
-import Test.Examples.DemoShow (dShow)
+import Seath.Types (BlockhainState(..), SeathConfig(SeathConfig))
+import Test.Examples.DemoShow (class DemoShow, dShow)
 
 mainTest :: RunnerConfig AdditionState -> Contract Unit
 mainTest config = do
@@ -74,9 +75,18 @@ mainTest config = do
       , actionHandler: handleAction
       , queryBlockchainState: queryBlockchainState
       }
+
     getState = getBlockhainState leader participants queryBlockchainState
-    logState = getState >>= logBlockchainState
-    demoLogState = getState >>= logInfo' <<< dShow
+
+    demoLog :: forall a. DemoShow a => a -> Contract Unit
+    demoLog = logInfo' <<< dShow
+
+    -- logInf = logInfo' <<< show
+    logInf = demoLog
+
+    demoLogState = getState >>= demoLog
+    -- logState = getState >>= logBlockchainState
+    logState = demoLogState
 
   logInfo' "Checking wallets funded"
   _ <- withKeyWallet (unwrap config).admin waitUntilItHasUtxo
@@ -93,29 +103,36 @@ mainTest config = do
     logInfo' "Initialization - DONE"
 
   -- Seath round logic
+  logInfo' "Getting state before Seath execution"
   startState <- getState
-  demoLogState
-  -- logBlockchainState startState -- state before Seath execution
+  logInf startState
 
+  logInfo' $ "Generating User actions"
   actions <- SeathSetup.genUserActions participants
-  logInfo' $ "User actions: " <> show actions
+  logInf actions
 
-  -- (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
-  --   seathConfig
-  --   actions
-  --   Nothing
-  -- let finalizedTxs /\ _ = unzip finalizedTxsAndActions
-  -- -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
-  -- txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
-
-  -- case last txIds of
-  --   Nothing -> throwContractError
-  --     "No IDs vere received after chain submission. Something is wrong."
-  --   Just txId -> do
-  --     awaitTxConfirmed txId
-  --     endState <- getState
-  --     logBlockchainState endState
-  --     checkFinalState config startState endState
+  logInfo' $ "Building transaction chain from actions with leader"
+  (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
+    seathConfig
+    actions
+    Nothing
+  let finalizedTxs /\ _ = unzip finalizedTxsAndActions
+  logInfo' $ "Submitting chain of " <> show (length finalizedTxsAndActions) <>
+    " transactions with leader"
+  txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+  logInf txIds
+  case last txIds of
+    Nothing -> throwContractError
+      "No IDs vere received after chain submission. Something is wrong."
+    Just txId -> do
+      logInfo' "Getting state right after chain submission"
+      demoLogState
+      logInfo' "Awaiting confirmation of the last transaction in chain"
+      awaitTxConfirmed txId
+      logInfo' "Getting final state"
+      endState <- getState
+      logInf endState
+      checkFinalState config startState endState
 
   logInfo' "end"
 

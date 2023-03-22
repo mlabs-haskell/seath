@@ -7,7 +7,6 @@ module Seath.Test.Examples.Addition.SeathSetup
   , submitChain
   , logBlockchainState
   , getBlockhainState
-  , BlockhainState(BlockhainState)
   , stateChangePerAction
   ) where
 
@@ -46,7 +45,8 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (discard, flip, ($))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
-import Seath.Types (UserAction(UserAction))
+import Seath.Types (BlockhainState(BlockhainState), UserAction(UserAction))
+import Test.Examples.DemoShow (dShow)
 
 newtype Leader = Leader KeyWallet
 
@@ -99,24 +99,14 @@ submitChain
   -> Array FinalizedTransaction
   -> Contract Unit
   -> Contract (Array TransactionHash)
-submitChain leader participants txs log = do
+submitChain leader participants txs _log = do
   allSigned <- signTransactions leader (zip participants txs)
   withKeyWallet (unwrap leader) $ traverse submitAndWait allSigned
   where
   submitAndWait balancedAndSignedTransaction = do
-    log
-    -- logInfo' $ "submiting: " <> show balancedAndSignedTransaction
     transactionId <- submit balancedAndSignedTransaction
-    -- awaitTxConfirmed transactionId
-    logInfo' $ "Submited chaned Tx ID: " <> show transactionId
+    logInfo' $ "Submited chaned Tx ID: " <> dShow transactionId
     pure $ transactionId
-
-newtype BlockhainState s = BlockhainState
-  { leaderUTXOs :: Maybe UtxoMap
-  , usersUTXOs :: Array (Maybe UtxoMap)
-  , sctiptState :: UtxoMap /\ s
-
-  }
 
 getBlockhainState
   :: forall s
