@@ -1,7 +1,7 @@
 module Seath.Core.Types
   ( UserAction(UserAction)
   , StateReturn(StateReturn)
-  , SeathConfig(SeathConfig)
+  , CoreConfiguration(CoreConfiguration)
   , ChainBuilderState(ChainBuilderState)
   ) where
 
@@ -51,12 +51,12 @@ newtype StateReturn validatorType datumType redeemerType stateType = StateReturn
 
 derive instance Newtype (StateReturn a b c d) _
 
-newtype SeathConfig
+newtype CoreConfiguration
   (actionType :: Type)
   (userStateType :: Type)
   (validatorType :: Type)
   (datumType :: Type)
-  (redeemerType :: Type) = SeathConfig
+  (redeemerType :: Type) = CoreConfiguration
   { leader :: PubKeyHash
   , stateVaildatorHash :: ValidatorHash
   , actionHandler ::

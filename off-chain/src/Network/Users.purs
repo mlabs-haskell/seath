@@ -1,10 +1,17 @@
-module Seath.Network.Users where
+module Seath.Network.Users
+  ( getSeathConfiguration
+  , sendActionToLeader
+  , waitForTransaction
+  , sendSignedTxToLeader
+  , sendRejectionToLeader
+  , waitForActionConfirmation
+  ) where
 
 import Contract.Transaction (FinalizedTransaction)
 import Data.Either (Either)
 import Data.Tuple.Nested (type (/\))
 import Data.Unit (Unit)
-import Seath.Core.Types (SeathConfig, UserAction)
+import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.Types (Request, SeathMonad, SignedTransaction)
 import Type.Function (type ($))
 import Undefined (undefined)
@@ -12,13 +19,10 @@ import Undefined (undefined)
 getSeathConfiguration
   :: forall actionType userStateType validatorType datumType redeemerType
    . SeathMonad
-       ( SeathConfig actionType userStateType validatorType datumType
+       ( CoreConfiguration actionType userStateType validatorType datumType
            redeemerType
        )
 getSeathConfiguration = undefined
-
--- TODO: What's the right type for this?
--- queryLeader
 
 sendActionToLeader
   :: forall a. UserAction a -> SeathMonad $ Request $ UserAction a

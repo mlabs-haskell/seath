@@ -32,7 +32,7 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Prelude (discard, ($), (<<<))
 import Seath.Core.Types
   ( ChainBuilderState(ChainBuilderState)
-  , SeathConfig(SeathConfig)
+  , CoreConfiguration(CoreConfiguration)
   , StateReturn(StateReturn)
   , UserAction
   )
@@ -49,7 +49,7 @@ buildChain
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => SeathConfig actionType userStateType validatorType datumType redeemerType
+  => CoreConfiguration actionType userStateType validatorType datumType redeemerType
   -> Array (UserAction actionType)
   -- | Set it to nothing if this is the first time you run the builder or 
   -- | if you want to get the actual state in the blockchain
@@ -59,7 +59,7 @@ buildChain
        ( Array (FinalizedTransaction /\ UserAction actionType) /\ UtxoMap /\
            userStateType
        )
-buildChain configW@(SeathConfig config) actions mState = do
+buildChain configW@(CoreConfiguration config) actions mState = do
   lastResult <- case mState of
     Just state -> pure state
     Nothing -> config.queryBlockchainState
@@ -81,19 +81,19 @@ actions2TransactionsChain
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => SeathConfig actionType userStateType validatorType datumType redeemerType
+  => CoreConfiguration actionType userStateType validatorType datumType redeemerType
   -> ChainBuilderState actionType userStateType
   -> Contract
        ( Array (FinalizedTransaction /\ UserAction actionType) /\ UtxoMap /\
            userStateType
        )
-actions2TransactionsChain (SeathConfig config) (ChainBuilderState builderState) =
+actions2TransactionsChain (CoreConfiguration config) (ChainBuilderState builderState) =
   case uncons $ builderState.pendingActions of
     Just { head: userAction, tail: pendingActions } -> do
       let
         lastUtxoMap /\ lastUserState = builderState.lastResult
       (finalizedTransaction /\ newUserState) <- action2Transaction
-        (SeathConfig config)
+        (CoreConfiguration config)
         lastUserState
         lastUtxoMap
         userAction
@@ -110,7 +110,7 @@ actions2TransactionsChain (SeathConfig config) (ChainBuilderState builderState) 
             , finalizedTransactions: finalizedTransactions
             , pendingActions: pendingActions
             }
-      actions2TransactionsChain (SeathConfig config) newBuilderState
+      actions2TransactionsChain (CoreConfiguration config) newBuilderState
     Nothing -> pure $ builderState.finalizedTransactions /\
       builderState.lastResult
 
@@ -124,13 +124,13 @@ action2Transaction
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => SeathConfig actionType userStateType validatorType datumType redeemerType
+  => CoreConfiguration actionType userStateType validatorType datumType redeemerType
   -> userStateType
   -> UtxoMap
   -> UserAction actionType
   -> Contract (FinalizedTransaction /\ userStateType)
 action2Transaction
-  (SeathConfig config)
+  (CoreConfiguration config)
   userState
   additionalUtxos
   userAction =

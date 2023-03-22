@@ -31,7 +31,7 @@ import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
 import Seath.Core.HandleActions (buildChain)
-import Seath.Core.Types (SeathConfig(SeathConfig))
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
   , handleAction
@@ -67,7 +67,7 @@ mainTest config = do
   let
     participants = NE.toArray $ map Participant
       (unwrap config).seathParticipants
-    seathConfig = SeathConfig
+    seathConfig = CoreConfiguration
       { leader: leaderPublicKeyHash
       , stateVaildatorHash: vaildatorHash
       , actionHandler: handleAction

@@ -1,4 +1,9 @@
-module Seath.Network.Leader where
+module Seath.Network.Leader
+  ( sendChainToUsersForSignature
+  , waitForChainSignatures
+  , submitChain
+  , sendConfirmationToUsers
+  ) where
 
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
@@ -21,27 +26,19 @@ sendChainToUsersForSignature
   :: forall a
    . Array (FinalizedTransaction /\ UserAction a)
   -> SeathMonad $ Array $ Either NetworkError $ Request
-       (FinalizedTransaction /\ UserAction a)
+       (SignatureRequestContent /\ UserAction a)
 sendChainToUsersForSignature = undefined
 
 -- | It would wait for the responses of the given array  until the 
 -- | configured timeout is reached.
 waitForChainSignatures
   :: forall a
-   . Array (Request SignatureRequestContent)
+   . Array $ Request (SignatureRequestContent /\ UserAction a)
   -- TODO: How to handle the different errors? A network error should be
   -- different than a timeout and a user signature rejection.
   -> SeathMonad $ Array $ Either NetworkError $ Response
        (SignedTransaction /\ UserAction a)
 waitForChainSignatures = undefined
-
--- | TODO: Network isn't the right place for this function.
-rebuildChainFrom
-  :: forall a
-   . Int
-  -> Array (SignedTransaction /\ UserAction a)
-  -> Array (UserAction a)
-rebuildChainFrom = undefined
 
 -- | Submit a Chain of SignedTransactions
 submitChain
