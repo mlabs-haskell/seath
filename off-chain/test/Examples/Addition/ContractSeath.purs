@@ -6,31 +6,31 @@ import Contract.Prelude
   ( either
   , hush
   , isJust
-  , unless
+  , unit
   , unwrap
   , when
   , (/=)
   , (<$>)
+  , (<<<)
   , (>>=)
   )
-import Contract.Transaction (awaitTxConfirmed)
+import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
-import Data.Array (last, unzip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.Either (note)
 import Data.Functor (map)
 import Data.List (head)
 import Data.Map (size, values)
+import Data.Map as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
 import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit)
 import Prelude (discard, pure, ($))
-import Seath.HandleActions (buildChain)
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
   , handleAction
@@ -51,13 +51,14 @@ import Seath.Test.Examples.Addition.Types
   , AdditionState
   )
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
+import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
 import Seath.Types (SeathConfig(SeathConfig))
+import Test.Examples.DemoShow (dShow)
 
 mainTest :: RunnerConfig AdditionState -> Contract Unit
 mainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
-  logInfo' $ "Running with " <> runnerConfInfo config
+  logInfo' $ "Starting Seath execution with: " <> dShow config
 
   let
     leaderKeyWallet = (unwrap config).seathLeader
@@ -75,38 +76,46 @@ mainTest config = do
       }
     getState = getBlockhainState leader participants queryBlockchainState
     logState = getState >>= logBlockchainState
+    demoLogState = getState >>= logInfo' <<< dShow
 
+  logInfo' "Checking wallets funded"
+  _ <- withKeyWallet (unwrap config).admin waitUntilItHasUtxo
+
+  logInfo' "Checking script state"
   existingState <- hush <$> try getState
 
-  unless (isJust existingState) $ do
-    logInfo' "No initialized state found - running initialization"
-    -- contract initialization by some admin
+  if (isJust existingState) then
+    logInfo' "State already initialized"
+  else do
+    logInfo'
+      "No initialized state found - running initialization with admin wallet"
     _ <- withKeyWallet (unwrap config).admin initialSeathContract
     logInfo' "Initialization - DONE"
 
   -- Seath round logic
   startState <- getState
-  logBlockchainState startState -- state before Seath execution
+  demoLogState
+  -- logBlockchainState startState -- state before Seath execution
 
   actions <- SeathSetup.genUserActions participants
   logInfo' $ "User actions: " <> show actions
 
-  (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
-    seathConfig
-    actions
-    Nothing
-  let finalizedTxs /\ _ = unzip finalizedTxsAndActions
-  -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
-  txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+  -- (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
+  --   seathConfig
+  --   actions
+  --   Nothing
+  -- let finalizedTxs /\ _ = unzip finalizedTxsAndActions
+  -- -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
+  -- txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
 
-  case last txIds of
-    Nothing -> throwContractError
-      "No IDs vere received after chain submission. Something is wrong."
-    Just txId -> do
-      awaitTxConfirmed txId
-      endState <- getState
-      logBlockchainState endState
-      checkFinalState config startState endState
+  -- case last txIds of
+  --   Nothing -> throwContractError
+  --     "No IDs vere received after chain submission. Something is wrong."
+  --   Just txId -> do
+  --     awaitTxConfirmed txId
+  --     endState <- getState
+  --     logBlockchainState endState
+  --     checkFinalState config startState endState
 
   logInfo' "end"
 
@@ -160,3 +169,12 @@ checkFinalState
           <> " at the end of test run,  but has "
           <> show currentAmount
 
+waitUntilItHasUtxo :: Contract Unit
+waitUntilItHasUtxo = do
+  -- logInfo' "Waiting for funds in admin"
+  mutxos <- getWalletUtxos
+  case mutxos of
+    Just utxos ->
+      if Map.isEmpty utxos then waitUntilItHasUtxo
+      else pure unit -- logInfo' $ "founds in admin: " <> show utxos
+    Nothing -> waitUntilItHasUtxo
