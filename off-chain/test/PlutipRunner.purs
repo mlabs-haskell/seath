@@ -1,8 +1,9 @@
 module Seath.Test.PlutipRunner (run) where
 
-import Contract.Config (LogLevel(Info), emptyHooks)
+import Contract.Prelude
+
+import Contract.Config (emptyHooks)
 import Contract.Monad (launchAff_)
-import Contract.Prelude (Effect, Maybe(Nothing), const)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
@@ -17,6 +18,7 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (($))
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
+import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
 
 run :: Effect Unit
@@ -33,7 +35,7 @@ run = launchAff_
             , seathLeader: leader
             , seathParticipants: participants'
             , minAdaRequired: BigInt.fromInt 200
-            , expectedStateChange: const $ BigInt.fromInt 500
+            , expectedStateChange: (+) (length participants * stateChangePerAction)
             }
 
       SeathAddition.mainTest runnerConf

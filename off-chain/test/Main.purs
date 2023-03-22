@@ -7,8 +7,6 @@ import Contract.Prelude
   , Maybe(Just, Nothing)
   , Unit
   , bind
-  , discard
-  , log
   , show
   , ($)
   , (<>)
