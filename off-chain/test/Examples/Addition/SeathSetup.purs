@@ -114,7 +114,7 @@ submitChain leader participants txs log = do
 newtype BlockhainState s = BlockhainState
   { leaderUTXOs :: Maybe UtxoMap
   , usersUTXOs :: Array (Maybe UtxoMap)
-  , sctiptState :: UtxoMap /\ s
+  , scriptState :: UtxoMap /\ s
 
   }
 
