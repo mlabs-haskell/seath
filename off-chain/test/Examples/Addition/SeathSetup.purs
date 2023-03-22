@@ -1,17 +1,19 @@
 module Seath.Test.Examples.Addition.SeathSetup
-  ( Leader(Leader)
-  , Participant(Participant)
+  ( Leader(..)
+  , Participant(..)
   , genAction
   , genUserActions
-  , getPublicKeyHash
-  , submitChain
-  , logBlockchainState
   , getBlockhainState
+  , getPublicKeyHash
+  , getWalletAddress
+  , logBlockchainState
   , stateChangePerAction
+  , submitChain
   ) where
 
 import Contract.Address
   ( PubKeyHash
+  , getNetworkId
   , getWalletAddresses
   , getWalletAddressesWithNetworkTag
   , toPubKeyHash
@@ -32,6 +34,7 @@ import Contract.Wallet.Key (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
+import Ctl.Internal.Serialization.Address (addressBech32)
 import Data.Array (head, length, range, zip, zipWith)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
@@ -84,6 +87,12 @@ getPublicKeyHash kw = withKeyWallet kw do
   address <- liftedM "can't get the address of KeyWallet" $ head <$>
     getWalletAddresses
   liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
+
+getWalletAddress :: KeyWallet -> Contract String
+getWalletAddress kw = withKeyWallet kw do
+  netId <- getNetworkId
+  let serializableAddr = (unwrap kw).address netId
+  pure $ addressBech32 serializableAddr
 
 signTransactions
   :: Leader

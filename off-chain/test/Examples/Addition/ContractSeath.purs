@@ -45,6 +45,7 @@ import Seath.Test.Examples.Addition.SeathSetup
   , Participant(Participant)
   , getBlockhainState
   , getPublicKeyHash
+  , getWalletAddress
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types
@@ -66,6 +67,8 @@ mainTest config = do
     leader = Leader leaderKeyWallet
   vaildatorHash <- fixedValidatorHash
   leaderPublicKeyHash <- getPublicKeyHash leaderKeyWallet
+  bech32address <- getWalletAddress leaderKeyWallet
+  logInfo' $ "Leader address: " <> bech32address
   let
     participants = NE.toArray $ map Participant
       (unwrap config).seathParticipants
@@ -134,7 +137,7 @@ mainTest config = do
       logInf endState
       checkFinalState config startState endState
 
-  logInfo' "end"
+  logInfo' "Happy end!"
 
 checkFinalState
   :: RunnerConfig AdditionState
