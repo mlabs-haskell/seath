@@ -100,6 +100,8 @@ submitChain
   -> Contract Unit
   -> Contract (Array TransactionHash)
 submitChain leader participants txs log = do
+  -- We don't really need leader to sign transactions right now.
+  -- This can change if we add a fee to the leader.
   allSigned <- signTransactions leader (zip participants txs)
   withKeyWallet (unwrap leader) $ traverse submitAndWait allSigned
   where
@@ -115,7 +117,6 @@ newtype BlockhainState s = BlockhainState
   { leaderUTXOs :: Maybe UtxoMap
   , usersUTXOs :: Array (Maybe UtxoMap)
   , sctiptState :: UtxoMap /\ s
-
   }
 
 getBlockhainState

@@ -49,7 +49,8 @@ buildChain
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => CoreConfiguration actionType userStateType validatorType datumType redeemerType
+  => CoreConfiguration actionType userStateType validatorType datumType
+       redeemerType
   -> Array (UserAction actionType)
   -- | Set it to nothing if this is the first time you run the builder or 
   -- | if you want to get the actual state in the blockchain
@@ -81,13 +82,16 @@ actions2TransactionsChain
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => CoreConfiguration actionType userStateType validatorType datumType redeemerType
+  => CoreConfiguration actionType userStateType validatorType datumType
+       redeemerType
   -> ChainBuilderState actionType userStateType
   -> Contract
        ( Array (FinalizedTransaction /\ UserAction actionType) /\ UtxoMap /\
            userStateType
        )
-actions2TransactionsChain (CoreConfiguration config) (ChainBuilderState builderState) =
+actions2TransactionsChain
+  (CoreConfiguration config)
+  (ChainBuilderState builderState) =
   case uncons $ builderState.pendingActions of
     Just { head: userAction, tail: pendingActions } -> do
       let
@@ -124,7 +128,8 @@ action2Transaction
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => CoreConfiguration actionType userStateType validatorType datumType redeemerType
+  => CoreConfiguration actionType userStateType validatorType datumType
+       redeemerType
   -> userStateType
   -> UtxoMap
   -> UserAction actionType
@@ -157,14 +162,10 @@ action2Transaction
         mustUseAdditionalUtxos realAdditionalUtxos <>
           mustSendChangeToAddress (unwrap userAction).changeAddress
       constraints = handlerResult.constraints
-        -- TODO : do we really need the signature of the leader?
-        -- It can be useful to have a track onchain of the leader 
-        -- actions.
         <> fold
           ( mustSpendPubKeyOutput <<< fst <$> toUnfoldable
               (unwrap userAction).userUTxo
           )
-        <> mustBeSignedBy (wrap config.leader)
         <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
     unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
       (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)

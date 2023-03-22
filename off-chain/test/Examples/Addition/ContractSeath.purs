@@ -72,6 +72,7 @@ mainTest config = do
       , stateVaildatorHash: vaildatorHash
       , actionHandler: handleAction
       , queryBlockchainState: queryBlockchainState
+      , numberOfBuiltChains: 0
       }
     getState = getBlockhainState leader participants queryBlockchainState
     logState = getState >>= logBlockchainState

@@ -35,7 +35,7 @@ newtype Response a = Response
 derive instance Newtype (Response a) _
 
 -- TODO: Define Handler types
-data SeathHandlers = RealNetworkHandlers | PlutipNetworkHandlers
+data SeathHandlers = RealNetworkHandlers {} | PlutipNetworkHandlers {}
 
 data NetworkError = SubmitError
 
