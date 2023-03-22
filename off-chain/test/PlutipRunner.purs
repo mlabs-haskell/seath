@@ -35,7 +35,8 @@ run = launchAff_
             , seathLeader: leader
             , seathParticipants: participants'
             , minAdaRequired: BigInt.fromInt 200
-            , expectedStateChange: (+) (length participants * stateChangePerAction)
+            , expectedStateChange: (+)
+                (length participants * stateChangePerAction)
             }
 
       SeathAddition.mainTest runnerConf
