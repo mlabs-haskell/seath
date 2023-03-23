@@ -3,7 +3,7 @@ module Seath.Test.PlutipRunner (run) where
 import Contract.Config (LogLevel(Info), emptyHooks)
 import Contract.Monad (Contract, launchAff_)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
-import Contract.Wallet (KeyWallet)
+import Contract.Wallet (KeyWallet, withKeyWallet)
 import Control.Alternative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
@@ -24,6 +24,7 @@ import Effect (Effect)
 import Effect.Aff (error)
 import Prelude (($))
 import Seath.Network.Types (LeaderNode, UserNode)
+import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.QuickCheck
@@ -37,7 +38,7 @@ import Seath.Test.Types
   , Participant
   , RunnerConfiguration(RunnerConfiguration)
   )
-import Seath.Test.Utils (gen2Contract, getPublicKeyHash)
+import Seath.Test.Utils (gen2Contract)
 import Type.Function (type ($))
 
 run :: Effect Unit
@@ -93,13 +94,13 @@ config =
   }
 
 makeLeaderNodeFromKeyWallet :: KeyWallet -> Contract LeaderNode
-makeLeaderNodeFromKeyWallet kw = do
-  pkh <- getPublicKeyHash kw
+makeLeaderNodeFromKeyWallet kw = withKeyWallet kw do
+  pkh <- getPublicKeyHash
   gen2Contract $ (makeNodeConfiguration >>> genLeaderNodeWith "-1") pkh
 
 makeParticpantNodeFromKeyWallet :: String -> KeyWallet -> Contract UserNode
-makeParticpantNodeFromKeyWallet ip kw = do
-  pkh <- getPublicKeyHash kw
+makeParticpantNodeFromKeyWallet ip kw = withKeyWallet kw do
+  pkh <- getPublicKeyHash
   gen2Contract $ (makeNodeConfiguration >>> genUserNodeWith ip) pkh
 
 makeParticipantsFromIndexedWallets

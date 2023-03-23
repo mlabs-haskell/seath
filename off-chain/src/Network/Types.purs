@@ -156,5 +156,6 @@ newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
 derive instance Newtype SignedTransaction _
 
+-- TODO : Shall we use (ReaderT nodeType Contract a) instead?
 -- | To use only with `UserNode` or `LeaderNode`
 type SeathMonad nodeType a = ReaderT nodeType Aff a

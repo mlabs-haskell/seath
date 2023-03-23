@@ -1,4 +1,4 @@
-module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
+module Seath.Test.Examples.Addition.ContractSeath (mainTest, newMainTest) where
 
 import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
@@ -20,8 +20,9 @@ import Contract.Wallet (getWalletUtxos, withKeyWallet)
 import Control.Applicative ((*>))
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe, try)
+import Control.Monad.Reader (runReaderT)
 import Ctl.Internal.Types.Natural (Natural)
-import Data.Array (last, unzip)
+import Data.Array (last, length, range, replicate, unzip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.Either (note)
@@ -31,12 +32,15 @@ import Data.Map as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
+import Data.Traversable (traverse)
 import Data.Tuple.Nested ((/\))
 import Data.Unit (Unit, unit)
 import Effect.Aff (error)
 import Prelude (discard, pure, ($))
 import Seath.Core.ChainBuilder (buildChain)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
+import Seath.Network.Users (makeUserAction)
+import Seath.Network.Utils (getPublicKeyHash, seath2Contract)
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
   , handleAction
@@ -46,10 +50,11 @@ import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
   ( getBlockchainState
   , logBlockchainState
+  , stateChangePerAction
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types
-  ( AdditionAction
+  ( AdditionAction(AddAmount)
   , AdditionDatum(AdditionDatum)
   , AdditionRedeemer
   , AdditionState
@@ -60,8 +65,50 @@ import Seath.Test.Types
   ( BlockchainState(BlockchainState)
   , RunnerConfiguration(RunnerConfiguration)
   )
-import Seath.Test.Utils (getPublicKeyHash, runnerConfInfo)
+import Seath.Test.Utils (runnerConfInfo)
 import Type.Function (type ($))
+
+newMainTest :: RunnerConfiguration AdditionState -> Contract Unit
+newMainTest config = do
+  -- todo: check that parties participants have enough funds by config.minAdaRequired
+  logInfo' $ "Running with " <> runnerConfInfo config
+
+  let
+    leader = (unwrap config).leader
+    participants = NE.toArray $ (unwrap config).participants
+    participantsNumber = length participants
+    plainActions = replicate participantsNumber (AddAmount stateChangePerAction)
+    getState = getBlockchainState leader participants queryBlockchainState
+    logState = getState >>= logBlockchainState
+
+  startState <- withKeyWallet (unwrap config).admin $ ensureInitialization 10
+    getState
+  logBlockchainState startState -- state before Seath execution
+
+  coreConfiguration <- runnerConfiguration2CoreConfiguration config
+
+  actions <- seath2Contract $ traverse makeUserAction plainActions
+  logInfo' $ "User actions: " <> show actions
+
+  (finalizedTxsAndActions /\ _) <- withKeyWallet (unwrap leader).wallet $
+    buildChain
+      coreConfiguration
+      actions
+      Nothing
+  let finalizedTxs /\ _ = unzip finalizedTxsAndActions
+  -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
+  txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+
+  case last txIds of
+    Nothing -> throwContractError
+      "No IDs vere received after chain submission. Something is wrong."
+    Just txId -> do
+      awaitTxConfirmed txId
+      endState <- getState
+      logBlockchainState endState
+      checkFinalState config startState endState
+
+  logInfo' "end"
 
 mainTest :: RunnerConfiguration AdditionState -> Contract Unit
 mainTest config = do
@@ -149,7 +196,7 @@ runnerConfiguration2CoreConfiguration config = do
   let
     leader = (unwrap config).leader
   vaildatorHash <- fixedValidatorHash
-  leaderPublicKeyHash <- getPublicKeyHash (unwrap leader).wallet
+  leaderPublicKeyHash <- withKeyWallet (unwrap leader).wallet getPublicKeyHash
   pure $ CoreConfiguration
     { leader: leaderPublicKeyHash
     , stateVaildatorHash: vaildatorHash

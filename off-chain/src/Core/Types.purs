@@ -21,7 +21,7 @@ import Data.Tuple.Nested (type (/\))
 newtype UserAction a = UserAction
   { publicKey :: PubKeyHash
   , action :: a
-  , userUTxo :: UtxoMap
+  , userUTxOs :: UtxoMap
   , changeAddress :: AddressWithNetworkTag
   }
 
@@ -37,7 +37,7 @@ instance
   Newtype (UserAction a)
     { publicKey :: PubKeyHash
     , action :: a
-    , userUTxo :: UtxoMap
+    , userUTxOs :: UtxoMap
     , changeAddress :: AddressWithNetworkTag
     }
 

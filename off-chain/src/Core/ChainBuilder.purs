@@ -164,11 +164,11 @@ action2Transaction
       constraints = handlerResult.constraints
         <> fold
           ( mustSpendPubKeyOutput <<< fst <$> toUnfoldable
-              (unwrap userAction).userUTxo
+              (unwrap userAction).userUTxOs
           )
         <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
     unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
-      (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxo)
+      (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxOs)
       constraints
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints

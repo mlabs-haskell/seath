@@ -34,13 +34,13 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
 import Prelude (discard, flip, ($))
 import Seath.Core.Types (UserAction(UserAction))
+import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Test.Types
   ( BlockchainState(BlockchainState)
   , Leader
   , Participant(Participant)
   )
-import Seath.Test.Utils (getPublicKeyHash)
 
 -- todo: pass action as param?
 genUserActions
@@ -54,14 +54,14 @@ stateChangePerAction = BigInt.fromInt 100
 genAction :: Participant -> Contract (UserAction AdditionAction)
 genAction (Participant p) =
   withKeyWallet p.wallet $ do
-    ownUtxos <- liftedM "no UTXOs found" getWalletUtxos
-    publicKeyHash <- getPublicKeyHash p.wallet
+    ownUtxos <- liftedM "no UTxOs found" getWalletUtxos
+    publicKeyHash <- withKeyWallet p.wallet getPublicKeyHash
     changeAddress <- liftedM "can't get Change address" $ head <$>
       getWalletAddressesWithNetworkTag
     pure $ UserAction
       { action: AddAmount stateChangePerAction
       , publicKey: publicKeyHash
-      , userUTxo: ownUtxos
+      , userUTxOs: ownUtxos
       , changeAddress
       }
 
