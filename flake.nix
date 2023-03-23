@@ -212,6 +212,19 @@
           plutip-tests = self.off-chain.project.${system}.runPlutipTest {
             testMain = "Seath.Test.Main";
           };
+
+          formatting = (nixpkgsFor system).runCommand "formatting-check"
+              {
+                nativeBuildInputs = [
+                  (nixpkgsFor system).easy-ps.purs-tidy
+                  (nixpkgsFor system).fd
+                ];
+              }
+              ''
+                cd ${./.}/off-chain
+                make check-format
+                touch $out
+              '';
         }
       );
 
@@ -222,6 +235,12 @@
 
       apps = perSystem (system: {
         default-ctl-runtime = (nixpkgsFor system).launchCtlRuntime { };
+        preprod-ctl-runtime = (nixpkgsFor system).launchCtlRuntime {
+            network = {
+              name = "preprod";
+              magic = 1; 
+              };
+            };
         docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
         ctl-docs = cardano-transaction-lib.apps.${system}.docs;
         script-export = {
