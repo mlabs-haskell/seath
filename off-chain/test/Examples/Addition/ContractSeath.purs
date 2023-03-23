@@ -39,11 +39,7 @@ import Seath.Test.Examples.Addition.Actions
   )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
-  ( BlockhainState(BlockhainState)
-  , Leader(Leader)
-  , Participant(Participant)
-  , getBlockhainState
-  , getPublicKeyHash
+  ( getBlockchainState
   , logBlockchainState
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
@@ -52,7 +48,13 @@ import Seath.Test.Examples.Addition.Types
   , AdditionState
   )
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
+import Seath.Test.Types
+  ( BlockchainState(BlockchainState)
+  , Leader(Leader)
+  , Participant(Participant)
+  , RunnerConfig(RunnerConfig)
+  )
+import Seath.Test.Utils (getPublicKeyHash, runnerConfInfo)
 
 mainTest :: RunnerConfig AdditionState -> Contract Unit
 mainTest config = do
@@ -74,7 +76,7 @@ mainTest config = do
       , queryBlockchainState: queryBlockchainState
       , numberOfBuiltChains: 0
       }
-    getState = getBlockhainState leader participants queryBlockchainState
+    getState = getBlockchainState leader participants queryBlockchainState
     logState = getState >>= logBlockchainState
 
   existingState <- hush <$> try getState
@@ -113,13 +115,13 @@ mainTest config = do
 
 checkFinalState
   :: RunnerConfig AdditionState
-  -> BlockhainState AdditionState
-  -> BlockhainState AdditionState
+  -> BlockchainState AdditionState
+  -> BlockchainState AdditionState
   -> Contract Unit
 checkFinalState
   (RunnerConfig config)
-  (BlockhainState startState)
-  (BlockhainState endState) = do
+  (BlockchainState startState)
+  (BlockchainState endState) = do
 
   checkLeaderUtxos
   checkScriptState

@@ -4,7 +4,6 @@ module Seath.Test.Examples.Utils
   , getScriptInputAndUtxos
   , getScriptUtxos
   , getTypedDatum
-  , submitTxFromConstraintsWithLog
   ) where
 
 import Contract.Address (getNetworkId, validatorHashEnterpriseAddress)
@@ -45,26 +44,6 @@ import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
 import Prelude (discard, ($))
 
-submitTxFromConstraintsWithLog
-  :: forall (validator :: Type) (datum :: Type)
-       (redeemer :: Type)
-   . ValidatorTypes validator datum redeemer
-  => IsData datum
-  => IsData redeemer
-  => ScriptLookups.ScriptLookups validator
-  -> TxConstraints redeemer datum
-  -> Contract TransactionHash
-submitTxFromConstraintsWithLog lookups constraints = do
-  unbalancedTx <- liftedE $ ScriptLookups.mkUnbalancedTx lookups constraints
-  logInfo' $ "unbalancedTx: " <> show unbalancedTx
-  balancedTx <- liftedE $ balanceTx unbalancedTx
-  logInfo' $ "balancedTx: " <> show balancedTx
-  balancedSignedTx <- signTransaction balancedTx
-  logInfo' $ "balancedSignedTx: " <> show balancedSignedTx
-  txHash <- submit balancedSignedTx
-  logInfo' $ "submitedTxId: " <> show txHash
-  pure txHash
-
 getScriptUtxos
   :: ValidatorHash
   -> Contract UtxoMap
@@ -93,3 +72,4 @@ getTypedDatum
 getTypedDatum out = do
   datum <- note "can't get datum" $ outputDatumDatum (out ^. _output ^. _datum)
   note "can't decode datum" $ fromData $ toData datum
+

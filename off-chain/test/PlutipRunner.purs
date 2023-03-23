@@ -7,23 +7,21 @@ import Contract.Monad (launchAff_)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (replicate)
 import Data.Array.NonEmpty as NE
-import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Time.Duration (Seconds(Seconds))
-import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (($))
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
-import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
+import Seath.Test.QuickCheck (makeDistribution)
+import Seath.Test.Types (RunnerConfig(RunnerConfig))
 
 run :: Effect Unit
 run = launchAff_
-  $ runPlutipContract config distribution
+  $ runPlutipContract config (makeDistribution 4)
   $
     \((admin /\ leader) /\ participants) -> do
       participants' <- liftMaybe (error "No participants found")
@@ -40,14 +38,6 @@ run = launchAff_
             }
 
       SeathAddition.mainTest runnerConf
-
-  where
-
-  distribution
-    :: (Array BigInt /\ Array BigInt) /\ (Array (Array BigInt))
-  distribution =
-    ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ]) /\
-      replicate 4 [ BigInt.fromInt 1_000_000_000 ]
 
 config :: PlutipConfig
 config =

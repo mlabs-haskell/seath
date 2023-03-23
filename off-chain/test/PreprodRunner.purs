@@ -22,7 +22,8 @@ import Node.Path as Path
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionState)
-import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), makeKeyWallet)
+import Seath.Test.Types (RunnerConfig(RunnerConfig))
+import Seath.Test.Utils (makeKeyWallet)
 
 run :: Effect Unit
 run = launchAff_ $ do

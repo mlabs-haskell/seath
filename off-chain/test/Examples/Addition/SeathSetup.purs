@@ -1,22 +1,13 @@
 module Seath.Test.Examples.Addition.SeathSetup
-  ( Leader(Leader)
-  , Participant(Participant)
-  , genAction
+  ( genAction
   , genUserActions
-  , getPublicKeyHash
   , submitChain
   , logBlockchainState
-  , getBlockhainState
-  , BlockhainState(BlockhainState)
+  , getBlockchainState
   , stateChangePerAction
   ) where
 
-import Contract.Address
-  ( PubKeyHash
-  , getWalletAddresses
-  , getWalletAddressesWithNetworkTag
-  , toPubKeyHash
-  )
+import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedM)
 import Contract.Prelude (class Show, Maybe, Tuple, for_)
@@ -29,32 +20,27 @@ import Contract.Transaction
   )
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
-import Contract.Wallet.Key (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind)
-import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head, length, range, zip, zipWith)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
 import Data.Monoid ((<>))
-import Data.Newtype (class Newtype, unwrap)
+import Data.Newtype (unwrap)
 import Data.Show (show)
 import Data.Traversable (traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
-import Effect.Aff (error)
 import Prelude (discard, flip, ($))
 import Seath.Core.Types (UserAction(UserAction))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
-
-newtype Leader = Leader KeyWallet
-
-derive instance Newtype Leader _
-
-newtype Participant = Participant KeyWallet
-
-derive instance Newtype Participant _
+import Seath.Test.Types
+  ( BlockchainState(BlockchainState)
+  , Leader
+  , Participant(Participant)
+  )
+import Seath.Test.Utils (getPublicKeyHash)
 
 -- todo: pass action as param?
 genUserActions
@@ -78,12 +64,6 @@ genAction (Participant p) =
       , userUTxo: ownUtxos
       , changeAddress
       }
-
-getPublicKeyHash :: KeyWallet -> Contract PubKeyHash
-getPublicKeyHash kw = withKeyWallet kw do
-  address <- liftedM "can't get the address of KeyWallet" $ head <$>
-    getWalletAddresses
-  liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
 
 signTransactions
   :: Leader
@@ -113,29 +93,23 @@ submitChain leader participants txs log = do
     logInfo' $ "Submited chaned Tx ID: " <> show transactionId
     pure $ transactionId
 
-newtype BlockhainState s = BlockhainState
-  { leaderUTXOs :: Maybe UtxoMap
-  , usersUTXOs :: Array (Maybe UtxoMap)
-  , sctiptState :: UtxoMap /\ s
-  }
-
-getBlockhainState
+getBlockchainState
   :: forall s
    . Leader
   -> Array Participant
   -> Contract (UtxoMap /\ s)
-  -> Contract (BlockhainState s)
-getBlockhainState leader participants stateQuery = do
+  -> Contract (BlockchainState s)
+getBlockchainState leader participants stateQuery = do
   leaderUTXOs <- withKeyWallet (unwrap leader) $ getWalletUtxos
   usersUTXOs :: _ <- traverse (\p -> withKeyWallet (unwrap p) getWalletUtxos)
     participants
   (sctiptState :: UtxoMap /\ s) <- withKeyWallet (unwrap leader) $ stateQuery
-  pure $ BlockhainState { leaderUTXOs, usersUTXOs, sctiptState }
+  pure $ BlockchainState { leaderUTXOs, usersUTXOs, sctiptState }
 
--- getBlockhainState = 
+-- getBlockchainState = 
 logBlockchainState
-  :: forall s. Show s => BlockhainState s -> Contract Unit
-logBlockchainState (BlockhainState bchState) = do
+  :: forall s. Show s => BlockchainState s -> Contract Unit
+logBlockchainState (BlockchainState bchState) = do
   logInfo' "------------------------- BlochainState -------------------------"
   logInfo' $ "utxosAt LEADER: " <> show bchState.leaderUTXOs
   for_ (enumUsers bchState.usersUTXOs) $ \(i /\ us) ->
