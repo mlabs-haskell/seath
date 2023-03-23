@@ -7,11 +7,12 @@ module Seath.Network.Types
   , SeathHandlers(RealNetworkHandlers, PlutipNetworkHandlers)
   , NetworkError(SubmitError)
   , SignedTransaction(SignedTransaction)
-  , NodeStateLeader(NodeStateLeader)
-  , NodeStateUser(NodeStateUser)
+  , LeaderNodeState(LeaderNodeState)
+  , UserNodeState(UserNodeState)
   , NodeInformation(NodeInformation)
   , NodeConfiguration(NodeConfiguration)
-  , Node(NodeUser, NodeLeader)
+  , UserNode(UserNode)
+  , LeaderNode(LeaderNode)
   , Ip
   ) where
 
@@ -77,10 +78,6 @@ newtype SignatureResponseContent = SignatureResponseContent
   , transaction :: FinalizedTransaction
   }
 
--- | We split data in three categories
--- | - Configuration, most functions won't perform changes on it.
--- | - State, we would keep changing it a lot in functions.
--- | - Information, read only things. 
 newtype NodeConfiguration = NodeConfiguration
   { timeout :: Int
   , handlers :: SeathHandlers
@@ -91,6 +88,7 @@ newtype NodeConfiguration = NodeConfiguration
 derive instance Newtype NodeConfiguration _
 derive instance Generic NodeConfiguration _
 
+-- Not sure if wee need to know the ip of our node.
 newtype NodeInformation = NodeInformation { ip :: Ip }
 
 derive instance Newtype NodeInformation _
@@ -99,52 +97,64 @@ derive instance Generic NodeInformation _
 instance Show NodeInformation where
   show = genericShow
 
-newtype NodeStateLeader = NodeStateLeader
+newtype LeaderNodeState = LeaderNodeState
   { numberOfRequests :: Int
   , numberOfBuiltChains :: Int
   }
 
-derive instance Newtype NodeStateLeader _
-derive instance Generic NodeStateLeader _
+derive instance Newtype LeaderNodeState _
+derive instance Generic LeaderNodeState _
 
-instance Show NodeStateLeader where
+instance Show LeaderNodeState where
   show = genericShow
 
-instance Arbitrary NodeStateLeader where
+instance Arbitrary LeaderNodeState where
   arbitrary = do
     numberOfRequests <- chooseInt 0 100000
     numberOfBuiltChains <- chooseInt 0 100000
-    pure $ NodeStateLeader { numberOfRequests, numberOfBuiltChains }
+    pure $ LeaderNodeState { numberOfRequests, numberOfBuiltChains }
 
-newtype NodeStateUser = NodeStateUser
+newtype UserNodeState = UserNodeState
   { numberOfRequests :: Int
   }
 
-derive instance Newtype NodeStateUser _
-derive instance Generic NodeStateUser _
+derive instance Newtype UserNodeState _
+derive instance Generic UserNodeState _
 
-instance Show NodeStateUser where
+instance Show UserNodeState where
   show = genericShow
 
-instance Arbitrary NodeStateUser where
+instance Arbitrary UserNodeState where
   arbitrary = do
     numberOfRequests <- chooseInt 0 100000
-    pure $ NodeStateUser { numberOfRequests }
+    pure $ UserNodeState { numberOfRequests }
 
-data Node
-  = NodeUser
-      { configuration :: NodeConfiguration
-      , state :: NodeStateUser
-      , information :: NodeInformation
-      }
-  | NodeLeader
-      { configuration :: NodeConfiguration
-      , state :: NodeStateLeader
-      , information :: NodeInformation
-      }
+-- | We split node data in three categories
+-- | - Configuration, most functions won't perform changes on it.
+-- | - State, we would keep changing it a lot in functions.
+-- | - Information, read only things. 
 
+-- | The environment for user side
+newtype UserNode = UserNode
+  { configuration :: NodeConfiguration
+  , state :: UserNodeState
+  , information :: NodeInformation
+  }
+
+derive instance Newtype UserNode _
+derive instance Generic UserNode _
+
+-- | The environment for leader side
+newtype LeaderNode = LeaderNode
+  { configuration :: NodeConfiguration
+  , state :: LeaderNodeState
+  , information :: NodeInformation
+  }
+
+-- | A transaction already signed by the needed user
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
 derive instance Newtype SignedTransaction _
 
-type SeathMonad a = ReaderT Node Aff a
+-- | To use only with `UserNode` or `LeaderNode`
+type SeathMonad nodeType a = ReaderT nodeType Aff a

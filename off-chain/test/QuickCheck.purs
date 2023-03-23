@@ -12,8 +12,9 @@ import Data.Newtype (wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Seath.Network.Types
   ( Ip
-  , Node(NodeUser, NodeLeader)
+  , LeaderNode(LeaderNode)
   , NodeConfiguration(NodeConfiguration)
+  , UserNode(UserNode)
   )
 import Seath.Test.Fixtures (fixedHandlers, fixedPort, fixedTimeOut)
 import Test.QuickCheck (arbitrary)
@@ -27,15 +28,15 @@ makeNodeConfiguration pk = NodeConfiguration
   , pubKeyHash: pk
   }
 
-genUserNodeWith :: Ip -> NodeConfiguration -> Gen Node
+genUserNodeWith :: Ip -> NodeConfiguration -> Gen UserNode
 genUserNodeWith ip configuration = do
   state <- arbitrary
-  pure $ NodeUser { configuration, information: wrap { ip }, state }
+  pure $ UserNode { configuration, information: wrap { ip }, state }
 
-genLeaderNodeWith :: Ip -> NodeConfiguration -> Gen Node
+genLeaderNodeWith :: Ip -> NodeConfiguration -> Gen LeaderNode
 genLeaderNodeWith ip configuration = do
   state <- arbitrary
-  pure $ NodeLeader { configuration, information: wrap { ip }, state }
+  pure $ LeaderNode { configuration, information: wrap { ip }, state }
 
 type Distribution = ((Array BigInt /\ Array BigInt) /\ Array (Array BigInt))
 

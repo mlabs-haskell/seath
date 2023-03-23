@@ -2,7 +2,7 @@ module Seath.Test.Types
   ( BlockchainState(BlockchainState)
   , Leader(Leader)
   , Participant(Participant)
-  , RunnerConfig(RunnerConfig)
+  , RunnerConfiguration(RunnerConfiguration)
   ) where
 
 import Contract.Utxos (UtxoMap)
@@ -12,6 +12,7 @@ import Data.BigInt (BigInt)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
+import Seath.Network.Types (LeaderNode, UserNode)
 
 newtype BlockchainState s = BlockchainState
   { leaderUTXOs :: Maybe UtxoMap
@@ -21,21 +22,20 @@ newtype BlockchainState s = BlockchainState
 
 derive instance Newtype (BlockchainState s) _
 
-newtype Leader = Leader KeyWallet
+newtype Leader = Leader { wallet :: KeyWallet, node :: LeaderNode }
 
 derive instance Newtype Leader _
 
-newtype Participant = Participant KeyWallet
+newtype Participant = Participant { wallet :: KeyWallet, node :: UserNode }
 
 derive instance Newtype Participant _
 
-newtype RunnerConfig (s :: Type) = RunnerConfig
+newtype RunnerConfiguration (s :: Type) = RunnerConfiguration
   { admin :: KeyWallet -- wallet that will run init contract
-  , seathLeader :: KeyWallet
-  , seathParticipants :: NonEmptyArray KeyWallet
+  , leader :: Leader
+  , participants :: NonEmptyArray Participant
   , minAdaRequired :: BigInt
   , expectedStateChange :: s -> s
   }
 
-derive instance Newtype (RunnerConfig s) _
-
+derive instance Newtype (RunnerConfiguration s) _

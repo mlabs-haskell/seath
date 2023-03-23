@@ -22,7 +22,7 @@ import Node.Path as Path
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionState)
-import Seath.Test.Types (RunnerConfig(RunnerConfig))
+import Seath.Test.Types (RunnerConfiguration(RunnerConfiguration))
 import Seath.Test.Utils (makeKeyWallet)
 
 run :: Effect Unit
@@ -38,16 +38,16 @@ run = launchAff_ $ do
     keyDirs <- readdir keysDir
     for keyDirs $ \keyDir -> makeKeyWallet $ Path.concat [ keysDir, keyDir ]
 
-  mkRunnerConf :: Array KeyWallet -> Maybe (RunnerConfig AdditionState)
+  mkRunnerConf :: Array KeyWallet -> Maybe (RunnerConfiguration AdditionState)
   mkRunnerConf keys = do
     admin <- keys !! 0
     leader <- keys !! 1
     participants <- NE.fromArray $ drop 2 keys
     pure $
-      RunnerConfig
+      RunnerConfiguration
         { admin: admin
-        , seathLeader: leader
-        , seathParticipants: participants
+        , leader: undefined leader
+        , participants: undefined participants
         , minAdaRequired: BigInt.fromInt 200
         , expectedStateChange: (+) (length participants * stateChangePerAction)
         }

@@ -1,4 +1,4 @@
-module Seath.Core.HandleActions (buildChain) where
+module Seath.Core.ChainBuilder (buildChain) where
 
 import Contract.BalanceTxConstraints
   ( mustSendChangeToAddress

@@ -1,7 +1,9 @@
 module Seath.Test.Examples.Addition.ContractSeath (mainTest) where
 
+import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, throwContractError)
+import Contract.Numeric.Natural (fromInt)
 import Contract.Prelude
   ( either
   , hush
@@ -14,23 +16,26 @@ import Contract.Prelude
   , (>>=)
   )
 import Contract.Transaction (awaitTxConfirmed)
-import Contract.Wallet (withKeyWallet)
+import Contract.Wallet (getWalletUtxos, withKeyWallet)
+import Control.Applicative ((*>))
 import Control.Monad (bind)
-import Control.Monad.Error.Class (try)
+import Control.Monad.Error.Class (liftMaybe, try)
+import Ctl.Internal.Types.Natural (Natural)
 import Data.Array (last, unzip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.Either (note)
-import Data.Functor (map)
 import Data.List (head)
 import Data.Map (size, values)
+import Data.Map as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
 import Data.Tuple.Nested ((/\))
-import Data.Unit (Unit)
+import Data.Unit (Unit, unit)
+import Effect.Aff (error)
 import Prelude (discard, pure, ($))
-import Seath.Core.HandleActions (buildChain)
+import Seath.Core.ChainBuilder (buildChain)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.Test.Examples.Addition.Actions
   ( fixedValidatorHash
@@ -44,60 +49,45 @@ import Seath.Test.Examples.Addition.SeathSetup
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types
-  ( AdditionDatum(AdditionDatum)
+  ( AdditionAction
+  , AdditionDatum(AdditionDatum)
+  , AdditionRedeemer
   , AdditionState
+  , AdditionValidator
   )
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.Types
   ( BlockchainState(BlockchainState)
-  , Leader(Leader)
-  , Participant(Participant)
-  , RunnerConfig(RunnerConfig)
+  , RunnerConfiguration(RunnerConfiguration)
   )
 import Seath.Test.Utils (getPublicKeyHash, runnerConfInfo)
+import Type.Function (type ($))
 
-mainTest :: RunnerConfig AdditionState -> Contract Unit
+mainTest :: RunnerConfiguration AdditionState -> Contract Unit
 mainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
   logInfo' $ "Running with " <> runnerConfInfo config
 
   let
-    leaderKeyWallet = (unwrap config).seathLeader
-    leader = Leader leaderKeyWallet
-  vaildatorHash <- fixedValidatorHash
-  leaderPublicKeyHash <- getPublicKeyHash leaderKeyWallet
-  let
-    participants = NE.toArray $ map Participant
-      (unwrap config).seathParticipants
-    seathConfig = CoreConfiguration
-      { leader: leaderPublicKeyHash
-      , stateVaildatorHash: vaildatorHash
-      , actionHandler: handleAction
-      , queryBlockchainState: queryBlockchainState
-      , numberOfBuiltChains: 0
-      }
+    leader = (unwrap config).leader
+    participants = NE.toArray $ (unwrap config).participants
     getState = getBlockchainState leader participants queryBlockchainState
     logState = getState >>= logBlockchainState
 
-  existingState <- hush <$> try getState
-
-  unless (isJust existingState) $ do
-    logInfo' "No initialized state found - running initialization"
-    -- contract initialization by some admin
-    _ <- withKeyWallet (unwrap config).admin initialSeathContract
-    logInfo' "Initialization - DONE"
-
-  -- Seath round logic
-  startState <- getState
+  startState <- withKeyWallet (unwrap config).admin $ ensureInitialization 10
+    getState
   logBlockchainState startState -- state before Seath execution
+
+  coreConfiguration <- runnerConfiguration2CoreConfiguration config
 
   actions <- SeathSetup.genUserActions participants
   logInfo' $ "User actions: " <> show actions
 
-  (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
-    seathConfig
-    actions
-    Nothing
+  (finalizedTxsAndActions /\ _) <- withKeyWallet (unwrap leader).wallet $
+    buildChain
+      coreConfiguration
+      actions
+      Nothing
   let finalizedTxs /\ _ = unzip finalizedTxsAndActions
   -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
   txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
@@ -113,13 +103,68 @@ mainTest config = do
 
   logInfo' "end"
 
+-- TODO : Add a timeout to avoid waiting forever in testnet
+ensureInitialization
+  :: forall a
+   . Int
+  -> Contract $ BlockchainState a
+  -> Contract $ BlockchainState a
+ensureInitialization waitingTime getState = do
+  _ <- waitForFunding waitingTime
+
+  existingState <- hush <$> try getState
+
+  unless (isJust existingState) $ do
+    logInfo' "No initialized state found - running initialization"
+    -- contract initialization by some admin
+    _ <- initialSeathContract
+    logInfo' "Initialization - DONE"
+  getState
+
+waitForFunding :: Int -> Contract Unit
+waitForFunding waitingTime = do
+  slotsTime <-
+    liftMaybe (error $ "can't convert waiting time: " <> show waitingTime) $
+      fromInt waitingTime
+  _ <- waitNSlots slotsTime
+  loop slotsTime
+  where
+  loop :: Natural -> Contract Unit
+  loop slots = do
+    logInfo' "Waiting for funds in wallet"
+    mutxos <- getWalletUtxos
+    case mutxos of
+      Just utxos ->
+        if Map.isEmpty utxos then
+          waitNSlots slots *> loop slots
+        else pure unit
+      Nothing -> waitNSlots slots *> loop slots
+
+runnerConfiguration2CoreConfiguration
+  :: RunnerConfiguration BigInt
+  -> Contract $ CoreConfiguration AdditionAction AdditionState AdditionValidator
+       AdditionDatum
+       AdditionRedeemer
+runnerConfiguration2CoreConfiguration config = do
+  let
+    leader = (unwrap config).leader
+  vaildatorHash <- fixedValidatorHash
+  leaderPublicKeyHash <- getPublicKeyHash (unwrap leader).wallet
+  pure $ CoreConfiguration
+    { leader: leaderPublicKeyHash
+    , stateVaildatorHash: vaildatorHash
+    , actionHandler: handleAction
+    , queryBlockchainState: queryBlockchainState
+    , numberOfBuiltChains: 0
+    }
+
 checkFinalState
-  :: RunnerConfig AdditionState
+  :: RunnerConfiguration AdditionState
   -> BlockchainState AdditionState
   -> BlockchainState AdditionState
   -> Contract Unit
 checkFinalState
-  (RunnerConfig config)
+  (RunnerConfiguration config)
   (BlockchainState startState)
   (BlockchainState endState) = do
 

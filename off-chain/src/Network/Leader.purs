@@ -11,7 +11,8 @@ import Data.Tuple.Nested (type (/\))
 import Data.Unit (Unit)
 import Seath.Core.Types (UserAction)
 import Seath.Network.Types
-  ( NetworkError
+  ( LeaderNode
+  , NetworkError
   , Request
   , Response
   , SeathMonad
@@ -25,7 +26,7 @@ import Undefined (undefined)
 sendChainToUsersForSignature
   :: forall a
    . Array (FinalizedTransaction /\ UserAction a)
-  -> SeathMonad $ Array $ Either NetworkError $ Request
+  -> SeathMonad LeaderNode $ Array $ Either NetworkError $ Request
        (SignatureRequestContent /\ UserAction a)
 sendChainToUsersForSignature = undefined
 
@@ -36,7 +37,7 @@ waitForChainSignatures
    . Array $ Request (SignatureRequestContent /\ UserAction a)
   -- TODO: How to handle the different errors? A network error should be
   -- different than a timeout and a user signature rejection.
-  -> SeathMonad $ Array $ Either NetworkError $ Response
+  -> SeathMonad LeaderNode $ Array $ Either NetworkError $ Response
        (SignedTransaction /\ UserAction a)
 waitForChainSignatures = undefined
 
@@ -44,10 +45,13 @@ waitForChainSignatures = undefined
 submitChain
   :: forall a
    . Array (SignedTransaction /\ UserAction a)
-  -> SeathMonad $ Array $ Either String (TransactionHash /\ UserAction a)
+  -> SeathMonad LeaderNode $ Array $ Either String
+       (TransactionHash /\ UserAction a)
 submitChain = undefined
 
 -- | 
 sendConfirmationToUsers
-  :: forall a. Array (TransactionHash /\ UserAction a) -> SeathMonad Unit
+  :: forall a
+   . Array (TransactionHash /\ UserAction a)
+  -> SeathMonad LeaderNode Unit
 sendConfirmationToUsers = undefined

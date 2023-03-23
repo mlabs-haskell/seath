@@ -53,9 +53,9 @@ stateChangePerAction = BigInt.fromInt 100
 
 genAction :: Participant -> Contract (UserAction AdditionAction)
 genAction (Participant p) =
-  withKeyWallet p $ do
+  withKeyWallet p.wallet $ do
     ownUtxos <- liftedM "no UTXOs found" getWalletUtxos
-    publicKeyHash <- getPublicKeyHash p
+    publicKeyHash <- getPublicKeyHash p.wallet
     changeAddress <- liftedM "can't get Change address" $ head <$>
       getWalletAddressesWithNetworkTag
     pure $ UserAction
@@ -70,8 +70,9 @@ signTransactions
   -> Array (Participant /\ FinalizedTransaction)
   -> Contract (Array BalancedSignedTransaction)
 signTransactions leader toSign = flip traverse toSign \(participant /\ tx) -> do
-  signedByParticipant <- withKeyWallet (unwrap participant) $ signTransaction tx
-  withKeyWallet (unwrap leader) $ signTransaction signedByParticipant
+  signedByParticipant <- withKeyWallet (unwrap participant).wallet $
+    signTransaction tx
+  withKeyWallet (unwrap leader).wallet $ signTransaction signedByParticipant
 
 submitChain
   :: Leader
@@ -83,7 +84,7 @@ submitChain leader participants txs log = do
   -- We don't really need leader to sign transactions right now.
   -- This can change if we add a fee to the leader.
   allSigned <- signTransactions leader (zip participants txs)
-  withKeyWallet (unwrap leader) $ traverse submitAndWait allSigned
+  withKeyWallet (unwrap leader).wallet $ traverse submitAndWait allSigned
   where
   submitAndWait balancedAndSignedTransaction = do
     log
@@ -100,10 +101,12 @@ getBlockchainState
   -> Contract (UtxoMap /\ s)
   -> Contract (BlockchainState s)
 getBlockchainState leader participants stateQuery = do
-  leaderUTXOs <- withKeyWallet (unwrap leader) $ getWalletUtxos
-  usersUTXOs :: _ <- traverse (\p -> withKeyWallet (unwrap p) getWalletUtxos)
+  leaderUTXOs <- withKeyWallet (unwrap leader).wallet $ getWalletUtxos
+  usersUTXOs :: _ <- traverse
+    (\p -> withKeyWallet (unwrap p).wallet getWalletUtxos)
     participants
-  (sctiptState :: UtxoMap /\ s) <- withKeyWallet (unwrap leader) $ stateQuery
+  (sctiptState :: UtxoMap /\ s) <- withKeyWallet (unwrap leader).wallet $
+    stateQuery
   pure $ BlockchainState { leaderUTXOs, usersUTXOs, sctiptState }
 
 -- getBlockchainState = 
