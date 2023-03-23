@@ -5,7 +5,7 @@ import Contract.Prelude
 import Contract.Prim.ByteArray (byteArrayToHex)
 import Contract.Transaction
   ( TransactionHash
-  , TransactionInput(..)
+  , TransactionInput(TransactionInput)
   , TransactionOutputWithRefScript
   )
 import Contract.Value (valueToCoin')

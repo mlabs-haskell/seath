@@ -1,9 +1,9 @@
 module Seath.Types
-  ( BlockhainState(..)
-  , ChainBuilderState(..)
-  , SeathConfig(..)
-  , StateReturn(..)
-  , UserAction(..)
+  ( BlockhainState(BlockhainState)
+  , ChainBuilderState(ChainBuilderState)
+  , SeathConfig(SeathConfig)
+  , StateReturn(StateReturn)
+  , UserAction(UserAction)
   ) where
 
 import Contract.Address (AddressWithNetworkTag, PubKeyHash)

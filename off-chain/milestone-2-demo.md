@@ -6,7 +6,7 @@ Main entry point of the demo is [Seath.Test.Main module](./test/Main.purs).
 
 ## Running on local private network
 
-Local network capabilities are integrated into current setup. Local network provided by [Plutip](https://github.com/mlabs-haskell/plutip). Network is started from scratch on each run. Slot length is is to [1 second](test/PlutipRunner.purs#L70).
+Local network capabilities are integrated into current setup. Local network provided by [Plutip](https://github.com/mlabs-haskell/plutip). Network is started from scratch on each run. Slot length is is to 1 second - see [config :: PlutipConfig](test/PlutipRunner.purs).
 
 To run the demo with local network do the following.
 

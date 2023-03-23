@@ -1,15 +1,21 @@
 module Seath.Test.PlutipRunner (run) where
 
+import Contract.Chain (waitNSlots)
 import Contract.Config (LogLevel(Info), emptyHooks)
-import Contract.Monad (launchAff_)
-import Contract.Prelude (Effect, Maybe(Nothing), const)
+import Contract.Log (logInfo')
+import Contract.Monad (Contract, launchAff_)
+import Contract.Numeric.Natural (fromInt')
+import Contract.Prelude (Effect, Maybe(Just, Nothing), const, pure, unit)
+import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
+import Contract.Utxos (getWalletUtxos)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (replicate)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
+import Data.Map as Map
 import Data.Time.Duration (Seconds(Seconds))
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
@@ -35,6 +41,11 @@ run = launchAff_
             , minAdaRequired: BigInt.fromInt 200
             , expectedStateChange: const $ BigInt.fromInt 500
             }
+
+      -- sometimes it takes several seconds befora wallets will be funded,
+      -- so we are waiting for funds to arrive here to avoid balancing errors
+      _ <- logInfo' "Await admin wallet funded"
+      _ <- withKeyWallet admin waitUntilItHasUtxo
 
       SeathAddition.mainTest runnerConf
 
@@ -69,3 +80,15 @@ config =
   , clusterConfig:
       { slotLength: Seconds 1.0 }
   }
+
+waitUntilItHasUtxo :: Contract Unit
+waitUntilItHasUtxo = do
+  _ <- logInfo' "Waiting for funds in wallet"
+  mutxos <- getWalletUtxos
+  case mutxos of
+    Just utxos ->
+      if Map.isEmpty utxos then waitUntilItHasUtxo
+      else pure unit
+    Nothing -> do
+      _ <- waitNSlots (fromInt' 1)
+      waitUntilItHasUtxo

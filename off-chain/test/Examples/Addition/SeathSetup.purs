@@ -1,6 +1,6 @@
 module Seath.Test.Examples.Addition.SeathSetup
-  ( Leader(..)
-  , Participant(..)
+  ( Leader(Leader)
+  , Participant(Participant)
   , genAction
   , genUserActions
   , getBlockhainState

@@ -6,7 +6,6 @@ import Contract.Prelude
   ( either
   , hush
   , isJust
-  , unit
   , unwrap
   , when
   , (/=)
@@ -15,7 +14,6 @@ import Contract.Prelude
   , (>>=)
   )
 import Contract.Transaction (awaitTxConfirmed)
-import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
@@ -26,7 +24,6 @@ import Data.Either (note)
 import Data.Functor (map)
 import Data.List (head)
 import Data.Map (size, values)
-import Data.Map as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
@@ -54,7 +51,7 @@ import Seath.Test.Examples.Addition.Types
   )
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
-import Seath.Types (BlockhainState(..), SeathConfig(SeathConfig))
+import Seath.Types (BlockhainState(BlockhainState), SeathConfig(SeathConfig))
 import Test.Examples.DemoShow (class DemoShow, dShow)
 
 mainTest :: RunnerConfig AdditionState -> Contract Unit
@@ -90,9 +87,6 @@ mainTest config = do
     demoLogState = getState >>= demoLog
     -- logState = getState >>= logBlockchainState
     logState = demoLogState
-
-  logInfo' "Checking wallets funded"
-  _ <- withKeyWallet (unwrap config).admin waitUntilItHasUtxo
 
   logInfo' "Checking script state"
   existingState <- hush <$> try getState
@@ -189,12 +183,3 @@ checkFinalState
           <> " at the end of test run,  but has "
           <> show currentAmount
 
-waitUntilItHasUtxo :: Contract Unit
-waitUntilItHasUtxo = do
-  -- logInfo' "Waiting for funds in admin"
-  mutxos <- getWalletUtxos
-  case mutxos of
-    Just utxos ->
-      if Map.isEmpty utxos then waitUntilItHasUtxo
-      else pure unit -- logInfo' $ "founds in admin: " <> show utxos
-    Nothing -> waitUntilItHasUtxo
