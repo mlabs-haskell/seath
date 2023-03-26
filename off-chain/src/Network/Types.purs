@@ -3,7 +3,6 @@ module Seath.Network.Types
   , Response(Response)
   , SignatureRequestContent(SignatureRequestContent)
   , SignatureResponseContent(SignatureResponseContent)
-  , SeathMonad
   , SeathHandlers(RealNetworkHandlers, PlutipNetworkHandlers)
   , NetworkError(SubmitError)
   , SignedTransaction(SignedTransaction)
@@ -16,17 +15,15 @@ module Seath.Network.Types
   , Ip
   ) where
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (AddressWithNetworkTag, PubKeyHash)
 import Contract.Transaction (FinalizedTransaction)
 import Control.Alternative (pure)
 import Control.Monad (bind)
-import Control.Monad.Reader.Trans (ReaderT)
 import Data.Function (($))
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.Show (class Show)
 import Data.Show.Generic (genericShow)
-import Effect.Aff (Aff)
 import Test.QuickCheck (class Arbitrary)
 import Test.QuickCheck.Gen (chooseInt)
 
@@ -83,6 +80,7 @@ newtype NodeConfiguration = NodeConfiguration
   , handlers :: SeathHandlers
   , port :: Int
   , pubKeyHash :: PubKeyHash
+  , changeAddress :: AddressWithNetworkTag
   }
 
 derive instance Newtype NodeConfiguration _
@@ -155,7 +153,3 @@ newtype LeaderNode = LeaderNode
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
 derive instance Newtype SignedTransaction _
-
--- TODO : Shall we use (ReaderT nodeType Contract a) instead?
--- | To use only with `UserNode` or `LeaderNode`
-type SeathMonad nodeType a = ReaderT nodeType Aff a

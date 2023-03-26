@@ -1,16 +1,18 @@
 module Seath.Test.PlutipRunner (run) where
 
+import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), emptyHooks)
-import Contract.Monad (Contract, launchAff_)
+import Contract.Monad (Contract, launchAff_, liftedM)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Wallet (KeyWallet, withKeyWallet)
 import Control.Alternative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
+import Data.Array (head)
 import Data.Array.NonEmpty (NonEmptyArray, length, range, zip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt as BigInt
-import Data.Function ((>>>))
+import Data.Functor ((<$>))
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (wrap)
 import Data.Ring ((*), (+))
@@ -96,12 +98,21 @@ config =
 makeLeaderNodeFromKeyWallet :: KeyWallet -> Contract LeaderNode
 makeLeaderNodeFromKeyWallet kw = withKeyWallet kw do
   pkh <- getPublicKeyHash
-  gen2Contract $ (makeNodeConfiguration >>> genLeaderNodeWith "-1") pkh
+  -- TODO: fix this to use the `getChangeAddress` function
+  changeAddress <- liftedM "can't get Change address" $ head
+    <$>
+      getWalletAddressesWithNetworkTag
+  gen2Contract $ genLeaderNodeWith "-1" $ makeNodeConfiguration pkh
+    changeAddress
 
 makeParticpantNodeFromKeyWallet :: String -> KeyWallet -> Contract UserNode
 makeParticpantNodeFromKeyWallet ip kw = withKeyWallet kw do
   pkh <- getPublicKeyHash
-  gen2Contract $ (makeNodeConfiguration >>> genUserNodeWith ip) pkh
+  -- TODO: fix this to use the `getChangeAddress` function
+  changeAddress <- liftedM "can't get Change address" $ head
+    <$>
+      getWalletAddressesWithNetworkTag
+  gen2Contract $ genUserNodeWith ip $ makeNodeConfiguration pkh changeAddress
 
 makeParticipantsFromIndexedWallets
   :: NonEmptyArray (Int /\ KeyWallet) -> Contract $ NonEmptyArray Participant

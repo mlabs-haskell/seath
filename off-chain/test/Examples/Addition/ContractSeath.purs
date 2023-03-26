@@ -2,27 +2,16 @@ module Seath.Test.Examples.Addition.ContractSeath (mainTest, newMainTest) where
 
 import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
-import Contract.Monad (Contract, throwContractError)
+import Contract.Monad (Contract, liftedM, throwContractError)
 import Contract.Numeric.Natural (fromInt)
-import Contract.Prelude
-  ( either
-  , hush
-  , isJust
-  , unless
-  , unwrap
-  , when
-  , (/=)
-  , (<$>)
-  , (>>=)
-  )
+import Contract.Prelude (either, hush, isJust, unless, unwrap, when, (/=), (<$>), (>>=))
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (getWalletUtxos, withKeyWallet)
-import Control.Applicative ((*>))
+import Control.Applicative (class Applicative, (*>))
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe, try)
-import Control.Monad.Reader (runReaderT)
 import Ctl.Internal.Types.Natural (Natural)
-import Data.Array (last, length, range, replicate, unzip)
+import Data.Array (last, length, replicate, unzip, zip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.Either (note)
@@ -33,38 +22,24 @@ import Data.Maybe (Maybe(Just, Nothing), maybe)
 import Data.Monoid ((<>))
 import Data.Show (show)
 import Data.Traversable (traverse)
-import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit, unit)
 import Effect.Aff (error)
+import Effect.Aff.Class (liftAff)
 import Prelude (discard, pure, ($))
 import Seath.Core.ChainBuilder (buildChain)
-import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
-import Seath.Network.Users (makeUserAction)
-import Seath.Network.Utils (getPublicKeyHash, seath2Contract)
-import Seath.Test.Examples.Addition.Actions
-  ( fixedValidatorHash
-  , handleAction
-  , queryBlockchainState
-  )
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
+import Seath.Network.Leader (getPendingActions, sendChainToUsersForSignature, startLeaderServer, waitForChainSignatures)
+import Seath.Network.Types (UserNode)
+import Seath.Network.Users (makeUserAction, sendActionToLeader, startUserServer)
+import Seath.Network.Utils (getPublicKeyHash)
+import Seath.Test.Examples.Addition.Actions (fixedValidatorHash, handleAction, queryBlockchainState)
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
-import Seath.Test.Examples.Addition.SeathSetup
-  ( getBlockchainState
-  , logBlockchainState
-  , stateChangePerAction
-  )
+import Seath.Test.Examples.Addition.SeathSetup (getBlockchainState, logBlockchainState, stateChangePerAction)
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
-import Seath.Test.Examples.Addition.Types
-  ( AdditionAction(AddAmount)
-  , AdditionDatum(AdditionDatum)
-  , AdditionRedeemer
-  , AdditionState
-  , AdditionValidator
-  )
+import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount), AdditionDatum(AdditionDatum), AdditionRedeemer, AdditionState, AdditionValidator)
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Test.Types
-  ( BlockchainState(BlockchainState)
-  , RunnerConfiguration(RunnerConfiguration)
-  )
+import Seath.Test.Types (BlockchainState(BlockchainState), Participant(..), RunnerConfiguration(RunnerConfiguration))
 import Seath.Test.Utils (runnerConfInfo)
 import Type.Function (type ($))
 
@@ -87,28 +62,59 @@ newMainTest config = do
 
   coreConfiguration <- runnerConfiguration2CoreConfiguration config
 
-  actions <- seath2Contract $ traverse makeUserAction plainActions
+  actions <- makeUserActionsFromActions (zip participants plainActions)
   logInfo' $ "User actions: " <> show actions
+
+  _ <- liftAff $ startLeaderServer (unwrap leader).node
+  _ <- liftAff $ traverse (\ x->startUserServer (unwrap x).node) participants
+
+  sendedActions <- liftAff $ f sendActionToLeader (zip participants actions)
+  recivedActions <- liftAff $ getPendingActions (unwrap leader).node
 
   (finalizedTxsAndActions /\ _) <- withKeyWallet (unwrap leader).wallet $
     buildChain
       coreConfiguration
-      actions
+      recivedActions
       Nothing
-  let finalizedTxs /\ _ = unzip finalizedTxsAndActions
-  -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
-  txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
 
-  case last txIds of
-    Nothing -> throwContractError
-      "No IDs vere received after chain submission. Something is wrong."
-    Just txId -> do
-      awaitTxConfirmed txId
-      endState <- getState
-      logBlockchainState endState
-      checkFinalState config startState endState
+  signatureRequest <- liftAff $ sendChainToUsersForSignature (unwrap leader).node finalizedTxsAndActions
+
+  -- maybeSignedTxs <- liftAff $ waitForChainSignatures (unwrap leader).node signatureRequest
+
+  -- txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+
+  -- case last txIds of
+  --   Nothing -> throwContractError
+  --     "No IDs were received after chain submission. Something is wrong."
+  --   Just txId -> do
+  --     awaitTxConfirmed txId
+  --     endState <- getState
+  --     logBlockchainState endState
+  --     checkFinalState config startState endState
 
   logInfo' "end"
+
+f :: forall a b (m::Type->Type). Applicative m => (UserNode -> a -> m b) -> Array (Participant /\ a) -> m $ Array b
+f function= traverse makeOne
+  where
+  makeOne :: Participant /\ a -> m b
+  makeOne ((Participant participant) /\ value) = function (participant.node) value
+
+-- startUserServers :: Array Participant -> Contract Unit
+-- startUserServer = traverse startOne
+--   where
+--     startOne (Participant participant) = startUserServer participant.node
+
+makeUserActionsFromActions
+  :: forall a. Array (Participant /\ a) -> Contract $ Array $ UserAction a
+makeUserActionsFromActions = traverse makeOne
+  where
+  makeOne :: Participant /\ a -> Contract $ UserAction a
+  makeOne ((Participant participant) /\ action) = withKeyWallet
+    participant.wallet
+    do
+      userUTxOs <- liftedM "no UTXOs found" getWalletUtxos
+      pure $ makeUserAction participant.node action userUTxOs
 
 mainTest :: RunnerConfiguration AdditionState -> Contract Unit
 mainTest config = do

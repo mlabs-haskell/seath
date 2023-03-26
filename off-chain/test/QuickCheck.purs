@@ -1,6 +1,6 @@
 module Seath.Test.QuickCheck where
 
-import Contract.Address (PubKeyHash)
+import Contract.Address (AddressWithNetworkTag, PubKeyHash)
 import Control.Alternative (pure)
 import Control.Monad (bind)
 import Data.Array (replicate)
@@ -20,12 +20,14 @@ import Seath.Test.Fixtures (fixedHandlers, fixedPort, fixedTimeOut)
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (Gen, chooseInt)
 
-makeNodeConfiguration :: PubKeyHash -> NodeConfiguration
-makeNodeConfiguration pk = NodeConfiguration
+makeNodeConfiguration
+  :: PubKeyHash -> AddressWithNetworkTag -> NodeConfiguration
+makeNodeConfiguration pk changeAddress = NodeConfiguration
   { timeout: fixedTimeOut
   , handlers: fixedHandlers
   , port: fixedPort
   , pubKeyHash: pk
+  , changeAddress
   }
 
 genUserNodeWith :: Ip -> NodeConfiguration -> Gen UserNode
