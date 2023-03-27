@@ -8,7 +8,6 @@ import Data.Array (head)
 import Data.Function (($))
 import Data.Functor ((<$>))
 import Effect.Aff (error)
-import Undefined (undefined)
 
 getPublicKeyHash :: Contract PubKeyHash
 getPublicKeyHash = do

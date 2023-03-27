@@ -14,6 +14,7 @@ import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (drop, (!!))
 import Data.Array.NonEmpty as NE
 import Data.BigInt as BigInt
+import Data.Log.Level as LogLevel
 import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect.Aff (error)
@@ -50,6 +51,7 @@ run = launchAff_ $ do
         , participants: undefined participants
         , minAdaRequired: BigInt.fromInt 200
         , expectedStateChange: (+) (length participants * stateChangePerAction)
+        , logLevel: LogLevel.Debug
         }
 
 config :: ContractParams

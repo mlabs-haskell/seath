@@ -9,6 +9,7 @@ import Contract.Utxos (UtxoMap)
 import Contract.Wallet (KeyWallet)
 import Data.Array.NonEmpty (NonEmptyArray)
 import Data.BigInt (BigInt)
+import Data.Log.Level (LogLevel)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
@@ -36,6 +37,7 @@ newtype RunnerConfiguration (s :: Type) = RunnerConfiguration
   , participants :: NonEmptyArray Participant
   , minAdaRequired :: BigInt
   , expectedStateChange :: s -> s
+  , logLevel :: LogLevel
   }
 
 derive instance Newtype (RunnerConfiguration s) _

@@ -64,7 +64,7 @@ sendRejectionToLeader
    . UserNode
   -> SignedTransaction
   -> UserAction a
-  -> Aff $Request $ SignedTransaction /\ UserAction a
+  -> Aff $ Request $ SignedTransaction /\ UserAction a
 sendRejectionToLeader = undefined
 
 waitForActionConfirmation
@@ -82,10 +82,11 @@ makeUserAction nodeConfig action userUTxOs =
   in
     wrap { action, publicKey, userUTxOs, changeAddress }
 
-makeUserActionAndSend :: forall a. UserNode -> a -> Contract $ Request $ UserAction a
+makeUserActionAndSend
+  :: forall a. UserNode -> a -> Contract $ Request $ UserAction a
 makeUserActionAndSend nodeConfig actionRaw = do
   walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
-  let 
+  let
     action = makeUserAction nodeConfig actionRaw walletUTxOs
   liftAff $ sendActionToLeader nodeConfig action
-  
+

@@ -13,6 +13,7 @@ import Data.Array.NonEmpty (NonEmptyArray, length, range, zip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt as BigInt
 import Data.Functor ((<$>))
+import Data.Log.Level as LogLevel
 import Data.Maybe (Maybe(Nothing))
 import Data.Newtype (wrap)
 import Data.Ring ((*), (+))
@@ -67,6 +68,7 @@ run = launchAff_
             , minAdaRequired: BigInt.fromInt 200
             , expectedStateChange: (+)
                 (BigInt.fromInt numberOfParticipants * stateChangePerAction)
+            , logLevel: LogLevel.Debug
             }
 
       SeathAddition.mainTest runnerConf

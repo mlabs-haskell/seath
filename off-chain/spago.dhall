@@ -18,6 +18,7 @@ You can edit this file as you like.
   , "foldable-traversable"
   , "lists"
   , "maybe"
+  , "monad-logger"
   , "mote"
   , "newtype"
   , "node-fs-aff"

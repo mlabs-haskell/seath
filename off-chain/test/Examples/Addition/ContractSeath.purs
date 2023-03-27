@@ -4,12 +4,23 @@ import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedM, throwContractError)
 import Contract.Numeric.Natural (fromInt)
-import Contract.Prelude (either, hush, isJust, unless, unwrap, when, (/=), (<$>), (>>=))
+import Contract.Prelude
+  ( either
+  , hush
+  , isJust
+  , unless
+  , unwrap
+  , when
+  , (/=)
+  , (<$>)
+  , (>>=)
+  )
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (getWalletUtxos, withKeyWallet)
 import Control.Applicative (class Applicative, (*>))
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe, try)
+import Control.Monad.Logger.Class (info)
 import Ctl.Internal.Types.Natural (Natural)
 import Data.Array (last, length, replicate, unzip, zip)
 import Data.Array.NonEmpty as NE
@@ -26,22 +37,49 @@ import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit, unit)
 import Effect.Aff (error)
 import Effect.Aff.Class (liftAff)
+import Effect.Exception (throw)
 import Prelude (discard, pure, ($))
 import Seath.Core.ChainBuilder (buildChain)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
-import Seath.Network.Leader (getPendingActions, sendChainToUsersForSignature, startLeaderServer, waitForChainSignatures)
+import Seath.Network.Leader
+  ( getPendingActions
+  , sendChainToUsersForSignature
+  , sendSignatureFailToUsers
+  , splitSuccessFails
+  , startLeaderServer
+  , waitForChainSignatures
+  )
 import Seath.Network.Types (UserNode)
 import Seath.Network.Users (makeUserAction, sendActionToLeader, startUserServer)
 import Seath.Network.Utils (getPublicKeyHash)
-import Seath.Test.Examples.Addition.Actions (fixedValidatorHash, handleAction, queryBlockchainState)
+import Seath.Test.Examples.Addition.Actions
+  ( fixedValidatorHash
+  , handleAction
+  , queryBlockchainState
+  )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
-import Seath.Test.Examples.Addition.SeathSetup (getBlockchainState, logBlockchainState, stateChangePerAction)
+import Seath.Test.Examples.Addition.SeathSetup
+  ( getBlockchainState
+  , logBlockchainState
+  , stateChangePerAction
+  )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
-import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount), AdditionDatum(AdditionDatum), AdditionRedeemer, AdditionState, AdditionValidator)
+import Seath.Test.Examples.Addition.Types
+  ( AdditionAction(AddAmount)
+  , AdditionDatum(AdditionDatum)
+  , AdditionRedeemer
+  , AdditionState
+  , AdditionValidator
+  )
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Test.Types (BlockchainState(BlockchainState), Participant(..), RunnerConfiguration(RunnerConfiguration))
+import Seath.Test.Types
+  ( BlockchainState(BlockchainState)
+  , Participant(..)
+  , RunnerConfiguration(RunnerConfiguration)
+  )
 import Seath.Test.Utils (runnerConfInfo)
 import Type.Function (type ($))
+import Undefined (undefined)
 
 newMainTest :: RunnerConfiguration AdditionState -> Contract Unit
 newMainTest config = do
@@ -66,9 +104,10 @@ newMainTest config = do
   logInfo' $ "User actions: " <> show actions
 
   _ <- liftAff $ startLeaderServer (unwrap leader).node
-  _ <- liftAff $ traverse (\ x->startUserServer (unwrap x).node) participants
+  _ <- liftAff $ traverse (\x -> startUserServer (unwrap x).node) participants
 
-  sendedActions <- liftAff $ f sendActionToLeader (zip participants actions)
+  sendedActions <- liftAff $ performFromParticipantsWithValue sendActionToLeader
+    (zip participants actions)
   recivedActions <- liftAff $ getPendingActions (unwrap leader).node
 
   (finalizedTxsAndActions /\ _) <- withKeyWallet (unwrap leader).wallet $
@@ -77,28 +116,57 @@ newMainTest config = do
       recivedActions
       Nothing
 
-  signatureRequest <- liftAff $ sendChainToUsersForSignature (unwrap leader).node finalizedTxsAndActions
+  signatureRequest <- liftAff $ sendChainToUsersForSignature
+    (unwrap leader).node
+    finalizedTxsAndActions
 
-  -- maybeSignedTxs <- liftAff $ waitForChainSignatures (unwrap leader).node signatureRequest
+  -- TODO: Fix this
+  -- {success:sended,fails:failToSend} <- splitSuccessFails signatureRequest
 
-  -- txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
+  let
+    { success: sended, fails: failToSend } = undefined signatureRequest
 
-  -- case last txIds of
-  --   Nothing -> throwContractError
-  --     "No IDs were received after chain submission. Something is wrong."
-  --   Just txId -> do
-  --     awaitTxConfirmed txId
-  --     endState <- getState
-  --     logBlockchainState endState
-  --     checkFinalState config startState endState
+  _ <- unless (isEmpty failToSend) $ throw
+    ("some transactions failed to be send for signature: " <> show failToSend)
+
+  maybeSignedTxs <- liftAff $ waitForChainSignatures (unwrap leader).node sended
+
+  -- TODO: Fix this
+  -- {success:toSubmit,fails:toRebuild} <- splitSuccessFails maybeSignedTxs
+  let
+    { success: toSubmit, fails: toRebuild } = undefined maybeSignedTxs
+
+  -- failedActions <- liftAff $ sendSignatureFailToUsers toRebuild
+  unless (isEmpty toRebuild) $ throw ("failed to be signed: " <> show toRebuild)
+
+  txIds <- SeathSetup.submitChain leader participants toSubmit logState
+
+  case last txIds of
+    Nothing -> throwContractError
+      "No IDs were received after chain submission. Something is wrong."
+    Just txId -> do
+      awaitTxConfirmed txId
+      endState <- getState
+      logBlockchainState endState
+      checkFinalState config startState endState
 
   logInfo' "end"
 
-f :: forall a b (m::Type->Type). Applicative m => (UserNode -> a -> m b) -> Array (Participant /\ a) -> m $ Array b
-f function= traverse makeOne
+  where
+  isEmpty [] = true
+  isEmpty _ = false
+
+performFromParticipantsWithValue
+  :: forall a b (m :: Type -> Type)
+   . Applicative m
+  => (UserNode -> a -> m b)
+  -> Array (Participant /\ a)
+  -> m $ Array b
+performFromParticipantsWithValue function = traverse makeOne
   where
   makeOne :: Participant /\ a -> m b
-  makeOne ((Participant participant) /\ value) = function (participant.node) value
+  makeOne ((Participant participant) /\ value) = function (participant.node)
+    value
 
 -- startUserServers :: Array Participant -> Contract Unit
 -- startUserServer = traverse startOne
@@ -119,6 +187,7 @@ makeUserActionsFromActions = traverse makeOne
 mainTest :: RunnerConfiguration AdditionState -> Contract Unit
 mainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
+  info Map.empty "This is a test for logger"
   logInfo' $ "Running with " <> runnerConfInfo config
 
   let
