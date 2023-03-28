@@ -27,6 +27,7 @@ newUser hs uid = pure $ User uid hs
 
 emitAction :: User -> UserAction -> IO ()
 emitAction (User uid hs) act = do
+  putStrLn $ "User " <> uid <> ": performing action"
   res <- sendActionToLeader hs (newAction uid act)
   case res of
     Right _ -> putStrLn $ "User " <> uid <> ": sent action successfully"
@@ -36,7 +37,7 @@ emitAction (User uid hs) act = do
 signChainedTx :: User -> SingRequest -> IO (Either String SignedTx)
 signChainedTx u sr = do
   if uId u == "user-2"
-    then pure (Left "User: user-2 failed to sign")
+    then pure (Left "Rejecting to sign")
     else do
       let (SingRequest _ tx) = sr
       putStrLn $ show u <> ": signing " <> show sr

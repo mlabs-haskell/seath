@@ -27,7 +27,7 @@ import Types
     toLeader,
   )
 import User
-  ( User,
+  ( User (uId),
     UserHandlers (UserHandlers),
     emitAction,
     newUser,
@@ -69,7 +69,7 @@ main = do
 
   forM_ users (startUserThread net)
 
-  forM_ users (`emitAction` "Test action")
+  forM_ users (\u -> emitAction u $ "Test action by " <> uId u)
 
   -- let main thread run for some seconds while leader and users exchanging actions
   letItRunFor 5

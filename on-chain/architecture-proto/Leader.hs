@@ -52,7 +52,7 @@ receiveAction leader@(Leader inb lim count opState _ _) ar = do
   st <- readTVarIO opState
   case st of
     Processing -> do
-      putStrLn $ "Leader: PROCESSING: Accept refused for " <> userId ar
+      putStrLn $ "Leader: PROCESSING IN PROGRESS: refused to accept action from " <> userId ar
       pure $ Left CantAcceptDuringProcessing
     Accepting -> acceptAction
   where
@@ -64,20 +64,20 @@ receiveAction leader@(Leader inb lim count opState _ _) ar = do
           putStrLn "Leader: Inbox limit reached"
           pure $ Left (InboxLimitReached lim)
         else do
-          putStrLn $ "Leader: Adding request to queue: " <> show ar
+          putStrLn $ "Leader: adding request to queue: " <> show ar
           atomically $ writeTQueue inb ar
           _ <- atomically $ do
             swapTVar count nextCount
 
           when (nextCount == lim) $ do
-            _ <- atomically $ swapTVar opState Processing
+            switchToProcessing opState
             void $ forkIO $ processInbox leader
 
           pure $ Right ()
 
 processInbox :: Leader -> IO ()
 processInbox (Leader inb _ _ _ reqs hs) = do
-  putStrLn "Leader: processing actions"
+  putStrLn "Leader: queue filled - processing actions"
   actionReqs <- atomically $ flushTQueue inb
 
   -- arch: run contract with `runContract` from CTL to do chaining
@@ -99,6 +99,9 @@ processInbox (Leader inb _ _ _ reqs hs) = do
             <> ". Error: "
             <> err
   printSuccessfullySigned reqs
+
+switchToProcessing :: TVar State -> IO ()
+switchToProcessing state = void $ atomically $ swapTVar state Processing
 
 -- collect requests for which leader got signed transaction from user
 rememberRequest :: TVar RequestMap -> UserId -> SingRequest -> STM ()

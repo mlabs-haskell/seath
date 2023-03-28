@@ -39,6 +39,8 @@ data SingRequest = SingRequest UserId Tx
   deriving stock (Show)
 
 -- network simulation
+-- requests have MVars so that receiver can put response there
+-- requester will block on this MVar to get response
 data NetMessage
   = AcceptActionReq (MVar NetMessage) ActionRequest
   | AcceptActionResp (Either String ())
@@ -52,4 +54,4 @@ data Network = Network
   }
 
 instance Show (MVar NetMessage) where
-  show _ = "<sender>"
+  show _ = "<forResponse>"
