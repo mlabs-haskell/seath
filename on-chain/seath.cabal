@@ -101,3 +101,7 @@ executable  architecture-proto
 
 
   hs-source-dirs: architecture-proto
+  other-modules:
+    User
+    Leader
+    Types

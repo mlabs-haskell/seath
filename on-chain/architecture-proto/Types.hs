@@ -1,4 +1,15 @@
-module Types (Tx,SingRequest(..), ActionRequest,UserId, UserAction, userId, action, newAction) where
+module Types
+  ( SignedTx (..),
+    Tx,
+    SingRequest (..),
+    ActionRequest,
+    UserId,
+    UserAction,
+    userId,
+    action,
+    newAction,
+  )
+where
 
 import Prelude
 
@@ -8,6 +19,9 @@ type UserAction = String
 
 type Tx = String
 
+data SignedTx = SignedTx UserId Tx
+  deriving stock (Show)
+
 data ActionRequest = ActionRequest
   { userId :: UserId,
     action :: UserAction
@@ -16,4 +30,5 @@ data ActionRequest = ActionRequest
 
 newAction = ActionRequest
 
-data SingRequest = SingRequest Tx
+data SingRequest = SingRequest UserId Tx
+  deriving stock (Show)
