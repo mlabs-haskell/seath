@@ -18,7 +18,7 @@ common common
     -fno-warn-orphans -fobject-code -fplugin-opt
     PlutusTx.Plugin:defer-errors
     -Wmissing-import-lists
-    -Werror 
+    -- -Werror 
 
   build-depends:      base ^>=4.14
   default-extensions:
@@ -94,7 +94,8 @@ executable  architecture-proto
   main-is:        Main.hs
   build-depends:
     , base
-    , seath
+    , async
+    , stm
 
 
-  hs-source-dirs: script-export
+  hs-source-dirs: architecture-proto

@@ -4,3 +4,5 @@
       component: "lib:seath"
     - path: "./script-export"
       component: "exe:script-export"
+    - path: "./architecture-proto"
+      component: "exe:architecture-proto"
