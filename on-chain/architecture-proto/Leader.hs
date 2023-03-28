@@ -1,41 +1,49 @@
-
-
 module Leader where
 
-import Prelude
-import Control.Concurrent.STM (TQueue, newTBQueueIO, newTQueueIO, TVar, newTVarIO, atomically, readTVarIO, writeTQueue, writeTVar, swapTVar)
-import Types
+import Control.Concurrent.STM (STM, TQueue, TVar, atomically, flushTQueue, modifyTVar', newTBQueueIO, newTQueueIO, newTVarIO, readTVarIO, swapTVar, writeTQueue, writeTVar)
+import Control.Monad (forM_, when)
 import Control.Monad.IO.Class
-import Control.Monad (when)
+import Data.Sequence (Seq, (|>))
+import Data.Sequence qualified as Seq
+import Types
+import Prelude
 
-data LeaderError 
+data LeaderError
   = InboxLimitReached Int
   | CantAcceptDoingProcessing
-  deriving stock Show
+  deriving stock (Show)
 
 data State = Accepting | Processing
 
-data Leader = Leader
-  { inbox :: TQueue ActionRequest
-  , inboxLimit :: Int
-  , msgCount :: TVar Int
-  , operationState :: TVar State
+type RequestMap = Seq (UserId, SingRequest) -- some ordered map will be better, probably
+
+data LeaderHandlers = LeaderHandlers
+  { sendToUserToSign :: SingRequest -> IO (Either String ())
   }
 
-newLeader :: IO Leader
-newLeader = do
+data Leader = Leader
+  { inbox :: TQueue ActionRequest,
+    inboxLimit :: Int,
+    msgCount :: TVar Int,
+    operationState :: TVar State,
+    reqMap :: TVar RequestMap,
+    handlers :: LeaderHandlers
+  }
+
+newLeader :: LeaderHandlers -> IO Leader
+newLeader hs = do
   inboxQueue <- newTQueueIO
   count <- newTVarIO 0
   state <- newTVarIO Accepting
-  pure $ Leader inboxQueue 3 count state
-
+  reqs <- newTVarIO Seq.empty
+  pure $ Leader inboxQueue 3 count state reqs hs
 
 receiveAction :: Leader -> ActionRequest -> IO (Either LeaderError ())
-receiveAction (Leader inb lim count opState) ar = do
+receiveAction leader@(Leader inb lim count opState reqs _) ar = do
   st <- readTVarIO opState
   case st of
     Processing -> do
-      putStrLn "Leader: Processing - accept refused"
+      putStrLn "Leader: Accept refused - processing"
       pure $ Left CantAcceptDoingProcessing
     Accepting -> acceptAction
   where
@@ -47,13 +55,38 @@ receiveAction (Leader inb lim count opState) ar = do
           putStrLn "Leader: Inbox limit reached"
           pure $ Left (InboxLimitReached lim)
         else do
-          putStrLn "Adding Action to queue"
+          putStrLn "Leader: Adding Action to queue"
           atomically $ writeTQueue inb ar
-          _ <- atomically $ swapTVar count nextCount
+          _ <- atomically $ do
+            swapTVar count nextCount
+          -- appendRequest reqs ar
 
           when (nextCount == lim) $ do
             _ <- atomically $ swapTVar opState Processing
-            processActions
+            processInbox leader
           pure $ Right ()
 
-processActions = putStrLn "Leader: processing actions"
+processInbox leader@(Leader inb lim count opState reqs hs) = do
+  putStrLn "Leader: processing actions"
+  actions <- atomically $ flushTQueue inb
+  forM_ actions $ \ar -> do
+    putStrLn $ "Leader: processing action " <> show ar
+    let signReq = SingRequest $ mkTx $ action ar
+    sendRes <- sendToUserToSign hs signReq
+    case sendRes of
+      Right _ -> do 
+        putStrLn $ "Leader: sending for signing - OK, user " <> userId ar
+        atomically $ rememberRequest reqs (userId ar) signReq
+      Left err ->
+        putStrLn $
+          "Failed to send sign request to user " <> userId ar
+            <> ". Error: "
+            <> err
+
+-- sendToSign
+
+rememberRequest :: TVar RequestMap -> UserId -> SingRequest -> STM ()
+rememberRequest tv uId sr = modifyTVar' tv (\s -> s |> (uId, sr))
+
+mkTx :: UserAction -> Tx
+mkTx ua = "Tx-from-" <> ua

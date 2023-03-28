@@ -96,6 +96,8 @@ executable  architecture-proto
     , base
     , async
     , stm
+    , containers
+    , uuid
 
 
   hs-source-dirs: architecture-proto
