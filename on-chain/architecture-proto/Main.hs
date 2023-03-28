@@ -5,35 +5,34 @@ module Main (main) where
 
 import Control.Arrow (ArrowChoice (left))
 import Control.Concurrent
-  ( Chan,
-    MVar,
-    forkIO,
+  ( forkIO,
     newChan,
-    newEmptyMVar,
     putMVar,
     readChan,
-    takeMVar,
     threadDelay,
-    writeChan,
   )
 import Control.Monad (forM_, forever, void)
-import Data.Map (Map)
 import Data.Map qualified as Map
+import Handlers qualified
 import Leader
   ( LeaderHandlers (LeaderHandlers),
     newLeader,
     receiveAction,
     sendToUserToSign,
   )
-import Types (ActionRequest, SignedTx, SingRequest (..), UserId)
+import Types
+  ( NetMessage (AcceptActionReq, AcceptActionResp, SignTxReq, SignTxResp),
+    Network (Network),
+    UserId,
+    toLeader,
+  )
 import User
   ( User,
     UserHandlers (UserHandlers),
-    acceptSignReq,
+    emitAction,
     newUser,
-    sendAction,
     sendActionToLeader,
-    uHandlers,
+    signChainedTx,
     uId,
   )
 import Prelude
@@ -42,28 +41,38 @@ main :: IO ()
 main = do
   putStrLn "Start test"
   let userIds = ["user-" <> show x | x <- [1 .. 4]]
+  -- make "network simulation"
   net <- mkNetwork userIds
 
+  -- arch: make handlers for dependency injection for leader
   let leaderHandlers =
         LeaderHandlers
-          { sendToUserToSign = _sendSignToUser net
+          -- arch: this will be done with some http-library for requests
+          { sendToUserToSign = Handlers._sendToUserToSign net
           }
+  -- arch: build wrapper for bunch of mutable stuff for the leader
   leader <- newLeader leaderHandlers
 
+  -- arch: make handlers for dependency injection for users
   let userHandlers =
         UserHandlers
-          { sendActionToLeader = _sendActionToLeader net
+          -- arch: this will be done with some http-library for requests
+          { sendActionToLeader = Handlers._sendActionToLeader net
           }
-
+  -- arch: build wrappers for users (they don't have bunch of mutable stuff now, but probably will)
   users <- traverse (newUser userHandlers) userIds
 
+  -- starting fake servers and emitting actions from users
+  -- actions will be sent via handler to the leader under the user's hood
+  -- thorough the "network"
   startLeaderThread net leader
 
   forM_ users (startUserThread net)
-  forM_ users (`sendAction` "Test action")
 
+  forM_ users (`emitAction` "Test action")
+
+  -- let main thread run for some seconds while leader and users exchanging actions
   letItRunFor 5
-
   putStrLn "Test end"
   where
     startLeaderThread net leader = do
@@ -71,10 +80,11 @@ main = do
         forkIO $
           forever $ do
             req <- readChan (toLeader net)
+            -- arch: this will be API endpoints for leader web-server
             case req of
-              AcceptActionReq sender ar -> do
+              AcceptActionReq forResponse ar -> do
                 res <- left show <$> receiveAction leader ar
-                putMVar sender (AcceptActionResp res)
+                putMVar forResponse (AcceptActionResp res)
               other -> error $ "leader got unexpected request: " <> show other
 
     startUserThread :: Network -> User -> IO ()
@@ -86,55 +96,16 @@ main = do
           (Map.lookup (uId u) userMap)
       void . forkIO . forever $ do
         req <- readChan userChan
+        -- arch: this will be API endpoints for user web-server
         case req of
           SignTxReq forResponse sr ->
-            acceptSignReq (uHandlers u) u sr
+            signChainedTx u sr
               >>= putMVar forResponse . SignTxResp
           other -> error $ "leader got unexpected request: " <> show other
       pure ()
 
 letItRunFor :: Int -> IO ()
-letItRunFor n = threadDelay (n * 1000000)
-
-_sendActionToLeader :: Network -> ActionRequest -> IO (Either String ())
-_sendActionToLeader (Network leadChan _) ar = do
-  response <- newEmptyMVar
-  writeChan leadChan (AcceptActionReq response ar)
-  resp <- takeMVar response
-  case resp of
-    AcceptActionResp r -> pure r
-    other -> error $ "Unexpected response while sending action to leader: " <> show other
-
-_sendSignToUser :: Network -> SingRequest -> IO (Either String SignedTx)
-_sendSignToUser (Network _ userMap) sr = do
-  let netUserId = let (SingRequest uid _) = sr in uid
-  userChan <-
-    maybe
-      (error "User not found in network")
-      pure
-      (Map.lookup netUserId userMap)
-  forResponse <- newEmptyMVar
-  writeChan userChan (SignTxReq forResponse sr)
-  resp <- takeMVar forResponse
-  case resp of
-    SignTxResp signedTx -> pure signedTx
-    other -> error $ "Unexpected response while asking user to sign: " <> show other
-
-instance Show (MVar NetMessage) where
-  show _ = "<sender>"
-
--- requests has MVar for response to be put there
-data NetMessage
-  = AcceptActionReq (MVar NetMessage) ActionRequest
-  | AcceptActionResp (Either String ())
-  | SignTxReq (MVar NetMessage) SingRequest
-  | SignTxResp (Either String SignedTx)
-  deriving stock (Show)
-
-data Network = Network
-  { toLeader :: Chan NetMessage,
-    toUsers :: Map UserId (Chan NetMessage)
-  }
+letItRunFor seconds = threadDelay (seconds * 1000000)
 
 mkNetwork :: [UserId] -> IO Network
 mkNetwork uids = do

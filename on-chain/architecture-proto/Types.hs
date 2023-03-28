@@ -8,9 +8,13 @@ module Types
     userId,
     action,
     newAction,
+    Network (..),
+    NetMessage (..),
   )
 where
 
+import Control.Concurrent (Chan, MVar)
+import Data.Map (Map)
 import Prelude
 
 type UserId = String
@@ -28,7 +32,24 @@ data ActionRequest = ActionRequest
   }
   deriving stock (Show)
 
+newAction :: UserId -> UserAction -> ActionRequest
 newAction = ActionRequest
 
 data SingRequest = SingRequest UserId Tx
   deriving stock (Show)
+
+-- network simulation
+data NetMessage
+  = AcceptActionReq (MVar NetMessage) ActionRequest
+  | AcceptActionResp (Either String ())
+  | SignTxReq (MVar NetMessage) SingRequest
+  | SignTxResp (Either String SignedTx)
+  deriving stock (Show)
+
+data Network = Network
+  { toLeader :: Chan NetMessage,
+    toUsers :: Map UserId (Chan NetMessage)
+  }
+
+instance Show (MVar NetMessage) where
+  show _ = "<sender>"

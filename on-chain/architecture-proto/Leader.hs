@@ -8,12 +8,11 @@ import Control.Concurrent.STM (STM, TQueue, TVar, atomically, flushTQueue, modif
 import Control.Monad (forM_, void, when)
 import Data.Sequence (Seq, (|>))
 import Data.Sequence qualified as Seq
+import SeathCore qualified as Seath
 import Types
-  ( ActionRequest (..),
+  ( ActionRequest (action, userId),
     SignedTx,
-    SingRequest (..),
-    Tx,
-    UserAction,
+    SingRequest (SingRequest),
     UserId,
   )
 import Prelude
@@ -38,7 +37,6 @@ data Leader = Leader
     operationState :: TVar State,
     reqMap :: TVar RequestMap,
     lHandlers :: LeaderHandlers
-    
   }
 
 newLeader :: LeaderHandlers -> IO Leader
@@ -50,7 +48,7 @@ newLeader hs = do
   pure $ Leader inboxQueue 3 count state reqs hs
 
 receiveAction :: Leader -> ActionRequest -> IO (Either LeaderError ())
-receiveAction leader@(Leader inb lim count opState _ hs) ar = do
+receiveAction leader@(Leader inb lim count opState _ _) ar = do
   st <- readTVarIO opState
   case st of
     Processing -> do
@@ -70,7 +68,6 @@ receiveAction leader@(Leader inb lim count opState _ hs) ar = do
           atomically $ writeTQueue inb ar
           _ <- atomically $ do
             swapTVar count nextCount
-          -- appendRequest reqs ar
 
           when (nextCount == lim) $ do
             _ <- atomically $ swapTVar opState Processing
@@ -81,29 +78,31 @@ receiveAction leader@(Leader inb lim count opState _ hs) ar = do
 processInbox :: Leader -> IO ()
 processInbox (Leader inb _ _ _ reqs hs) = do
   putStrLn "Leader: processing actions"
-  actions <- atomically $ flushTQueue inb
-  forM_ actions $ \ar -> do
-    putStrLn $ "Leader: processing action " <> show ar
-    let signReq = SingRequest (userId ar) (mkTx $ action ar)
+  actionReqs <- atomically $ flushTQueue inb
+
+  -- arch: run contract with `runContract` from CTL to do chaining
+  chainedTxs <- Seath.runContract (Seath.actionsToTxChain (action <$> actionReqs))
+
+  let toProcess = zipWith (\ar tx -> (userId ar, tx)) actionReqs chainedTxs
+
+  forM_ toProcess $ \(uid, tx) -> do
+    putStrLn $ "Leader: processing chained tx " <> show tx
+    let signReq = SingRequest uid tx
     sendRes <- sendToUserToSign hs signReq
     case sendRes of
       Right _ -> do
-        putStrLn $ "Leader: sending for signing - OK, user " <> userId ar
-        atomically $ rememberRequest reqs (userId ar) signReq
+        putStrLn $ "Leader: sending for signing - OK, user " <> uid
+        atomically $ rememberRequest reqs uid signReq
       Left err ->
         putStrLn $
-          "Leader: Failed to get signature from user " <> userId ar
+          "Leader: Failed to get signature from user " <> uid
             <> ". Error: "
             <> err
   printSuccessfullySigned reqs
 
--- sendToSign
-
+-- collect requests for which leader got signed transaction from user
 rememberRequest :: TVar RequestMap -> UserId -> SingRequest -> STM ()
 rememberRequest tv uId sr = modifyTVar' tv (\s -> s |> (uId, sr))
-
-mkTx :: UserAction -> Tx
-mkTx ua = "Tx-from-" <> ua
 
 printSuccessfullySigned :: TVar RequestMap -> IO ()
 printSuccessfullySigned reqs = do
