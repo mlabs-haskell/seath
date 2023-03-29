@@ -30,26 +30,26 @@ import Data.List (head)
 import Data.Map (size, values)
 import Data.Map as Map
 import Data.Maybe (Maybe(Just, Nothing), maybe)
-import Data.Monoid ((<>))
+import Data.Monoid (mempty, (<>))
 import Data.Show (show)
 import Data.Traversable (traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit, unit)
 import Effect.Aff (error)
 import Effect.Aff.Class (liftAff)
+import Effect.Class (liftEffect)
 import Effect.Exception (throw)
 import Prelude (discard, pure, ($))
 import Seath.Core.ChainBuilder (buildChain)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
 import Seath.Network.Leader
-  ( getPendingActions
+  ( getNextBatchOfActions
   , sendChainToUsersForSignature
-  , sendSignatureFailToUsers
   , splitSuccessFails
   , startLeaderServer
   , waitForChainSignatures
   )
-import Seath.Network.Types (UserNode)
+import Seath.Network.Types (OrderedMap, UserNode)
 import Seath.Network.Users (makeUserAction, sendActionToLeader, startUserServer)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions
@@ -81,7 +81,7 @@ import Seath.Test.Utils (runnerConfInfo)
 import Type.Function (type ($))
 import Undefined (undefined)
 
-newMainTest :: RunnerConfiguration AdditionState -> Contract Unit
+newMainTest :: RunnerConfiguration AdditionState AdditionAction -> Contract Unit
 newMainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
   logInfo' $ "Running with " <> runnerConfInfo config
@@ -108,38 +108,42 @@ newMainTest config = do
 
   sendedActions <- liftAff $ performFromParticipantsWithValue sendActionToLeader
     (zip participants actions)
-  recivedActions <- liftAff $ getPendingActions (unwrap leader).node
+  recivedActions <- liftAff $ getNextBatchOfActions (unwrap leader).node mempty
 
+  -- TODO: chainBuilder must return the chain and the possible errors processing
+  -- actions, so we can notify the user here (and right now a exception balancing
+  -- would break the process).
   (finalizedTxsAndActions /\ _) <- withKeyWallet (unwrap leader).wallet $
     buildChain
       coreConfiguration
-      recivedActions
+      -- TODO : fixme
+      (undefined recivedActions)
       Nothing
 
   signatureRequest <- liftAff $ sendChainToUsersForSignature
     (unwrap leader).node
-    finalizedTxsAndActions
-
-  -- TODO: Fix this
-  -- {success:sended,fails:failToSend} <- splitSuccessFails signatureRequest
-
+    -- TODO :fixme
+    (undefined finalizedTxsAndActions)
   let
-    { success: sended, fails: failToSend } = undefined signatureRequest
+    { success: sended, failures: failToSend } = splitSuccessFails
+      signatureRequest
 
-  _ <- unless (isEmpty failToSend) $ throw
-    ("some transactions failed to be send for signature: " <> show failToSend)
+  _ <- liftEffect $ unless (isEmpty failToSend) $ throw
+    ( "some transactions failed to be send for signature: " <> undefined
+        failToSend
+    )
 
   maybeSignedTxs <- liftAff $ waitForChainSignatures (unwrap leader).node sended
 
-  -- TODO: Fix this
-  -- {success:toSubmit,fails:toRebuild} <- splitSuccessFails maybeSignedTxs
   let
-    { success: toSubmit, fails: toRebuild } = undefined maybeSignedTxs
+    { success: toSubmit, failures: toRebuild } = splitSuccessFails
+      maybeSignedTxs
 
-  -- failedActions <- liftAff $ sendSignatureFailToUsers toRebuild
-  unless (isEmpty toRebuild) $ throw ("failed to be signed: " <> show toRebuild)
+  liftEffect $ unless (isEmpty toRebuild) $ throw
+    ("failed to be signed: " <> undefined toRebuild)
 
-  txIds <- SeathSetup.submitChain leader participants toSubmit logState
+  txIds <- SeathSetup.submitChain leader participants (undefined toSubmit)
+    logState
 
   case last txIds of
     Nothing -> throwContractError
@@ -153,18 +157,18 @@ newMainTest config = do
   logInfo' "end"
 
   where
-  isEmpty [] = true
-  isEmpty _ = false
+  isEmpty :: forall a b. OrderedMap a b -> Boolean
+  isEmpty = undefined
 
 performFromParticipantsWithValue
-  :: forall a b (m :: Type -> Type)
+  :: forall a b (m :: Type -> Type) actionType
    . Applicative m
-  => (UserNode -> a -> m b)
-  -> Array (Participant /\ a)
+  => (UserNode actionType -> a -> m b)
+  -> Array (Participant actionType /\ a)
   -> m $ Array b
 performFromParticipantsWithValue function = traverse makeOne
   where
-  makeOne :: Participant /\ a -> m b
+  makeOne :: Participant actionType /\ a -> m b
   makeOne ((Participant participant) /\ value) = function (participant.node)
     value
 
@@ -174,17 +178,20 @@ performFromParticipantsWithValue function = traverse makeOne
 --     startOne (Participant participant) = startUserServer participant.node
 
 makeUserActionsFromActions
-  :: forall a. Array (Participant /\ a) -> Contract $ Array $ UserAction a
+  :: forall actionType
+   . Array (Participant actionType /\ actionType)
+  -> Contract $ Array $ UserAction actionType
 makeUserActionsFromActions = traverse makeOne
   where
-  makeOne :: Participant /\ a -> Contract $ UserAction a
+  makeOne
+    :: Participant actionType /\ actionType -> Contract $ UserAction actionType
   makeOne ((Participant participant) /\ action) = withKeyWallet
     participant.wallet
     do
       userUTxOs <- liftedM "no UTXOs found" getWalletUtxos
       pure $ makeUserAction participant.node action userUTxOs
 
-mainTest :: RunnerConfiguration AdditionState -> Contract Unit
+mainTest :: RunnerConfiguration AdditionState AdditionAction -> Contract Unit
 mainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
   info Map.empty "This is a test for logger"
@@ -263,7 +270,7 @@ waitForFunding waitingTime = do
       Nothing -> waitNSlots slots *> loop slots
 
 runnerConfiguration2CoreConfiguration
-  :: RunnerConfiguration BigInt
+  :: RunnerConfiguration BigInt AdditionAction
   -> Contract $ CoreConfiguration AdditionAction AdditionState AdditionValidator
        AdditionDatum
        AdditionRedeemer
@@ -281,7 +288,7 @@ runnerConfiguration2CoreConfiguration config = do
     }
 
 checkFinalState
-  :: RunnerConfiguration AdditionState
+  :: RunnerConfiguration AdditionState AdditionAction
   -> BlockchainState AdditionState
   -> BlockchainState AdditionState
   -> Contract Unit

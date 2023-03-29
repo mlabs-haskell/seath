@@ -1,92 +1,113 @@
 module Seath.Network.Users
-  ( getSeathConfiguration
+  ( getSeathCoreConfiguration
   , sendActionToLeader
   , waitForTransaction
-  , sendSignedTxToLeader
+  , sendSignedTransactionToLeader
   , sendRejectionToLeader
-  , waitForActionConfirmation
+  , waitForConfirmationOfFinalChainPartìcipation
   , makeUserAction
   , makeUserActionAndSend
   , startUserServer
   , stopUserServer
+  , newUserState
   ) where
 
 import Contract.Monad (Contract, liftedM)
-import Contract.Transaction (FinalizedTransaction)
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
-import Data.Newtype (unwrap, wrap)
-import Data.Tuple.Nested (type (/\))
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Aff.Class (liftAff)
 import Seath.Core.Types (CoreConfiguration, UserAction)
-import Seath.Network.Types (Request, SignedTransaction, UserNode)
+import Seath.Network.Types
+  ( AskForSignature
+  , IncludeActionResponse
+  , Ip
+  , ProcessingActionError
+  , SignedTransaction
+  , UserNode
+  , UserState
+  )
 import Type.Function (type ($))
 import Undefined (undefined)
 
-startUserServer :: UserNode -> Aff Unit
+startUserServer :: forall a. UserNode a -> Aff Unit
 startUserServer = undefined
 
-stopUserServer :: UserNode -> Aff Unit
+stopUserServer :: forall a. UserNode a -> Aff Unit
 stopUserServer = undefined
 
-getSeathConfiguration
+getSeathCoreConfiguration
   :: forall actionType userStateType validatorType datumType redeemerType
-   . UserNode
+   . UserNode actionType
   -> CoreConfiguration actionType userStateType validatorType datumType
        redeemerType
-getSeathConfiguration = undefined
+getSeathCoreConfiguration = undefined
 
+-- | This function won't raise a exception if we can't reach the network.
 sendActionToLeader
-  :: forall a. UserNode -> UserAction a -> Aff $ Request $ UserAction a
+  :: forall a
+   . UserNode a
+  -> UserAction a
+  -> Aff $ Either String IncludeActionResponse
 sendActionToLeader = undefined
 
 waitForTransaction
   :: forall a
-   . UserNode
-  -> Request $ UserAction a
-  -> Aff $ Either String $ FinalizedTransaction /\ UserAction a
+   . UserNode a
+  -> IncludeActionResponse
+  -- the first Either is to catch the network errors
+  -> Aff $ Either String $ Either ProcessingActionError $ AskForSignature
 waitForTransaction = undefined
 
-sendSignedTxToLeader
+sendSignedTransactionToLeader
   :: forall a
-   . UserNode
+   . UserNode a
+  -> AskForSignature
   -> SignedTransaction
-  -> UserAction a
-  -> Aff $ Request $ SignedTransaction /\ UserAction a
-sendSignedTxToLeader = undefined
+  -- the first Either is to catch the network errors
+  -> Aff $ Either String $ Either ProcessingActionError Unit
+sendSignedTransactionToLeader = undefined
 
+-- | We refuse to sign the given transaction and inform the server
+-- | explicitly.
 sendRejectionToLeader
   :: forall a
-   . UserNode
-  -> SignedTransaction
-  -> UserAction a
-  -> Aff $ Request $ SignedTransaction /\ UserAction a
+   . UserNode a
+  -> AskForSignature
+  -> Aff $ Either String Unit
 sendRejectionToLeader = undefined
 
-waitForActionConfirmation
+waitForConfirmationOfFinalChainPartìcipation
   :: forall a
-   . UserNode
-  -> Request $ SignedTransaction /\ UserAction a
+   . UserNode a
+  -> AskForSignature
   -> Aff Unit
-waitForActionConfirmation = undefined
+waitForConfirmationOfFinalChainPartìcipation = undefined
 
-makeUserAction :: forall a. UserNode -> a -> UtxoMap -> UserAction a
-makeUserAction nodeConfig action userUTxOs =
-  let
-    publicKey = (unwrap (unwrap nodeConfig).configuration).pubKeyHash
-    changeAddress = (unwrap (unwrap nodeConfig).configuration).changeAddress
-  in
-    wrap { action, publicKey, userUTxOs, changeAddress }
+makeUserAction :: forall a. UserNode a -> a -> UtxoMap -> UserAction a
+makeUserAction nodeConfig action userUTxOs = undefined
+
+-- TODO : Fixme
+--   let
+--     publicKey = (unwrap (unwrap nodeConfig).configuration).pubKeyHash
+--     changeAddress = (unwrap (unwrap nodeConfig).configuration).changeAddress
+--   in
+--     wrap { action, publicKey, userUTxOs, changeAddress }
 
 makeUserActionAndSend
-  :: forall a. UserNode -> a -> Contract $ Request $ UserAction a
+  :: forall a. UserNode a -> a -> Contract $ Either String IncludeActionResponse
 makeUserActionAndSend nodeConfig actionRaw = do
   walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
   let
     action = makeUserAction nodeConfig actionRaw walletUTxOs
   liftAff $ sendActionToLeader nodeConfig action
 
+-- | Return a new mutable `userState`
+newUserState :: forall a. Aff $ UserState a
+newUserState = undefined
+
+getOwnIp :: Aff Ip
+getOwnIp = undefined

@@ -30,11 +30,11 @@ import Seath.Network.Types (LeaderNode, UserNode)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
+import Seath.Test.Examples.Addition.Types (AdditionAction)
 import Seath.Test.QuickCheck
   ( genLeaderNodeWith
   , genUserNodeWith
   , makeDistribution
-  , makeNodeConfiguration
   )
 import Seath.Test.Types
   ( Leader(Leader)
@@ -43,6 +43,7 @@ import Seath.Test.Types
   )
 import Seath.Test.Utils (gen2Contract)
 import Type.Function (type ($))
+import Undefined (undefined)
 
 run :: Effect Unit
 run = launchAff_
@@ -51,7 +52,7 @@ run = launchAff_
     \((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
       participantsWallets' <- liftMaybe (error "No participants found")
         (NE.fromArray participantsWallets)
-      leaderNode <- makeLeaderNodeFromKeyWallet leaderWallet
+      leaderNode <- makeLeaderNode
       let
         numberOfParticipants = length participantsWallets'
         indexes = range 0 numberOfParticipants
@@ -97,29 +98,20 @@ config =
       { slotLength: Seconds 1.0 }
   }
 
-makeLeaderNodeFromKeyWallet :: KeyWallet -> Contract LeaderNode
-makeLeaderNodeFromKeyWallet kw = withKeyWallet kw do
-  pkh <- getPublicKeyHash
-  -- TODO: fix this to use the `getChangeAddress` function
-  changeAddress <- liftedM "can't get Change address" $ head
-    <$>
-      getWalletAddressesWithNetworkTag
-  gen2Contract $ genLeaderNodeWith "-1" $ makeNodeConfiguration pkh
-    changeAddress
+-- The types here can change
+makeLeaderNode :: Contract $ LeaderNode AdditionAction
+makeLeaderNode = undefined
 
-makeParticpantNodeFromKeyWallet :: String -> KeyWallet -> Contract UserNode
-makeParticpantNodeFromKeyWallet ip kw = withKeyWallet kw do
-  pkh <- getPublicKeyHash
-  -- TODO: fix this to use the `getChangeAddress` function
-  changeAddress <- liftedM "can't get Change address" $ head
-    <$>
-      getWalletAddressesWithNetworkTag
-  gen2Contract $ genUserNodeWith ip $ makeNodeConfiguration pkh changeAddress
+-- The types here can change
+makeParticpantNode :: Contract $ UserNode AdditionAction
+makeParticpantNode = undefined
 
 makeParticipantsFromIndexedWallets
-  :: NonEmptyArray (Int /\ KeyWallet) -> Contract $ NonEmptyArray Participant
-makeParticipantsFromIndexedWallets = traverse indexed2Participant
-  where
-  indexed2Participant (index /\ wallet) = do
-    node <- makeParticpantNodeFromKeyWallet (show index) wallet
-    pure $ wrap { wallet, node }
+  :: NonEmptyArray (Int /\ KeyWallet)
+  -> Contract $ NonEmptyArray $ Participant AdditionAction
+makeParticipantsFromIndexedWallets = undefined
+-- traverse indexed2Participant
+-- where
+-- indexed2Participant (index /\ wallet) = do
+--   node <- makeParticpantNodeFromKeyWallet (show index) wallet
+--   pure $ wrap { wallet, node }

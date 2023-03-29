@@ -23,21 +23,23 @@ newtype BlockchainState s = BlockchainState
 
 derive instance Newtype (BlockchainState s) _
 
-newtype Leader = Leader { wallet :: KeyWallet, node :: LeaderNode }
+newtype Leader actionType = Leader
+  { wallet :: KeyWallet, node :: LeaderNode actionType }
 
-derive instance Newtype Leader _
+derive instance Newtype (Leader actionType) _
 
-newtype Participant = Participant { wallet :: KeyWallet, node :: UserNode }
+newtype Participant actionType = Participant
+  { wallet :: KeyWallet, node :: UserNode actionType }
 
-derive instance Newtype Participant _
+derive instance Newtype (Participant actionType) _
 
-newtype RunnerConfiguration (s :: Type) = RunnerConfiguration
+newtype RunnerConfiguration (s :: Type) actionType = RunnerConfiguration
   { admin :: KeyWallet -- wallet that will run init contract
-  , leader :: Leader
-  , participants :: NonEmptyArray Participant
+  , leader :: Leader actionType
+  , participants :: NonEmptyArray (Participant actionType)
   , minAdaRequired :: BigInt
   , expectedStateChange :: s -> s
   , logLevel :: LogLevel
   }
 
-derive instance Newtype (RunnerConfiguration s) _
+derive instance Newtype (RunnerConfiguration s actionType) _

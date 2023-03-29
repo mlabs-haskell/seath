@@ -12,33 +12,44 @@ import Data.Newtype (wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Seath.Network.Types
   ( Ip
+  , LeaderConfiguration
   , LeaderNode(LeaderNode)
-  , NodeConfiguration(NodeConfiguration)
+  , LeaderState
+  , UserConfiguration
   , UserNode(UserNode)
+  , UserState
   )
-import Seath.Test.Fixtures (fixedHandlers, fixedPort, fixedTimeOut)
+import Seath.Test.Examples.Addition.Types (AdditionAction)
+import Seath.Test.Fixtures
+  ( fixedLeaderClientHandlers
+  , fixedPort
+  , fixedTimeOut
+  , fixedUserClientHandlers
+  )
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (Gen, chooseInt)
+import Type.Function (type ($))
+import Undefined (undefined)
 
-makeNodeConfiguration
-  :: PubKeyHash -> AddressWithNetworkTag -> NodeConfiguration
-makeNodeConfiguration pk changeAddress = NodeConfiguration
-  { timeout: fixedTimeOut
-  , handlers: fixedHandlers
-  , port: fixedPort
-  , pubKeyHash: pk
-  , changeAddress
-  }
+genLeaderConfiguration :: Gen LeaderConfiguration
+genLeaderConfiguration = undefined
 
-genUserNodeWith :: Ip -> NodeConfiguration -> Gen UserNode
-genUserNodeWith ip configuration = do
-  state <- arbitrary
-  pure $ UserNode { configuration, information: wrap { ip }, state }
+-- do
+-- maxWaitingTimeForSignature :: MiliSeconds <- arbitrary
+-- maxQueueSize :: Int <- arbitrary
+-- numberOfActionToTriggerChainBuilder :: Int <- arbitrary
+-- maxWaitingTimeBeforeBuildChain :: Int <- chooseInt 10 100
+-- pure $ LeaderConfiguration{maxWaitingTimeForSignature, maxQueueSize,numberOfActionToTriggerChainBuilder,maxWaitingTimeBeforeBuildChain, clientHandlers:fixedLeaderClientHandlers}
 
-genLeaderNodeWith :: Ip -> NodeConfiguration -> Gen LeaderNode
-genLeaderNodeWith ip configuration = do
-  state <- arbitrary
-  pure $ LeaderNode { configuration, information: wrap { ip }, state }
+genUserConfiguration :: Gen $ UserConfiguration AdditionAction
+genUserConfiguration = undefined
+
+genUserNodeWith :: UserState AdditionAction -> Gen $ UserNode AdditionAction
+genUserNodeWith = undefined
+
+genLeaderNodeWith
+  :: LeaderState AdditionAction -> Gen $ LeaderNode AdditionAction
+genLeaderNodeWith = undefined
 
 type Distribution = ((Array BigInt /\ Array BigInt) /\ Array (Array BigInt))
 

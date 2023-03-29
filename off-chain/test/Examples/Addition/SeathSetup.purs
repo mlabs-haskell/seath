@@ -44,14 +44,15 @@ import Seath.Test.Types
 
 -- todo: pass action as param?
 genUserActions
-  :: Array Participant -> Contract (Array (UserAction AdditionAction))
+  :: Array (Participant AdditionAction)
+  -> Contract (Array (UserAction AdditionAction))
 genUserActions ps =
   traverse genAction ps
 
 stateChangePerAction ∷ BigInt
 stateChangePerAction = BigInt.fromInt 100
 
-genAction :: Participant -> Contract (UserAction AdditionAction)
+genAction :: Participant AdditionAction -> Contract (UserAction AdditionAction)
 genAction (Participant p) =
   withKeyWallet p.wallet $ do
     ownUtxos <- liftedM "no UTxOs found" getWalletUtxos
@@ -66,8 +67,9 @@ genAction (Participant p) =
       }
 
 signTransactions
-  :: Leader
-  -> Array (Participant /\ FinalizedTransaction)
+  :: forall a
+   . Leader a
+  -> Array (Participant a /\ FinalizedTransaction)
   -> Contract (Array BalancedSignedTransaction)
 signTransactions leader toSign = flip traverse toSign \(participant /\ tx) -> do
   signedByParticipant <- withKeyWallet (unwrap participant).wallet $
@@ -75,8 +77,9 @@ signTransactions leader toSign = flip traverse toSign \(participant /\ tx) -> do
   withKeyWallet (unwrap leader).wallet $ signTransaction signedByParticipant
 
 submitChain
-  :: Leader
-  -> Array Participant
+  :: forall a
+   . Leader a
+  -> Array (Participant a)
   -> Array FinalizedTransaction
   -> Contract Unit
   -> Contract (Array TransactionHash)
@@ -95,9 +98,9 @@ submitChain leader participants txs log = do
     pure $ transactionId
 
 getBlockchainState
-  :: forall s
-   . Leader
-  -> Array Participant
+  :: forall s a
+   . Leader a
+  -> Array (Participant a)
   -> Contract (UtxoMap /\ s)
   -> Contract (BlockchainState s)
 getBlockchainState leader participants stateQuery = do

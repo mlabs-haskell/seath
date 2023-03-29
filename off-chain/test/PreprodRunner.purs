@@ -22,7 +22,7 @@ import Node.FS.Aff (readdir)
 import Node.Path as Path
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
-import Seath.Test.Examples.Addition.Types (AdditionState)
+import Seath.Test.Examples.Addition.Types (AdditionAction, AdditionState)
 import Seath.Test.Types (RunnerConfiguration(RunnerConfiguration))
 import Seath.Test.Utils (makeKeyWallet)
 
@@ -39,7 +39,9 @@ run = launchAff_ $ do
     keyDirs <- readdir keysDir
     for keyDirs $ \keyDir -> makeKeyWallet $ Path.concat [ keysDir, keyDir ]
 
-  mkRunnerConf :: Array KeyWallet -> Maybe (RunnerConfiguration AdditionState)
+  mkRunnerConf
+    :: Array KeyWallet
+    -> Maybe (RunnerConfiguration AdditionState AdditionAction)
   mkRunnerConf keys = do
     admin <- keys !! 0
     leader <- keys !! 1

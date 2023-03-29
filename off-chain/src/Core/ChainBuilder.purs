@@ -38,6 +38,9 @@ import Seath.Core.Types
   )
 import Seath.Core.Utils (findOwnOutputs, getFinalizedTransactionHash)
 
+-- TODO: Make the the buildChain function to skip transactions with erros
+-- in the balancer and to report them at the end.
+
 -- | Use this function to run Seath chain generation
 buildChain
   :: forall (actionType :: Type) (userStateType :: Type) (validatorType :: Type)

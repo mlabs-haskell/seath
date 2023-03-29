@@ -26,7 +26,8 @@ import Node.Path as Path
 import Seath.Test.Types (RunnerConfiguration)
 import Test.QuickCheck.Gen (Gen, randomSampleOne)
 
-runnerConfInfo :: forall s. RunnerConfiguration s -> String
+runnerConfInfo
+  :: forall s actionType. RunnerConfiguration s actionType -> String
 runnerConfInfo conf =
   "RunnerConfig { participants = "
     <> show (NE.length (unwrap conf).participants)
