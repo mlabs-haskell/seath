@@ -1,11 +1,20 @@
 module Seath.Test.PlutipRunner (run) where
 
 import Contract.Chain (waitNSlots)
-import Contract.Config (LogLevel(Info), emptyHooks)
+import Contract.Config (emptyHooks)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, launchAff_)
 import Contract.Numeric.Natural (fromInt')
-import Contract.Prelude (Effect, Maybe(Just, Nothing), const, pure, unit)
+import Contract.Prelude
+  ( Effect
+  , LogLevel(Info)
+  , Maybe(Nothing, Just)
+  , length
+  , pure
+  , unit
+  , (*)
+  , (+)
+  )
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Utxos (getWalletUtxos)
@@ -23,6 +32,7 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (($))
 import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
+import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
 
 run :: Effect Unit
@@ -39,7 +49,8 @@ run = launchAff_
             , seathLeader: leader
             , seathParticipants: participants'
             , minAdaRequired: BigInt.fromInt 200
-            , expectedStateChange: const $ BigInt.fromInt 500
+            , expectedStateChange: (+)
+                (length participants * stateChangePerAction)
             }
 
       -- sometimes it takes several seconds befora wallets will be funded,

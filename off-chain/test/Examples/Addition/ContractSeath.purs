@@ -143,11 +143,11 @@ checkFinalState
   (BlockhainState startState)
   (BlockhainState endState) = do
 
-  checlLeaderUtxos
+  checkLeaderUtxos
   checkScriptState
 
   where
-  checlLeaderUtxos = do
+  checkLeaderUtxos = do
     leaderUtxos <- maybe
       (throwContractError "Leader should have UTXOs at the end of test run")
       pure
