@@ -89,7 +89,8 @@ getNextBatchOfActions
   -> Array (UserPetitionID /\ UserAction a)
   -> Aff $ OrderedMap UserPetitionID $ UserAction a
 getNextBatchOfActions = undefined
-  (getAbatchOfPendingActions undefined undefined)
+
+-- (getAbatchOfPendingActions undefined undefined)
 
 startLeaderServer :: forall a. LeaderNode a -> Aff Unit
 startLeaderServer = undefined

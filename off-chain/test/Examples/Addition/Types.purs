@@ -8,6 +8,7 @@ module Seath.Test.Examples.Addition.Types
   , initialState
   ) where
 
+import Aeson (class DecodeAeson, class EncodeAeson)
 import Contract.PlutusData
   ( class FromData
   , class HasPlutusSchema
@@ -43,6 +44,9 @@ instance DatumType AdditionValidator AdditionDatum
 instance RedeemerType AdditionValidator AdditionRedeemer
 
 newtype AdditionAction = AddAmount BigInt
+
+derive newtype instance EncodeAeson AdditionAction
+derive newtype instance DecodeAeson AdditionAction
 
 derive instance Eq AdditionAction
 derive instance Generic AdditionAction _

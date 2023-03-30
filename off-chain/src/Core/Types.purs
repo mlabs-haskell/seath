@@ -3,11 +3,26 @@ module Seath.Core.Types
   , StateReturn(StateReturn)
   , CoreConfiguration(CoreConfiguration)
   , ChainBuilderState(ChainBuilderState)
+  , ChangeAddr(ChangeAddr)
+  , getAddr
   ) where
 
-import Contract.Address (AddressWithNetworkTag, PubKeyHash)
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , JsonDecodeError(..)
+  , fromString
+  , toString
+  )
+import Contract.Address
+  ( AddressWithNetworkTag
+  , PubKeyHash
+  , addressWithNetworkTagFromBech32
+  , addressWithNetworkTagToBech32
+  )
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
+import Contract.Prelude (Either(..), bind, maybe, note, pure, ($))
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)
@@ -17,12 +32,13 @@ import Data.Monoid ((<>))
 import Data.Newtype (class Newtype)
 import Data.Show (class Show, show)
 import Data.Tuple.Nested (type (/\))
+import Undefined (undefined)
 
 newtype UserAction a = UserAction
   { publicKey :: PubKeyHash
   , action :: a
   , userUTxOs :: UtxoMap
-  , changeAddress :: AddressWithNetworkTag
+  , changeAddress :: ChangeAddr
   }
 
 instance showUserAction :: Show a => Show (UserAction a) where
@@ -38,8 +54,28 @@ instance
     { publicKey :: PubKeyHash
     , action :: a
     , userUTxOs :: UtxoMap
-    , changeAddress :: AddressWithNetworkTag
+    , changeAddress :: ChangeAddr
     }
+
+derive newtype instance EncodeAeson a => EncodeAeson (UserAction a)
+derive newtype instance DecodeAeson a => DecodeAeson (UserAction a)
+
+data ChangeAddr = ChangeAddr AddressWithNetworkTag
+
+getAddr :: ChangeAddr -> AddressWithNetworkTag
+getAddr (ChangeAddr addr) = addr
+
+instance DecodeAeson ChangeAddr where
+  decodeAeson a = do
+    -- addr <- note "Cant parse from bech23" $ addressWithNetworkTagFromBech32 s
+    addrS <- maybe (Left $ TypeMismatch "String") pure $ toString a
+    addr <- maybe (Left $ TypeMismatch "Bech32 AddressWithNetworkTag") pure $
+      addressWithNetworkTagFromBech32 addrS
+    pure $ ChangeAddr addr
+
+instance EncodeAeson ChangeAddr where
+  encodeAeson (ChangeAddr addr) =
+    fromString $ addressWithNetworkTagToBech32 addr
 
 newtype StateReturn validatorType datumType redeemerType stateType = StateReturn
   { constraints ::

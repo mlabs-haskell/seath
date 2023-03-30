@@ -4,7 +4,8 @@ You can edit this file as you like.
 -}
 { name = "seath"
 , dependencies =
-  [ "aff"
+  [ "aeson"
+  , "aff"
   , "arrays"
   , "bifunctors"
   , "bigints"
@@ -12,6 +13,7 @@ You can edit this file as you like.
   , "console"
   , "control"
   , "datetime"
+  , "debug"
   , "effect"
   , "either"
   , "exceptions"

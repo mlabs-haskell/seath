@@ -1,18 +1,25 @@
 module Seath.Network.Types where
 
+import Aeson (class DecodeAeson, class EncodeAeson, decodeJsonString)
+import Contract.Prelude (class Show, bind, pure, show, ($))
 import Contract.Transaction (FinalizedTransaction)
+import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)
 import Data.Tuple.Nested (type (/\))
 import Data.Unit (Unit)
+import Debug (trace)
 import Effect.Aff (Aff)
+import Payload.Server.DecodeBody (class DecodeBody)
 import Seath.Core.Types (UserAction)
 import Type.Function (type ($))
 
 -- TODO: replace this types with real ones.
 -- The names are indicatives but can change.
+type AsyncMutableQueueRef :: forall k. k -> k
 type AsyncMutableQueueRef a = a
+
 type Ip = String
 type Port = String
 type ControlNumber = Int
@@ -82,6 +89,18 @@ newtype IncludeActionRequest a = IncludeActionRequest
   , port :: Port
   , action :: UserAction a
   }
+
+instance incReq :: Show a => Show (IncludeActionRequest a) where
+  show (IncludeActionRequest iar) = show iar.action
+
+instance decBodyIncludeActionRequest ::
+  ( DecodeAeson a
+  ) =>
+  DecodeBody (IncludeActionRequest a) where
+  decodeBody s = lmap show $ decodeJsonString s
+
+derive newtype instance EncodeAeson a => EncodeAeson (IncludeActionRequest a)
+derive newtype instance DecodeAeson a => DecodeAeson (IncludeActionRequest a)
 
 -- The idea is that we would read the lenght of the pending request
 -- queue and based on that we accept or reject the action

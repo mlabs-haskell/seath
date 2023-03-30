@@ -4,7 +4,6 @@ import Contract.BalanceTxConstraints
   ( mustSendChangeToAddress
   , mustUseAdditionalUtxos
   )
-import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.Prelude (fst)
@@ -27,14 +26,14 @@ import Data.Map (empty, toUnfoldable)
 import Data.Maybe (Maybe(Nothing, Just))
 import Data.Monoid ((<>))
 import Data.Newtype (unwrap, wrap)
-import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
-import Prelude (discard, ($), (<<<))
+import Prelude (($), (<<<))
 import Seath.Core.Types
   ( ChainBuilderState(ChainBuilderState)
   , CoreConfiguration(CoreConfiguration)
   , StateReturn(StateReturn)
   , UserAction
+  , getAddr
   )
 import Seath.Core.Utils (findOwnOutputs, getFinalizedTransactionHash)
 
@@ -163,7 +162,7 @@ action2Transaction
         if additionalUtxos == scriptUtxos then empty else additionalUtxos
       balanceConstraints =
         mustUseAdditionalUtxos realAdditionalUtxos <>
-          mustSendChangeToAddress (unwrap userAction).changeAddress
+          mustSendChangeToAddress (getAddr (unwrap userAction).changeAddress)
       constraints = handlerResult.constraints
         <> fold
           ( mustSpendPubKeyOutput <<< fst <$> toUnfoldable

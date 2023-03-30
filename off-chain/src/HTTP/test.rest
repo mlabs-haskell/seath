@@ -1,0 +1,4 @@
+POST http://0.0.0.0:3000/leader/include_action HTTP/1.1
+content-type: application/json
+
+{"port":"port","ip":"IP","controlNumber":1,"action":{"userUTxOs":[[{"transactionId":"d39a41bee21b89eba878574b547deb4f0cfea6e2fbd01c71cc22af8e13f94829","index":0},{"scriptRef":null,"output":{"referenceScript":null,"datum":{"tag":"NoOutputDatum","contents":{}},"amount":{"getValue":[[{"unCurrencySymbol":""},[[{"unTokenName":""},1000000000]]]]},"address":{"addressStakingCredential":null,"addressCredential":{"tag":"PubKeyCredential","contents":{"getPubKeyHash":"fd80a86b507d289789afe650ccdfacde911430181c4554750e4f2903"}}}}}]],"publicKey":{"getPubKeyHash":"fd80a86b507d289789afe650ccdfacde911430181c4554750e4f2903"},"changeAddress":"addr1v87cp2rt2p7j39uf4ln9pnxl4n0fz9psrqwy24r4pe8jjqcc0zcqa","action":100}}
