@@ -74,7 +74,7 @@ import Seath.Test.Examples.Addition.Types
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.Types
   ( BlockchainState(BlockchainState)
-  , Participant(..)
+  , Participant(Participant)
   , RunnerConfiguration(RunnerConfiguration)
   )
 import Seath.Test.Utils (runnerConfInfo)
