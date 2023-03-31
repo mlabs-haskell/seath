@@ -1,9 +1,21 @@
 module Seath.Test.HttpDebug where
 
+import Aeson (class EncodeAeson)
 import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), ServerConfig, emptyHooks)
 import Contract.Monad (Aff, Contract, launchAff_, liftedM)
-import Contract.Prelude (bind, discard, liftEffect, log, pure, (<$>))
+import Contract.Prelude
+  ( Either(..)
+  , bind
+  , discard
+  , liftEffect
+  , log
+  , note
+  , pure
+  , (<$>)
+  , (<>)
+  , (==)
+  )
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Utxos (getWalletUtxos)
@@ -11,20 +23,22 @@ import Contract.Wallet (KeyWallet)
 import Data.Array (head)
 import Data.BigInt as BigInt
 import Data.Maybe (Maybe(Nothing))
-import Data.Show (show)
 import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
 import Data.Tuple.Nested ((/\))
 import Data.UInt (fromInt) as UInt
+import Data.UUID (UUID, genUUID, parseUUID)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (delay, forkAff)
+import Payload.ResponseTypes (Response(..))
+import Prelude (show)
 import Prelude (($))
 import Seath.Core.Types (ChangeAddress(..), UserAction(..))
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..))
-import Seath.Network.Types (LeaderNode, UserNode)
+import Seath.Network.Types (IncludeActionError(..), LeaderNode, UserNode)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
@@ -49,18 +63,33 @@ main = do
       log "Leader server started"
 
     log "Delay before user include action request"
-    delay $ Milliseconds 2000.0
+    delay $ Milliseconds 1000.0
     action <- runContract
     log "Fire user include action request"
     res <- userNode `userHandlerSubmitAction` action
-    log $ show res
+    log $ "Include request result: " <> show res
     log "end"
 
+-- TODO: not real handler yet, just for server debugging
+userHandlerSubmitAction
+  :: forall a
+   . EncodeAeson a
+  => UserNode a
+  -> UserAction a
+  -> Aff (Either IncludeActionError UUID)
+userHandlerSubmitAction userNode action = do
+  res <- (Client.mkUserClient userNode).leader.includeAction
+    { body: IncludeRequest action }
+  pure $ case res of
+    Right resp -> convertResonse resp
+    Left r -> Left $ OtherError $ "Leader failed to respond: " <> show r
   where
-  -- TODO: not real handler, just for server debugging
-  userHandlerSubmitAction userNode action =
-    (Client.mkUserClient userNode).leader.includeAction
-      { body: IncludeRequest action }
+  convertResonse (Response r) =
+    if (r.body.status == "success") then
+      note (OtherError "Can't parse request ID") $ parseUUID r.body.data
+    -- FIXME: parse error from errData
+    else Left $ OtherError $ "FIXME: parse error from errData: " <>
+      r.body.errData
 
 runContract :: Aff (UserAction AdditionAction)
 runContract = runPlutipContract config distrib

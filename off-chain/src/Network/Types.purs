@@ -1,5 +1,6 @@
 module Seath.Network.Types where
 
+import Contract.Prelude (genericShow)
 import Contract.Transaction (FinalizedTransaction)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
@@ -10,6 +11,7 @@ import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
+import Prelude (class Show)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Type.Function (type ($))
@@ -26,16 +28,29 @@ type MiliSeconds = Int
 type Time = Int
 type MutableInt = Int
 
-newtype IncludeActionError = RejectedServerBussy LeaderServerStateInfo
+data IncludeActionError 
+  = RejectedServerBussy LeaderServerStateInfo
+  | OtherError String
+
+derive instance Generic IncludeActionError _
+
+instance showIAE :: Show IncludeActionError where
+  show = genericShow
 
 newtype AcceptSignedTransactionError = AcceptSignedTransactionError
   StatusResponse
+
+derive newtype instance Show AcceptSignedTransactionError
 
 data LeaderServerStage
   = WaitingForActions
   | BuildingChain
   | WaitingForChainSignatures
   | SubmittingChain
+
+derive instance Generic LeaderServerStage _
+instance showLSS :: Show  LeaderServerStage where
+  show = genericShow
 
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
@@ -47,6 +62,10 @@ newtype LeaderServerStateInfo = LeaderServerInfo
   , maxTimeOutForSignature :: MiliSeconds
   , serverStage :: LeaderServerStage
   }
+
+derive instance Generic LeaderServerStateInfo _
+instance showLSSI :: Show  LeaderServerStateInfo where
+  show = genericShow
 
 newtype GetActionStatus = GetActionStatus
   { controlNumber :: UUID
@@ -69,6 +88,10 @@ data StatusResponse
   | RequireNewSignature
   | SubmitError String
   | NotFound
+
+derive instance Generic StatusResponse _
+instance showSR :: Show  StatusResponse where
+  show = genericShow
 
 newtype SendSignedTransaction = SendSignedTransaction
   { controlNumber :: UUID

@@ -1,14 +1,17 @@
 module Seath.HTTP.Spec where
 
+import Contract.Prelude (Either)
+import Data.UUID (UUID)
 import Payload.Spec (POST, Routes, Spec(Spec))
-import Seath.HTTP.Types (IncludeRequest, IncludeResponse)
+import Seath.HTTP.Types (IncludeRequest, JSend, UID(..))
 import Type.Proxy (Proxy)
 
 type LeaderRoutes a = Routes "/leader"
   { includeAction ::
       POST "/include-action"
         { body :: IncludeRequest a
-        , response :: IncludeResponse
+        -- , response :: Either String UUID 
+        , response :: JSend String UID 
         }
   }
 

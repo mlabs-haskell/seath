@@ -1,17 +1,33 @@
 module Seath.HTTP.Types where
 
+import Contract.Prelude
+import Undefined
+
 import Aeson
   ( class DecodeAeson
   , class EncodeAeson
   , decodeJsonString
   , encodeAeson
+  , fromString
+  , isString
+  , stringifyAeson
+  , toString
   )
-import Contract.Prelude (class Show, show, ($))
+import Ctl.Internal.Test.UtxoDistribution (encodeDistribution)
 import Data.Bifunctor (bimap)
+import Data.String
+  ( Pattern(Pattern)
+  , Replacement(Replacement)
+  , replace
+  , replaceAll
+  )
 import Data.UUID (UUID)
+import Payload.Client.DecodeResponse (class DecodeResponse)
 import Payload.Client.EncodeBody (class EncodeBody)
 import Payload.ContentType (class HasContentType, json)
+import Payload.ResponseTypes (Json(..), Response(..), ResponseBody(..))
 import Payload.Server.DecodeBody (class DecodeBody)
+import Payload.Server.Response (class EncodeResponse, encodeResponse, ok)
 import Seath.Core.Types (UserAction)
 
 -- Include action
@@ -34,13 +50,35 @@ instance encIncludeReq ::
 instance includeContentType :: HasContentType (IncludeRequest a) where
   getContentType _ = json
 
-type IncludeResponse =
-  { requestId :: String }
+newtype UID = UID UUID
 
-fromUUID :: UUID -> IncludeResponse
-fromUUID uuid = { requestId: show uuid }
+instance showUID :: Show UID where
+  show (UID uuid) =
+    replace (Pattern "(UUID ") (Replacement "")
+      $ replace (Pattern ")") (Replacement "")
+      $ show uuid
 
--- newtype IncludeResponse = IncludeResponse UUID
+instance eaUID :: EncodeAeson UID where
+  encodeAeson = show >>> fromString
 
--- instance encIncludeResp :: EncodeResponse IncludeResponse where
---   encodeResponse (IncludeResponse uuid) = undefined
+-- Phantom types to make Spec and Handlers more readable
+-- Went with Record coz couldn't make `DecodeResponse` instance for custom `data` type
+type JSend :: forall err a. err -> a -> Type
+type JSend err a = { status :: String, data :: String, errData :: String }
+
+toJsend
+  :: forall err a
+   . EncodeAeson err
+  => EncodeAeson a
+  => Either err a
+  -> JSend err a
+toJsend r = case r of
+  Right a -> { status: "success", data: showAeson a, errData: "" }
+  Left err -> { status: "failure", data: "", errData: showAeson err }
+  where
+  showAeson :: forall v. EncodeAeson v => v -> String
+  showAeson v =
+    let
+      encoded = encodeAeson v
+    in -- FIXME: how to avoid extra quotes? 
+      fromMaybe (show encoded) (toString encoded)

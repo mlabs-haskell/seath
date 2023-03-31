@@ -35,6 +35,7 @@ You can edit this file as you like.
   , "quickcheck"
   , "refs"
   , "spec"
+  , "strings"
   , "transformers"
   , "tuples"
   , "typelevel-prelude"
