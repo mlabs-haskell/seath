@@ -4,12 +4,13 @@ import Prelude
 
 import Aeson (encodeAeson, toString)
 import Contract.Prelude (Either(..), log)
+import Data.Bifunctor (bimap)
 import Data.Either (Either)
 import Data.UUID (UUID, genUUID)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Seath.HTTP.Types (IncludeRequest, JSend(..), UID(..), toJsend)
-import Seath.Network.Types (LeaderNode)
+import Seath.Network.Types (IncludeActionError, LeaderNode)
 import Undefined (undefined)
 
 mkHandlers leaderNode = { leader: { includeAction: includeAction leaderNode } }
@@ -21,12 +22,18 @@ includeAction
   -> { body :: IncludeRequest a }
   -- -> Aff (Either String UUID)
   -> Aff (JSend String UID)
-includeAction leaderNode b = do
-  uuid <- liftEffect $ do
-    log $ "Leader: Server: includeAction body: " <> show b
-    genUUID -- TODO: use leader node
-  pure $ toJsend $ (Right (UID uuid) :: Either String UID)
-  -- pure $ toJsend $ (Left "ErrLOL" :: Either String UID)
+includeAction leaderNode req = do
+  result <- processRequest
+  -- TODO: correct (de)serialization for `IncludeActionError`
+  pure $ toJsend $ (bimap show UID result)
+  where
+  processRequest :: Aff (Either IncludeActionError UUID)
+  processRequest =
+    -- TODO: here leaderNode will process incoming action
+    -- like `Leader.includeAction leaderNode req.body`
+    Right <$> liftEffect genUUID
+
+-- pure $ toJsend $ (Left "ErrLOL" :: Either String UID)
 
 acceptSignedTransaction :: forall anything. anything
 acceptSignedTransaction = undefined
