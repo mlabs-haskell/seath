@@ -91,18 +91,26 @@ newtype LeaderState a = LeaderState
 
 derive instance Newtype (LeaderState a) _
 
-newtype LeaderConfiguration = LeaderConfiguration
+newtype LeaderConfiguration a = LeaderConfiguration
   { maxWaitingTimeForSignature :: MiliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
+  , serverHandlers ::
+      { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
+      , acceptSignedTransaction ::
+          SendSignedTransaction
+          -> Aff $ Either AcceptSignedTransactionError Unit
+      , rejectToSign :: UUID -> Aff Unit
+      , getActionStatus :: UUID -> Aff StatusResponse
+      }
   }
 
-derive instance Newtype LeaderConfiguration _
+derive instance Newtype (LeaderConfiguration a) _
 
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
-  , configuration :: LeaderConfiguration
+  , configuration :: LeaderConfiguration a
   }
 
 derive instance Newtype (LeaderNode a) _
@@ -140,7 +148,7 @@ newtype UserConfiguration a = UserConfiguration
           SendSignedTransaction
           -> Aff $ Either AcceptSignedTransactionError Unit
       , rejectToSign :: UUID -> Aff Unit
-      , getActionStatus :: UUID -> StatusResponse
+      , getActionStatus :: UUID -> Aff StatusResponse
       }
   }
 
