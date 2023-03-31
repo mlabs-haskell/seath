@@ -1,9 +1,8 @@
 module Seath.Test.HttpDebug where
 
 import Contract.Address (getWalletAddressesWithNetworkTag)
-import Contract.Config (LogLevel(Info), emptyHooks)
+import Contract.Config (LogLevel(Info), ServerConfig, emptyHooks)
 import Contract.Monad (Aff, Contract, launchAff_, liftedM)
-import Contract.Monad (launchAff_)
 import Contract.Prelude (bind, discard, liftEffect, log, pure, (<$>))
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
@@ -22,8 +21,10 @@ import Effect.Aff (delay, forkAff)
 import Prelude (($))
 import Seath.Core.Types (ChangeAddress(..), UserAction(..))
 import Seath.HTTP.Client as Client
+import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..))
+import Seath.Network.Types (LeaderNode, UserNode)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
@@ -31,19 +32,35 @@ import Undefined (undefined)
 
 main :: Effect Unit
 main = do
-  -- _ <- runConract
-  let serverConf = undefined
+  let
+    serverConf :: SeathServerConfig
+    serverConf = undefined
+
+    leaderNode :: LeaderNode AdditionAction
+    leaderNode = undefined
+
+    userNode :: UserNode AdditionAction
+    userNode = undefined
+
   launchAff_ do
     _ <- forkAff $ do
-      liftEffect $ Server.runServer serverConf
-      log "Server started"
+      log "Starting server"
+      liftEffect $ Server.runServer serverConf leaderNode
+      log "Leader server started"
 
-    log "dealy 1"
+    log "Delay before user include action request"
     delay $ Milliseconds 2000.0
     action <- runContract
-    res <- Client.client.leader.includeAction { body: IncludeRequest action }
+    log "Fire user include action request"
+    res <- userNode `userHandlerSubmitAction` action
     log $ show res
     log "end"
+
+  where
+  -- TODO: not real handler, just for server debugging
+  userHandlerSubmitAction userNode action =
+    (Client.mkUserClient userNode).leader.includeAction
+      { body: IncludeRequest action }
 
 runContract :: Aff (UserAction AdditionAction)
 runContract = runPlutipContract config distrib

@@ -14,11 +14,18 @@ type LeaderRoutes a = Routes "/leader"
 
 spec
   :: forall a
+   . Spec
+       { leader :: LeaderRoutes a
+       }
+spec = Spec
+
+proxySpec
+  :: forall a
    . Proxy a
   -> Spec
        { leader :: LeaderRoutes a
        }
-spec _ = Spec
+proxySpec _ = spec
 
 -- TODO:
 -- type LeaderServerSpec a = Spec

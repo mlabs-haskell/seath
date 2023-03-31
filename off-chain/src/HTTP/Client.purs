@@ -4,14 +4,16 @@ import Prelude
 import Type.Proxy
 
 import Effect (Effect)
-import Payload.Client (defaultOpts, mkClient)
+import Payload.Client as Client
+import Payload.Client.ClientApi (class ClientApi)
 import Payload.Server as Payload
 import Seath.HTTP.Handlers as Handlers
 import Seath.HTTP.Spec as Spec
+import Seath.Network.Types (UserNode)
 import Seath.Test.Examples.Addition.Types (AdditionAction)
 
-client =
+mkUserClient userNode =
   let
-    opts = defaultOpts { baseUrl = "http://localhost:3000" }
+    opts = Client.defaultOpts { baseUrl = "http://localhost:3000" } -- FIXME: hardcoded
   in
-    mkClient opts (Spec.spec (Proxy :: Proxy AdditionAction))
+    Client.mkClient opts (Spec.spec)

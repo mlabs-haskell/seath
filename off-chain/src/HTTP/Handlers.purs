@@ -8,22 +8,22 @@ import Data.UUID (genUUID)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Seath.HTTP.Types (IncludeRequest, IncludeResponse, fromUUID)
+import Seath.Network.Types (LeaderNode)
 import Undefined (undefined)
 
-handlers = { leader: { includeAction: includeAction } }
+mkHandlers leaderNode = { leader: { includeAction: includeAction leaderNode } }
 
 includeAction
   :: forall a
    . Show a
-  => { body :: IncludeRequest a }
+  => LeaderNode a
+  -> { body :: IncludeRequest a }
   -> Aff (Either String IncludeResponse)
-includeAction b = do
+includeAction leaderNode b = do
   uuid <- liftEffect $ do
-    log $ show b
-    genUUID
+    log $ "Leader: Server: includeAction body: " <> show b
+    genUUID -- TODO: use leader node
   pure $ Right (fromUUID uuid)
-
--- pure $ Left "Include action error"
 
 acceptSignedTransaction :: forall anything. anything
 acceptSignedTransaction = undefined

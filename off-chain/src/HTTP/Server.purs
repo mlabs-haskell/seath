@@ -1,17 +1,23 @@
 module Seath.HTTP.Server where
 
 import Prelude
-import Type.Proxy
 
+import Aeson (class DecodeAeson)
 import Effect (Effect)
 import Payload.Server as Payload
 import Seath.HTTP.Handlers as Handlers
 import Seath.HTTP.Spec as Spec
-import Seath.Test.Examples.Addition.Types (AdditionAction)
+import Seath.Network.Types (LeaderNode)
 
-type ServerConfig = {}
+type SeathServerConfig = {}
 
-runServer :: ServerConfig -> Effect Unit
-runServer _ = Payload.launch
-  (Spec.spec (Proxy :: Proxy AdditionAction))
-  Handlers.handlers
+runServer
+  :: forall a
+   . DecodeAeson a
+  => Show a
+  => SeathServerConfig
+  -> LeaderNode a
+  -> Effect Unit
+runServer _ leaderNode = Payload.launch
+  Spec.spec
+  (Handlers.mkHandlers leaderNode)
