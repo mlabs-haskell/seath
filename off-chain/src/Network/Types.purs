@@ -4,17 +4,19 @@ import Contract.Transaction (FinalizedTransaction)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)
+import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
+import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
+import Effect.Ref (Ref)
 import Seath.Core.Types (UserAction)
+import Seath.Network.OrderedMap (OrderedMap)
 import Type.Function (type ($))
 
 -- TODO: replace this types with real ones.
 -- The names are indicatives but can change.
 type AsyncMutableQueueRef a = a
-type Ip = String
-type Port = String
 type ControlNumber = Int
 type QueueIndex = Int
 type ChainNumber = Int
@@ -24,21 +26,10 @@ type MiliSeconds = Int
 type Time = Int
 type MutableInt = Int
 
--- This represent a Map that can remember the order of insertion.
--- it seems that we can use purescript-ordered-collections with a 
--- type like this.
--- I would like to use purescript-ordered-collections, but the 
--- Ord instance it has is over the keys, and then we would need 
--- to cast it to a plain map quite often.
-type OrderedMap keys values =
-  { map :: Map keys (values /\ Int), lastIndex :: Int }
-
 newtype IncludeActionError = RejectedServerBussy LeaderServerStateInfo
 
-data ProcessingActionError
-  = RejectedAtChainBuilder String
-  | RequireNewSignature
-  | SubmitError String
+newtype AcceptSignedTransactionError = AcceptSignedTransactionError
+  StatusResponse
 
 data LeaderServerStage
   = WaitingForActions
@@ -57,114 +48,64 @@ newtype LeaderServerStateInfo = LeaderServerInfo
   , serverStage :: LeaderServerStage
   }
 
-newtype UserPetitionID = UserPetitionID
-  {
-    -- This intend to be the number of petitions that the leader 
-    -- has processed until now, but I don't know if we really need it.
-    -- A consequence of having it, can be that a lot of request in 
-    -- the server would try to update it at the same time 
-    -- droping performance.
-    -- In the other side, this allow us to mantain the order of 
-    -- the petitions.
-    petitionNumber :: ControlNumber
-  -- | This is provided by the user request
-  , userControlNumber :: ControlNumber
-  , ip :: Ip
-  , port :: Port
+newtype GetActionStatus = GetActionStatus
+  { controlNumber :: UUID
   }
 
-newtype IncludeActionRequest a = IncludeActionRequest
-  {
-    -- | This number is atached on every message that the 
-    -- | server sends to the user related to this action.
-    controlNumber :: ControlNumber
-  , ip :: Ip
-  , port :: Port
-  , action :: UserAction a
-  }
+derive instance Newtype GetActionStatus _
 
--- The idea is that we would read the lenght of the pending request
--- queue and based on that we accept or reject the action
-newtype IncludeActionResponse = IncludeActionResponse
-  {
-    -- | The number attached in the user request
-    controlNumber :: ControlNumber
-  , status :: Either IncludeActionError LeaderServerStateInfo
-  }
+data StatusResponse
+  = AskForSignature
+      {
+        -- | The control number that the user attached in it's request to
+        -- | process the action.
+        controlNumber :: UUID
+      , transaction :: FinalizedTransaction
+      }
+  | ToBeProcessed Int
+  | ToBeSubmited Int
+  | Processing
+  | RejectedAtChainBuilder String
+  | RequireNewSignature
+  | SubmitError String
+  | NotFound
 
--- | Only the Request, the expected response is empty, details in the `Spec`.
--- | The expected response is always empty
-newtype AskForSignature = AskForSignature
-  {
-    -- | The control number that the user attached in it's request to
-    -- | process the action.
-    controlNumber :: ControlNumber
-  -- | Seath `leader` maintains a control of the number of built chains
-  -- | Every response corresponding to a request with a 
-  -- | chain number below a threshold are ignored by the leader.
-  , chainNumber :: ChainNumber
-  -- | Index of the transaction in the chain built.
-  , index :: ChainIndex
-  , timeOfExecution :: Time
-  -- | Transaction ready to be signed by the user.
-  , transaction :: FinalizedTransaction
-  }
-
--- | Only the Request, the expected response is empty, details in the `Spec`.
 newtype SendSignedTransaction = SendSignedTransaction
-  { chainNumber :: ChainNumber
-  , index :: ChainIndex
+  { controlNumber :: UUID
   , transaction :: SignedTransaction
   }
 
--- | Only the Request, the expected response is empty, details in the `Spec`.
-newtype SendSignatureRejection = SendSignatureRejection
-  { chainNumber :: ChainNumber
-  , index :: ChainIndex
-  }
-
-newtype ReportErrorAtProcessing = ReportErrorAtProcessing
-  { userControlNumber :: ControlNumber
-  , errorStatus :: ProcessingActionError
-  }
-
-newtype PendingAction a = PendingAction
-  { petitionID :: UserPetitionID
-  , action :: UserAction a
-  }
-
 -- I suspect that this `a` is a type like :
--- `UserPetitionID /\ UserAction a`
+-- `UUID /\ UserAction a`
 newtype LeaderState a = LeaderState
-  { pendingActionsRequest :: AsyncMutableQueueRef a
+  { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
   -- For actions that were part of a previous built chain 
   -- and were removed since a previous action failed.
-  , prioritaryPendingActions :: Array a
-  , signatureResponses :: AsyncMutableQueueRef a
-  , processedRequest :: MutableInt
-  , numberOfChainsBuilt :: ChainNumber
+  , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
+  , signatureResponses :: Ref $ OrderedMap UUID (UserAction a)
   , stage :: LeaderServerStage
   -- We really need to think if we really want this,
-  -- see `UserPetitionID` comment.
+  -- see `UUID` comment.
   , numberOfActionsRequestsMade :: MutableInt
   }
+
+derive instance Newtype (LeaderState a) _
 
 newtype LeaderConfiguration = LeaderConfiguration
   { maxWaitingTimeForSignature :: MiliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
-  -- Those are built on top of a network or IO interface
-  , clientHandlers ::
-      { transactionSignature :: AskForSignature -> Aff $ Either String Unit
-      , reportError :: ReportErrorAtProcessing -> Aff $ Either String Unit
-      }
   }
+
+derive instance Newtype LeaderConfiguration _
 
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration
   }
+
+derive instance Newtype (LeaderNode a) _
 
 newtype UserState a = UserState
   {
@@ -173,7 +114,8 @@ newtype UserState a = UserState
     -- | by the leader but aren't in processes right now.
     -- TODO : put the right types in the following three
     -- Maybe is : `MutableReference (OrderedMap (SomeUniqueID a) UserAction a)
-    actionsSent :: Array a
+    pendingResponse :: OrderedMap UUID a
+  , actionsSent :: OrderedMap UUID a
   -- | `transactionsSent` is intended for both the `action` and it's
   -- | corresponding `SignedTransaction` already send to the server.
   , transactionsSent :: Array a
@@ -193,11 +135,12 @@ newtype UserState a = UserState
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
   , clientHandlers ::
-      { includeAction ::
-          IncludeActionRequest a -> Aff $ Either String IncludeActionResponse
+      { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
       , acceptSignedTransaction ::
-          SendSignedTransaction -> Aff $ Either String Unit
-      , rejectToSign :: SendSignatureRejection -> Aff $ Either String Unit
+          SendSignedTransaction
+          -> Aff $ Either AcceptSignedTransactionError Unit
+      , rejectToSign :: UUID -> Aff Unit
+      , getActionStatus :: UUID -> StatusResponse
       }
   }
 

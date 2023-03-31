@@ -1,10 +1,9 @@
 module Seath.Network.Users
   ( getSeathCoreConfiguration
   , sendActionToLeader
-  , waitForTransaction
+  , getActionStatus
   , sendSignedTransactionToLeader
   , sendRejectionToLeader
-  , waitForConfirmationOfFinalChainPartìcipation
   , makeUserAction
   , makeUserActionAndSend
   , startUserServer
@@ -17,16 +16,16 @@ import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
+import Data.UUID (UUID)
 import Data.Unit (Unit)
+import Effect (Effect)
 import Effect.Aff (Aff)
-import Effect.Aff.Class (liftAff)
+import Effect.Class (liftEffect)
 import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.Types
-  ( AskForSignature
-  , IncludeActionResponse
-  , Ip
-  , ProcessingActionError
+  ( IncludeActionError
   , SignedTransaction
+  , StatusResponse
   , UserNode
   , UserState
   )
@@ -51,24 +50,19 @@ sendActionToLeader
   :: forall a
    . UserNode a
   -> UserAction a
-  -> Aff $ Either String IncludeActionResponse
+  -> Effect $ Either IncludeActionError UUID
 sendActionToLeader = undefined
 
-waitForTransaction
-  :: forall a
-   . UserNode a
-  -> IncludeActionResponse
-  -- the first Either is to catch the network errors
-  -> Aff $ Either String $ Either ProcessingActionError $ AskForSignature
-waitForTransaction = undefined
+getActionStatus :: forall a. UserNode a -> UUID -> Effect StatusResponse
+getActionStatus = undefined
 
 sendSignedTransactionToLeader
   :: forall a
    . UserNode a
-  -> AskForSignature
+  -> UUID
   -> SignedTransaction
   -- the first Either is to catch the network errors
-  -> Aff $ Either String $ Either ProcessingActionError Unit
+  -> Effect Unit
 sendSignedTransactionToLeader = undefined
 
 -- | We refuse to sign the given transaction and inform the server
@@ -76,38 +70,22 @@ sendSignedTransactionToLeader = undefined
 sendRejectionToLeader
   :: forall a
    . UserNode a
-  -> AskForSignature
-  -> Aff $ Either String Unit
-sendRejectionToLeader = undefined
-
-waitForConfirmationOfFinalChainPartìcipation
-  :: forall a
-   . UserNode a
-  -> AskForSignature
+  -> UUID
   -> Aff Unit
-waitForConfirmationOfFinalChainPartìcipation = undefined
+sendRejectionToLeader = undefined
 
 makeUserAction :: forall a. UserNode a -> a -> UtxoMap -> UserAction a
 makeUserAction nodeConfig action userUTxOs = undefined
 
--- TODO : Fixme
---   let
---     publicKey = (unwrap (unwrap nodeConfig).configuration).pubKeyHash
---     changeAddress = (unwrap (unwrap nodeConfig).configuration).changeAddress
---   in
---     wrap { action, publicKey, userUTxOs, changeAddress }
-
 makeUserActionAndSend
-  :: forall a. UserNode a -> a -> Contract $ Either String IncludeActionResponse
+  :: forall a. UserNode a -> a -> Contract $ Either IncludeActionError UUID
 makeUserActionAndSend nodeConfig actionRaw = do
   walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
   let
     action = makeUserAction nodeConfig actionRaw walletUTxOs
-  liftAff $ sendActionToLeader nodeConfig action
+  liftEffect $ sendActionToLeader nodeConfig action
 
 -- | Return a new mutable `userState`
 newUserState :: forall a. Aff $ UserState a
 newUserState = undefined
 
-getOwnIp :: Aff Ip
-getOwnIp = undefined

@@ -1,39 +1,21 @@
 module Seath.Network.Spec where
 
+import Data.Either (Either)
+import Data.UUID (UUID)
 import Payload.ResponseTypes (Empty)
-import Payload.Spec (POST, Spec)
+import Payload.Spec (GET, POST, Spec)
+import Seath.Core.Types (UserAction)
 import Seath.Network.Types
-  ( AskForSignature
-  , IncludeActionRequest
-  , IncludeActionResponse
-  , ReportErrorAtProcessing
-  , SendSignatureRejection
+  ( IncludeActionError
   , SendSignedTransaction
+  , StatusResponse
   )
-
-type UserServerSpec = Spec
-  { transactionSignature ::
-      POST "/user/transactionSignature"
-        { body :: AskForSignature
-        -- | Http always needs a response and we can't wait for user to sign a 
-        -- | transaction to respond, as consequence the corresponding response 
-        -- | is empty and the user need to send a new request
-        -- | with the signed transaction later.
-
-        , response :: Empty
-        }
-  , reportError ::
-      POST "/user/reportError"
-        { body :: ReportErrorAtProcessing
-        , response :: Empty
-        }
-  }
 
 type LeaderServerSpec a = Spec
   { includeAction ::
       POST "/leader/includeAction"
-        { body :: IncludeActionRequest a
-        , response :: IncludeActionResponse
+        { body :: UserAction a
+        , response :: Either IncludeActionError UUID
         }
   , acceptSignedTransaction ::
       POST "/leader/acceptSignedTransaction"
@@ -41,8 +23,13 @@ type LeaderServerSpec a = Spec
         , response :: Empty
         }
   , rejectToSign ::
-      POST "/leader/acceptSignedTransaction"
-        { body :: SendSignatureRejection
+      GET "/leader/refuseToSign/<controlNumber>"
+        { params :: { controlNumber :: UUID }
         , response :: Empty
+        }
+  , getActionStatus ::
+      GET "/leader/getActionStatus/<controlNumber>"
+        { params :: { controlNumber :: UUID }
+        , response :: StatusResponse
         }
   }

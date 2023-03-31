@@ -11,8 +11,7 @@ import Data.Functor ((<$>))
 import Data.Newtype (wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Seath.Network.Types
-  ( Ip
-  , LeaderConfiguration
+  ( LeaderConfiguration
   , LeaderNode(LeaderNode)
   , LeaderState
   , UserConfiguration
@@ -21,10 +20,8 @@ import Seath.Network.Types
   )
 import Seath.Test.Examples.Addition.Types (AdditionAction)
 import Seath.Test.Fixtures
-  ( fixedLeaderClientHandlers
-  , fixedPort
+  ( fixedPort
   , fixedTimeOut
-  , fixedUserClientHandlers
   )
 import Test.QuickCheck (arbitrary)
 import Test.QuickCheck.Gen (Gen, chooseInt)

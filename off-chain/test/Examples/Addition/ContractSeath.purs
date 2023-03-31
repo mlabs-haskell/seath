@@ -44,12 +44,12 @@ import Seath.Core.ChainBuilder (buildChain)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
 import Seath.Network.Leader
   ( getNextBatchOfActions
-  , sendChainToUsersForSignature
-  , splitSuccessFails
   , startLeaderServer
   , waitForChainSignatures
   )
-import Seath.Network.Types (OrderedMap, UserNode)
+import Seath.Network.OrderedMap (OrderedMap)
+import Seath.Network.OrderedMap as OrderedMap
+import Seath.Network.Types (UserNode)
 import Seath.Network.Users (makeUserAction, sendActionToLeader, startUserServer)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions
@@ -106,9 +106,11 @@ newMainTest config = do
   _ <- liftAff $ startLeaderServer (unwrap leader).node
   _ <- liftAff $ traverse (\x -> startUserServer (unwrap x).node) participants
 
-  sendedActions <- liftAff $ performFromParticipantsWithValue sendActionToLeader
+  sendedActions <- liftEffect $ performFromParticipantsWithValue
+    sendActionToLeader
     (zip participants actions)
-  recivedActions <- liftAff $ getNextBatchOfActions (unwrap leader).node mempty
+  recivedActions <- liftAff $ getNextBatchOfActions (unwrap leader).node
+    OrderedMap.empty
 
   -- TODO: chainBuilder must return the chain and the possible errors processing
   -- actions, so we can notify the user here (and right now a exception balancing
@@ -119,46 +121,47 @@ newMainTest config = do
       -- TODO : fixme
       (undefined recivedActions)
       Nothing
+  pure unit
 
-  signatureRequest <- liftAff $ sendChainToUsersForSignature
-    (unwrap leader).node
-    -- TODO :fixme
-    (undefined finalizedTxsAndActions)
-  let
-    { success: sended, failures: failToSend } = splitSuccessFails
-      signatureRequest
+-- signatureRequest <- liftAff $ sendChainToUsersForSignature
+--   (unwrap leader).node
+--   -- TODO :fixme
+--   (undefined finalizedTxsAndActions)
+-- let
+--   { success: sended, failures: failToSend } = splitSuccessFails
+--     signatureRequest
 
-  _ <- liftEffect $ unless (isEmpty failToSend) $ throw
-    ( "some transactions failed to be send for signature: " <> undefined
-        failToSend
-    )
+-- _ <- liftEffect $ unless (isEmpty failToSend) $ throw
+--   ( "some transactions failed to be send for signature: " <> undefined
+--       failToSend
+--   )
 
-  maybeSignedTxs <- liftAff $ waitForChainSignatures (unwrap leader).node sended
+-- maybeSignedTxs <- liftAff $ waitForChainSignatures (unwrap leader).node sended
 
-  let
-    { success: toSubmit, failures: toRebuild } = splitSuccessFails
-      maybeSignedTxs
+-- let
+--   { success: toSubmit, failures: toRebuild } = splitSuccessFails
+--     maybeSignedTxs
 
-  liftEffect $ unless (isEmpty toRebuild) $ throw
-    ("failed to be signed: " <> undefined toRebuild)
+-- liftEffect $ unless (isEmpty toRebuild) $ throw
+--   ("failed to be signed: " <> undefined toRebuild)
 
-  txIds <- SeathSetup.submitChain leader participants (undefined toSubmit)
-    logState
+-- txIds <- SeathSetup.submitChain leader participants (undefined toSubmit)
+--   logState
 
-  case last txIds of
-    Nothing -> throwContractError
-      "No IDs were received after chain submission. Something is wrong."
-    Just txId -> do
-      awaitTxConfirmed txId
-      endState <- getState
-      logBlockchainState endState
-      checkFinalState config startState endState
+-- case last txIds of
+--   Nothing -> throwContractError
+--     "No IDs were received after chain submission. Something is wrong."
+--   Just txId -> do
+--     awaitTxConfirmed txId
+--     endState <- getState
+--     logBlockchainState endState
+--     checkFinalState config startState endState
 
-  logInfo' "end"
+-- logInfo' "end"
 
-  where
-  isEmpty :: forall a b. OrderedMap a b -> Boolean
-  isEmpty = undefined
+-- where
+-- isEmpty :: forall a b. OrderedMap a b -> Boolean
+-- isEmpty = undefined
 
 performFromParticipantsWithValue
   :: forall a b (m :: Type -> Type) actionType

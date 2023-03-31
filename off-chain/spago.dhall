@@ -25,18 +25,21 @@ You can edit this file as you like.
   , "node-path"
   , "node-process"
   , "ordered-collections"
+  , "parallel"
   , "payload"
   , "posix-types"
   , "prelude"
   , "profunctor-lenses"
   , "queue"
   , "quickcheck"
+  , "refs"
   , "spec"
   , "transformers"
   , "tuples"
   , "typelevel-prelude"
   , "uint"
   , "undefined"
+  , "uuid"
   ]
 , packages = ./packages.dhall
 , sources = [ "src/**/*.purs", "exe/**/*.purs", "test/**/*.purs" ]
