@@ -1,0 +1,4 @@
+POST http://0.0.0.0:3000/leader/include-action HTTP/1.1
+content-type: application/json
+
+{"userUTxOs":[[{"transactionId":"dd010c7898521fe6c18c610a18ef101d123044478e665790d7424dc593563c8d","index":0},{"scriptRef":null,"output":{"referenceScript":null,"datum":{"tag":"NoOutputDatum","contents":{}},"amount":{"getValue":[[{"unCurrencySymbol":""},[[{"unTokenName":""},1000000000]]]]},"address":{"addressStakingCredential":null,"addressCredential":{"tag":"PubKeyCredential","contents":{"getPubKeyHash":"928ea41fdde65e1d0789c6baf6864728acd45f85da4f79b0763de25c"}}}}}]],"publicKey":{"getPubKeyHash":"928ea41fdde65e1d0789c6baf6864728acd45f85da4f79b0763de25c"},"changeAddress":"addr1vxfgafqlmhn9u8g838rt4a5xgu52e4zlshdy77dswc77yhql60q5v","action":100}

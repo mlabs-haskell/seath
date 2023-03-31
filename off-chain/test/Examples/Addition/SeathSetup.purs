@@ -33,7 +33,7 @@ import Data.Traversable (traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (Unit)
 import Prelude (discard, flip, ($))
-import Seath.Core.Types (UserAction(UserAction))
+import Seath.Core.Types (ChangeAddress(ChangeAddress), UserAction(UserAction))
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Test.Types
@@ -63,7 +63,7 @@ genAction (Participant p) =
       { action: AddAmount stateChangePerAction
       , publicKey: publicKeyHash
       , userUTxOs: ownUtxos
-      , changeAddress
+      , changeAddress: ChangeAddress changeAddress
       }
 
 signTransactions
