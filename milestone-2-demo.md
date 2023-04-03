@@ -2,11 +2,11 @@
 
 It is strongly recommended to use Nix to run this demo and following description will use Nix setup.
 
-Main entry point of the demo is [Seath.Test.Main module](./test/Main.purs).
+Main entry point of the demo is [Seath.Test.Main module](./off-chain/test/Main.purs).
 
 ## Running on local private network
 
-Local network capabilities are integrated into current setup. Local network provided by [Plutip](https://github.com/mlabs-haskell/plutip). Network is started from scratch on each run. Slot length is is to 1 second - see [config :: PlutipConfig](test/PlutipRunner.purs).
+Local network capabilities are integrated into current setup. Local network provided by [Plutip](https://github.com/mlabs-haskell/plutip). Network is started from scratch on each run. Slot length is is to 1 second - see [config :: PlutipConfig](./off-chain/test/PlutipRunner.purs).
 
 To run the demo with local network do the following.
 
@@ -31,7 +31,7 @@ Local network will be started automatically and as soon as all required wallets 
 
 For preprod testnet [cardano transaction library runtime](https://github.com/Plutonomicon/cardano-transaction-lib/blob/v5.0.0/doc/runtime.md) is required. It includes Cardano node, Ogmios and Kupo.
 
-Demo setup has Nix run command to launch everything. Only requirement is `Docker` installed and running.
+Demo setup has Nix run command to launch everything. Only requirement is `Docker` set up and running, and user with appropriate permission. See related Docker docs on [isntallation](https://docs.docker.com/engine/install/) and [setting up the user](https://docs.docker.com/engine/install/linux-postinstall/).
 
 To start required services from the root of the repo execute
 
