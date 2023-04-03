@@ -28,7 +28,7 @@ import Test.QuickCheck.Gen (Gen, chooseInt)
 import Type.Function (type ($))
 import Undefined (undefined)
 
-genLeaderConfiguration :: Gen LeaderConfiguration
+genLeaderConfiguration :: forall a. Gen a -> Gen $ LeaderConfiguration a
 genLeaderConfiguration = undefined
 
 -- do
