@@ -33,8 +33,6 @@ includeAction leaderNode req = do
     -- like `Leader.includeAction leaderNode req.body`
     Right <$> liftEffect genUUID
 
--- pure $ toJsend $ (Left "ErrLOL" :: Either String UID)
-
 acceptSignedTransaction :: forall anything. anything
 acceptSignedTransaction = undefined
 

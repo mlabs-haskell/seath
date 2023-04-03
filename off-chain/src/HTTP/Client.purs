@@ -12,7 +12,7 @@ import Seath.HTTP.Spec as Spec
 import Seath.Network.Types (UserNode)
 import Seath.Test.Examples.Addition.Types (AdditionAction)
 
-mkUserClient userNode =
+mkUserClient =
   let
     opts = Client.defaultOpts { baseUrl = "http://localhost:3000" } -- FIXME: hardcoded
   in
