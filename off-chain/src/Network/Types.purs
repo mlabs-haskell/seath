@@ -20,6 +20,7 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
 import Type.Function (type ($))
+import Aeson
 
 -- TODO: replace this types with real ones.
 -- The names are indicatives but can change.
@@ -37,9 +38,12 @@ data IncludeActionError
   = RejectedServerBussy LeaderServerStateInfo
   | OtherError String
 
+
+-- derive instance DecodeAeson AdditionAction
+
 derive instance Generic IncludeActionError _
 
-instance showIAE :: Show IncludeActionError where
+instance showIncludeActionError :: Show IncludeActionError where
   show = genericShow
 
 newtype AcceptSignedTransactionError = AcceptSignedTransactionError
@@ -57,6 +61,9 @@ derive instance Generic LeaderServerStage _
 instance showLSS :: Show LeaderServerStage where
   show = genericShow
 
+-- instance aesonLeaderServerStage :: EncodeAeson LeaderServerStage where
+
+
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
 derive instance Generic SignedTransaction _
@@ -68,8 +75,10 @@ newtype LeaderServerStateInfo = LeaderServerInfo
   , serverStage :: LeaderServerStage
   }
 
+derive newtype instance EncodeAeson LeaderServerStateInfo
+
 derive instance Generic LeaderServerStateInfo _
-instance showLSSI :: Show LeaderServerStateInfo where
+instance showLeaderServerStateInfo :: Show LeaderServerStateInfo where
   show = genericShow
 
 newtype GetActionStatus = GetActionStatus

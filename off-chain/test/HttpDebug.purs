@@ -4,7 +4,7 @@ module Seath.Test.HttpDebug
   , genAction
   , main
   , runWithPlutip
-  , userHandlerSubmitAction
+  , userHandlerSendAction
   ) where
 
 import Aeson (class EncodeAeson)
@@ -153,7 +153,7 @@ _testUserNode = UserNode
   , configuration: UserConfiguration
       { maxQueueSize: undefined
       , clientHandlers:
-          { submitToLeader: userHandlerSubmitAction -- TODO: arch: naming
+          { submitToLeader: userHandlerSendAction -- TODO: arch: naming
           , acceptSignedTransaction: undefined
           , rejectToSign: undefined
           , getActionStatus: undefined
@@ -162,13 +162,12 @@ _testUserNode = UserNode
       }
   }
 
--- TODO: not real handler yet, just for server debugging
-userHandlerSubmitAction
+userHandlerSendAction
   :: forall a
    . EncodeAeson a
   => UserAction a
   -> Aff (Either IncludeActionError UUID)
-userHandlerSubmitAction action = do
+userHandlerSendAction action = do
   res <- (Client.mkUserClient).leader.includeAction
     { body: IncludeRequest action }
   pure $ case res of

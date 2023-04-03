@@ -4,7 +4,7 @@ import Prelude
 
 import Aeson (encodeAeson, toString)
 import Contract.Prelude (Either(..), log, unwrap)
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (bimap, rmap)
 import Data.Either (Either)
 import Data.UUID (UUID, genUUID)
 import Effect.Aff (Aff)
@@ -22,12 +22,12 @@ includeAction
   => LeaderNode a
   -> { body :: IncludeRequest a }
   -- -> Aff (Either String UUID)
-  -> Aff (JSend String UID)
+  -> Aff (JSend IncludeActionError UID)
 includeAction leaderNode req = do
   log "Leader HTTP-server: requets to include action"
   result <- leaderNode `Leader.includetAction` (unwrap req.body)
   -- TODO: correct (de)serialization for `IncludeActionError`
-  pure $ toJsend $ (bimap show UID result)
+  pure $ toJsend $ (rmap UID result)
 
 acceptSignedTransaction :: forall anything. anything
 acceptSignedTransaction = undefined

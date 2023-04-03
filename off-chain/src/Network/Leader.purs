@@ -46,7 +46,8 @@ includetAction
 includetAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
   pendingCount <- numberOfPending node.state
-  if (pendingCount < maxPendingCapacity node.configuration) then
+  -- if (pendingCount < maxPendingCapacity node.configuration) then
+  if (pendingCount > maxPendingCapacity node.configuration) then
     (Right <$> addAction action node.state)
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
 

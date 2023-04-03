@@ -4,6 +4,7 @@ import Contract.Prelude (Either)
 import Data.UUID (UUID)
 import Payload.Spec (POST, Routes, Spec(Spec))
 import Seath.HTTP.Types (IncludeRequest, JSend, UID(..))
+import Seath.Network.Types (IncludeActionError)
 import Type.Proxy (Proxy)
 
 type LeaderRoutes a = Routes "/leader"
@@ -11,7 +12,7 @@ type LeaderRoutes a = Routes "/leader"
       POST "/include-action"
         { body :: IncludeRequest a
         -- , response :: Either String UUID 
-        , response :: JSend String UID
+        , response :: JSend IncludeActionError UID
         }
   }
 
