@@ -3,13 +3,14 @@ module Seath.HTTP.Handlers where
 import Prelude
 
 import Aeson (encodeAeson, toString)
-import Contract.Prelude (Either(..), log)
+import Contract.Prelude (Either(..), log, unwrap)
 import Data.Bifunctor (bimap)
 import Data.Either (Either)
 import Data.UUID (UUID, genUUID)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Seath.HTTP.Types (IncludeRequest, JSend(..), UID(..), toJsend)
+import Seath.Network.Leader as Leader
 import Seath.Network.Types (IncludeActionError, LeaderNode)
 import Undefined (undefined)
 
@@ -23,15 +24,10 @@ includeAction
   -- -> Aff (Either String UUID)
   -> Aff (JSend String UID)
 includeAction leaderNode req = do
-  result <- processRequest
+  log "Leader HTTP-server: requets to include action"
+  result <- leaderNode `Leader.includetAction` (unwrap req.body)
   -- TODO: correct (de)serialization for `IncludeActionError`
   pure $ toJsend $ (bimap show UID result)
-  where
-  processRequest :: Aff (Either IncludeActionError UUID)
-  processRequest =
-    -- TODO: here leaderNode will process incoming action
-    -- like `Leader.includeAction leaderNode req.body`
-    Right <$> liftEffect genUUID
 
 acceptSignedTransaction :: forall anything. anything
 acceptSignedTransaction = undefined

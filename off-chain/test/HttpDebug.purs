@@ -1,21 +1,17 @@
-module Seath.Test.HttpDebug where
+module Seath.Test.HttpDebug
+  ( _testUserNode
+  , config
+  , genAction
+  , main
+  , runWithPlutip
+  , userHandlerSubmitAction
+  ) where
 
 import Aeson (class EncodeAeson)
 import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), ServerConfig, emptyHooks)
 import Contract.Monad (Aff, Contract, launchAff_, liftedM)
-import Contract.Prelude
-  ( Either(..)
-  , bind
-  , discard
-  , liftEffect
-  , log
-  , note
-  , pure
-  , (<$>)
-  , (<>)
-  , (==)
-  )
+import Contract.Prelude (Either(..), bind, discard, liftAff, liftEffect, log, note, pure, (<$>), (<>), (==))
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Utxos (getWalletUtxos)
@@ -31,20 +27,15 @@ import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (delay, forkAff)
 import Payload.ResponseTypes (Response(..))
-import Prelude (show)
 import Prelude (($))
+import Prelude (show)
 import Seath.Core.Types (ChangeAddress(..), UserAction(..))
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..))
-import Seath.Network.Types
-  ( IncludeActionError(..)
-  , LeaderNode
-  , UserConfiguration(..)
-  , UserNode(..)
-  , UserState(..)
-  )
+import Seath.Network.Types (IncludeActionError(..), LeaderConfiguration(..), LeaderNode(..), LeaderState(..), UserConfiguration(..), UserNode(..), UserState(..))
+import Seath.Network.Users (sendActionToLeader)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
@@ -52,58 +43,77 @@ import Undefined (undefined)
 
 main :: Effect Unit
 main = do
-  let
-    serverConf :: SeathServerConfig
-    serverConf = undefined
+  runWithPlutip
 
-    leaderNode :: LeaderNode AdditionAction
-    leaderNode = undefined
+runWithPlutip :: Effect Unit
+runWithPlutip = launchAff_ $ runPlutipContract config distrib $
+  \(a /\ _b) -> do
+    testAction <- genAction a
+    let
+      serverConf :: SeathServerConfig
+      serverConf = undefined
 
-    userNode :: UserNode AdditionAction
-    userNode = undefined
+      leaderNode :: LeaderNode AdditionAction
+      leaderNode = _testLeaderNode
 
-  launchAff_ do
-    _ <- forkAff $ do
-      log "Starting server"
-      liftEffect $ Server.runServer serverConf leaderNode
-      log "Leader server started"
+      userNode :: UserNode AdditionAction
+      userNode = _testUserNode
 
-    log "Delay before user include action request"
-    delay $ Milliseconds 1000.0
-    action <- genActionPlutip
-    log "Fire user include action request"
-    -- res <- userNode `userHandlerSubmitAction` action
-    -- log $ "Include request result: " <> show res
-    log "end"
+    liftAff $ do
+      _ <- forkAff $ do
+        log "Starting server"
+        liftEffect $ Server.runServer serverConf leaderNode
+        log "Leader server started"
 
+      log "Delay before user include action request"
+      delay $ Milliseconds 1000.0
+      log "Fire user include action request"
+      res <- userNode `sendActionToLeader` testAction
+      log $ "Include request result: " <> show res
+      log "end"
 
-
-genActionPlutip :: Aff (UserAction AdditionAction)
-genActionPlutip = runPlutipContract config distrib
-  $
-    \(a /\ _b) -> genAction a
-  -- log $ stringifyAeson $ encodeAeson req
   where
   distrib =
     ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ])
 
-  genAction :: KeyWallet -> Contract (UserAction AdditionAction)
-  genAction w =
-    withKeyWallet w $ do
-      ownUtxos <- liftedM "no UTxOs found" getWalletUtxos
-      publicKeyHash <- withKeyWallet w getPublicKeyHash
-      changeAddress <- liftedM "can't get Change address" $ head <$>
-        getWalletAddressesWithNetworkTag
-      pure $ UserAction
-        { action: AddAmount stateChangePerAction
-        , publicKey: publicKeyHash
-        , userUTxOs: ownUtxos
-        , changeAddress: ChangeAddress changeAddress
-        }
+genAction :: KeyWallet -> Contract (UserAction AdditionAction)
+genAction w =
+  withKeyWallet w $ do
+    ownUtxos <- liftedM "no UTxOs found" getWalletUtxos
+    publicKeyHash <- withKeyWallet w getPublicKeyHash
+    changeAddress <- liftedM "can't get Change address" $ head <$>
+      getWalletAddressesWithNetworkTag
+    pure $ UserAction
+      { action: AddAmount stateChangePerAction
+      , publicKey: publicKeyHash
+      , userUTxOs: ownUtxos
+      , changeAddress: ChangeAddress changeAddress
+      }
+
+-- Assembling LeaderNode
+
+_testLeaderNode :: LeaderNode AdditionAction
+_testLeaderNode = LeaderNode
+  { state: LeaderState
+      { pendingActionsRequest: undefined
+      , prioritaryPendingActions: undefined
+      , signatureResponses: undefined
+      , stage: undefined
+      , numberOfActionsRequestsMade: undefined
+
+      }
+  , configuration: LeaderConfiguration
+      { maxWaitingTimeForSignature: undefined
+      , maxQueueSize: undefined
+      , numberOfActionToTriggerChainBuilder: undefined
+      , maxWaitingTimeBeforeBuildChain: undefined
+
+      }
+  }
 
 -- Assembling UserNode
-_user_node :: UserNode AdditionAction
-_user_node = UserNode
+_testUserNode :: UserNode AdditionAction
+_testUserNode = UserNode
   { state: UserState
       { pendingResponse: undefined
       , actionsSent: undefined
@@ -114,14 +124,13 @@ _user_node = UserNode
   , configuration: UserConfiguration
       { maxQueueSize: undefined
       , clientHandlers:
-          { includeAction: userHandlerSubmitAction -- TODO: arch: naming
+          { submitToLeader: userHandlerSubmitAction -- TODO: arch: naming
           , acceptSignedTransaction: undefined
           , rejectToSign: undefined
           , getActionStatus: undefined
           }
 
       }
-
   }
 
 -- TODO: not real handler yet, just for server debugging
@@ -143,7 +152,6 @@ userHandlerSubmitAction action = do
     -- FIXME: parse error from errData
     else Left $ OtherError $ "FIXME: parse error from errData: " <>
       r.body.errData
-
 
 -- Plutip config
 

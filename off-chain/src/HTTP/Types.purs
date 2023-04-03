@@ -31,8 +31,11 @@ import Payload.Server.Response (class EncodeResponse, encodeResponse, ok)
 import Seath.Core.Types (UserAction)
 
 -- Include action
+-- ! acrh: newtype wrapper made to avoid having DecodeBody/EncodeBody
+-- ! instances in `Network` layer, as it should be decoupled from HTTP layer
 newtype IncludeRequest a = IncludeRequest (UserAction a)
 
+derive instance Newtype (IncludeRequest a) _
 derive newtype instance Show a => Show (IncludeRequest a)
 
 instance decIncludeReq ::

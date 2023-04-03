@@ -1,5 +1,6 @@
 module Seath.Network.Types where
 
+import Contract.Monad (Contract)
 import Contract.Prelude (genericShow)
 import Contract.Transaction (FinalizedTransaction)
 import Data.Either (Either)
@@ -119,14 +120,19 @@ newtype LeaderConfiguration a = LeaderConfiguration
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
-  , serverHandlers ::
-      { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
-      , acceptSignedTransaction ::
-          SendSignedTransaction
-          -> Aff $ Either AcceptSignedTransactionError Unit
-      , rejectToSign :: UUID -> Aff Unit
-      , getActionStatus :: UUID -> Aff StatusResponse
-      }
+  
+  -- FIXME: not sure we should do it like this.
+  -- We will need user node to build webserver. So if we are passing web-server
+  -- handlers here, we'll get circular dependency.
+  -- I think we need only hadlers for 3d party services, that leader will need to call. 
+  -- , serverHandlers ::
+  --     { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
+  --     , acceptSignedTransaction ::
+  --         SendSignedTransaction
+  --         -> Aff $ Either AcceptSignedTransactionError Unit
+  --     , rejectToSign :: UUID -> Aff Unit
+  --     , getActionStatus :: UUID -> Aff StatusResponse
+  --     }
   }
 
 derive instance Newtype (LeaderConfiguration a) _
@@ -166,7 +172,7 @@ newtype UserState a = UserState
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
   , clientHandlers ::
-      { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
+      { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
       , acceptSignedTransaction ::
           SendSignedTransaction
           -> Aff $ Either AcceptSignedTransactionError Unit

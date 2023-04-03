@@ -5,23 +5,31 @@ module Seath.Network.Leader
   , stopLeaderServer
   , getNextBatchOfActions
   , newLeaderState
+  , includetAction
   ) where
+
+import Contract.Prelude
 
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
 import Data.Tuple.Nested (type (/\))
-import Data.UUID (UUID)
+import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
-import Seath.Network.Types
-  ( LeaderNode
-  , LeaderState
-  , SignedTransaction
-  )
+import Seath.Network.Types (IncludeActionError, LeaderNode, LeaderState, SignedTransaction)
 import Type.Function (type ($))
 import Undefined (undefined)
+
+includetAction
+  :: forall a
+   . LeaderNode a
+   -> UserAction a
+   -> Aff (Either IncludeActionError UUID)
+includetAction leaderNode action = do
+  log "Leader: accepting action"
+  Right <$> liftEffect genUUID
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.
@@ -55,7 +63,7 @@ getNextBatchOfActions
   -> OrderedMap UUID $ UserAction a
   -> Aff $ OrderedMap UUID $ UserAction a
 getNextBatchOfActions = undefined
-  (getAbatchOfPendingActions undefined undefined)
+  -- (getAbatchOfPendingActions undefined undefined)
 
 startLeaderServer :: forall a. LeaderNode a -> Aff Unit
 startLeaderServer = undefined

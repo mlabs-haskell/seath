@@ -106,7 +106,7 @@ newMainTest config = do
   _ <- liftAff $ startLeaderServer (unwrap leader).node
   _ <- liftAff $ traverse (\x -> startUserServer (unwrap x).node) participants
 
-  sendedActions <- liftEffect $ performFromParticipantsWithValue
+  sendedActions <- liftAff $ performFromParticipantsWithValue
     sendActionToLeader
     (zip participants actions)
   recivedActions <- liftAff $ getNextBatchOfActions (unwrap leader).node

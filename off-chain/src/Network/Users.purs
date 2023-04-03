@@ -12,6 +12,7 @@ module Seath.Network.Users
   ) where
 
 import Contract.Monad (Contract, liftedM)
+import Contract.Prelude (liftAff)
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
 import Data.Either (Either)
@@ -22,13 +23,7 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Seath.Core.Types (CoreConfiguration, UserAction)
-import Seath.Network.Types
-  ( IncludeActionError
-  , SignedTransaction
-  , StatusResponse
-  , UserNode
-  , UserState
-  )
+import Seath.Network.Types (IncludeActionError, SignedTransaction, StatusResponse, UserConfiguration(..), UserNode(..), UserState)
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -50,8 +45,12 @@ sendActionToLeader
   :: forall a
    . UserNode a
   -> UserAction a
-  -> Effect $ Either IncludeActionError UUID
-sendActionToLeader = undefined
+  -> Aff $ Either IncludeActionError UUID
+sendActionToLeader userNode action = do
+  let
+    (UserNode node) = userNode
+    (UserConfiguration conf) = node.configuration
+  conf.clientHandlers.submitToLeader action
 
 getActionStatus :: forall a. UserNode a -> UUID -> Effect StatusResponse
 getActionStatus = undefined
@@ -83,7 +82,7 @@ makeUserActionAndSend nodeConfig actionRaw = do
   walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
   let
     action = makeUserAction nodeConfig actionRaw walletUTxOs
-  liftEffect $ sendActionToLeader nodeConfig action
+  liftAff $ sendActionToLeader nodeConfig action
 
 -- | Return a new mutable `userState`
 newUserState :: forall a. Aff $ UserState a
