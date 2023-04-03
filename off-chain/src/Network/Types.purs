@@ -1,20 +1,24 @@
 module Seath.Network.Types where
 
+import Contract.Prelude
+
 import Contract.Monad (Contract)
-import Contract.Prelude (genericShow)
 import Contract.Transaction (FinalizedTransaction)
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Map (Map)
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
-import Data.UUID (UUID)
+import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
+import Effect.Ref as Ref
 import Prelude (class Show)
 import Seath.Core.Types (UserAction)
+import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
+import Seath.Network.OrderedMap as OMap
 import Type.Function (type ($))
 
 -- TODO: replace this types with real ones.
@@ -29,7 +33,7 @@ type MiliSeconds = Int
 type Time = Int
 type MutableInt = Int
 
-data IncludeActionError 
+data IncludeActionError
   = RejectedServerBussy LeaderServerStateInfo
   | OtherError String
 
@@ -50,7 +54,7 @@ data LeaderServerStage
   | SubmittingChain
 
 derive instance Generic LeaderServerStage _
-instance showLSS :: Show  LeaderServerStage where
+instance showLSS :: Show LeaderServerStage where
   show = genericShow
 
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
@@ -65,7 +69,7 @@ newtype LeaderServerStateInfo = LeaderServerInfo
   }
 
 derive instance Generic LeaderServerStateInfo _
-instance showLSSI :: Show  LeaderServerStateInfo where
+instance showLSSI :: Show LeaderServerStateInfo where
   show = genericShow
 
 newtype GetActionStatus = GetActionStatus
@@ -91,7 +95,7 @@ data StatusResponse
   | NotFound
 
 derive instance Generic StatusResponse _
-instance showSR :: Show  StatusResponse where
+instance showSR :: Show StatusResponse where
   show = genericShow
 
 newtype SendSignedTransaction = SendSignedTransaction
@@ -113,6 +117,18 @@ newtype LeaderState a = LeaderState
   , numberOfActionsRequestsMade :: MutableInt
   }
 
+addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
+addAction action st = liftEffect do
+  actionUUID <- genUUID
+  Ref.modify_
+    (OMap.push actionUUID action)
+    (unwrap st).pendingActionsRequest
+  pure actionUUID
+
+numberOfPending :: forall a. LeaderState a -> Aff Int
+numberOfPending st = OMap.length <$>
+  (liftEffect $ Ref.read (unwrap st).pendingActionsRequest)
+
 derive instance Newtype (LeaderState a) _
 
 newtype LeaderConfiguration a = LeaderConfiguration
@@ -120,7 +136,7 @@ newtype LeaderConfiguration a = LeaderConfiguration
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
-  
+
   -- FIXME: not sure we should do it like this.
   -- We will need user node to build webserver. So if we are passing web-server
   -- handlers here, we'll get circular dependency.
@@ -134,6 +150,12 @@ newtype LeaderConfiguration a = LeaderConfiguration
   --     , getActionStatus :: UUID -> Aff StatusResponse
   --     }
   }
+
+maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
+maxPendingCapacity conf = (unwrap conf).maxQueueSize
+
+signTimeout :: forall a. LeaderConfiguration a -> Int
+signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
 
 derive instance Newtype (LeaderConfiguration a) _
 

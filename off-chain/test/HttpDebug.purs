@@ -11,7 +11,22 @@ import Aeson (class EncodeAeson)
 import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), ServerConfig, emptyHooks)
 import Contract.Monad (Aff, Contract, launchAff_, liftedM)
-import Contract.Prelude (Either(..), bind, discard, liftAff, liftEffect, log, note, pure, (<$>), (<>), (==))
+import Contract.Prelude
+  ( class Monad
+  , Either(..)
+  , bind
+  , discard
+  , liftAff
+  , liftEffect
+  , log
+  , note
+  , pure
+  , (<$>)
+  , (<<<)
+  , (<>)
+  , (==)
+  , (>>=)
+  )
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Utxos (getWalletUtxos)
@@ -26,15 +41,27 @@ import Data.UUID (UUID, genUUID, parseUUID)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (delay, forkAff)
+import Effect.Ref as Ref
+import Effect.Unsafe (unsafePerformEffect)
 import Payload.ResponseTypes (Response(..))
-import Prelude (($))
 import Prelude (show)
+import Prelude (($))
 import Seath.Core.Types (ChangeAddress(..), UserAction(..))
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..))
-import Seath.Network.Types (IncludeActionError(..), LeaderConfiguration(..), LeaderNode(..), LeaderState(..), UserConfiguration(..), UserNode(..), UserState(..))
+import Seath.Network.Leader (showDebugState)
+import Seath.Network.OrderedMap as OMap
+import Seath.Network.Types
+  ( IncludeActionError(..)
+  , LeaderConfiguration(..)
+  , LeaderNode(..)
+  , LeaderState(..)
+  , UserConfiguration(..)
+  , UserNode(..)
+  , UserState(..)
+  )
 import Seath.Network.Users (sendActionToLeader)
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
@@ -53,11 +80,10 @@ runWithPlutip = launchAff_ $ runPlutipContract config distrib $
       serverConf :: SeathServerConfig
       serverConf = undefined
 
-      leaderNode :: LeaderNode AdditionAction
-      leaderNode = _testLeaderNode
-
       userNode :: UserNode AdditionAction
       userNode = _testUserNode
+
+    leaderNode <- liftEffect newTestLeaderNode
 
     liftAff $ do
       _ <- forkAff $ do
@@ -70,6 +96,7 @@ runWithPlutip = launchAff_ $ runPlutipContract config distrib $
       log "Fire user include action request"
       res <- userNode `sendActionToLeader` testAction
       log $ "Include request result: " <> show res
+      showDebugState leaderNode >>= log
       log "end"
 
   where
@@ -92,24 +119,26 @@ genAction w =
 
 -- Assembling LeaderNode
 
-_testLeaderNode :: LeaderNode AdditionAction
-_testLeaderNode = LeaderNode
-  { state: LeaderState
-      { pendingActionsRequest: undefined
-      , prioritaryPendingActions: undefined
-      , signatureResponses: undefined
-      , stage: undefined
-      , numberOfActionsRequestsMade: undefined
+newTestLeaderNode :: Effect (LeaderNode AdditionAction)
+newTestLeaderNode = do
+  pending <- Ref.new OMap.empty
+  pure $ LeaderNode
+    { state: LeaderState
+        { pendingActionsRequest: pending
+        , prioritaryPendingActions: undefined
+        , signatureResponses: undefined
+        , stage: undefined
+        , numberOfActionsRequestsMade: undefined
 
-      }
-  , configuration: LeaderConfiguration
-      { maxWaitingTimeForSignature: undefined
-      , maxQueueSize: undefined
-      , numberOfActionToTriggerChainBuilder: undefined
-      , maxWaitingTimeBeforeBuildChain: undefined
+        }
+    , configuration: LeaderConfiguration
+        { maxWaitingTimeForSignature: undefined
+        , maxQueueSize: 4
+        , numberOfActionToTriggerChainBuilder: undefined
+        , maxWaitingTimeBeforeBuildChain: undefined
 
-      }
-  }
+        }
+    }
 
 -- Assembling UserNode
 _testUserNode :: UserNode AdditionAction

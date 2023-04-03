@@ -11,7 +11,7 @@ type LeaderRoutes a = Routes "/leader"
       POST "/include-action"
         { body :: IncludeRequest a
         -- , response :: Either String UUID 
-        , response :: JSend String UID 
+        , response :: JSend String UID
         }
   }
 

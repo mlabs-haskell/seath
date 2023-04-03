@@ -37,24 +37,3 @@ type ResponseQueue = IOQueues One.Queue (Ref.Ref Int) Int
 
 newLeaderStateInfo :: forall a. LeaderNode a -> Effect LeaderServerStateInfo
 newLeaderStateInfo = undefined
-
-makeRequestAccumulator
-  :: forall a
-   . LeaderNode a
-  -> UserAction a
-  -> Effect (Either IncludeActionError UUID)
-makeRequestAccumulator state request = do
-  let
-    (nodeState :: LeaderState a) = (unwrap state).state
-    nodeConfiguration = unwrap (unwrap state).configuration
-    (mapRef :: Ref (OrderedMap UUID (UserAction a))) =
-      (unwrap nodeState).pendingActionsRequest
-  (ordMap :: OrderedMap UUID (UserAction a)) <- Ref.read mapRef
-  if length ordMap < nodeConfiguration.maxQueueSize then
-    do
-      newUUID <- genUUID
-      let newMap = push ordMap newUUID request
-      Ref.write newMap mapRef
-      (pure <<< pure) $ newUUID
-  else
-    Left <<< RejectedServerBussy <$> newLeaderStateInfo state

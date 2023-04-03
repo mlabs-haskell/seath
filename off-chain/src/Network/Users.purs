@@ -23,7 +23,14 @@ import Effect (Effect)
 import Effect.Aff (Aff)
 import Effect.Class (liftEffect)
 import Seath.Core.Types (CoreConfiguration, UserAction)
-import Seath.Network.Types (IncludeActionError, SignedTransaction, StatusResponse, UserConfiguration(..), UserNode(..), UserState)
+import Seath.Network.Types
+  ( IncludeActionError
+  , SignedTransaction
+  , StatusResponse
+  , UserConfiguration(..)
+  , UserNode(..)
+  , UserState
+  )
 import Type.Function (type ($))
 import Undefined (undefined)
 

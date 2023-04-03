@@ -6,9 +6,12 @@ module Seath.Network.OrderedMap
   , empty
   ) where
 
-import Contract.Prelude as Array
+import Contract.Prelude
+
+import Data.Array as Array
 import Data.Either (Either)
 import Data.Map (Map)
+import Data.Map as Map
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
 import Type.Function (type ($))
@@ -28,13 +31,21 @@ derive instance Newtype (OrderedMap keys values) _
 length :: forall keys values. OrderedMap keys values -> Int
 length (OrderedMap ordMap) = Array.length ordMap.array
 
+-- TODO: tests when API will stabilaze
 push
   :: forall keys values
-   . OrderedMap keys values
-  -> keys
+   . Ord keys
+  => keys
   -> values
   -> OrderedMap keys values
-push (OrderedMap ordMap) key value = undefined
+  -> OrderedMap keys values
+push key value (OrderedMap ordMap) =
+  let
+    currIndex = Array.length ordMap.array
+    map = Map.insert key (currIndex /\ value) ordMap.map
+    array = Array.cons (key /\ value) ordMap.array
+  in
+    OrderedMap { map, array }
 
 splitEither
   :: forall a b c
@@ -43,4 +54,4 @@ splitEither
 splitEither = undefined
 
 empty :: forall a b. OrderedMap a b
-empty = undefined
+empty = OrderedMap { map: Map.empty, array: [] }
