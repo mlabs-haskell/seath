@@ -13,16 +13,12 @@ import Contract.Prelude
 
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
-import Data.Map as Map
 import Data.Tuple.Nested (type (/\))
-import Data.UUID (UUID, genUUID)
+import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
-import Effect.Exception (error)
-import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
-import Seath.Network.OrderedMap (OrderedMap(..))
-import Seath.Network.OrderedMap as OMap
+import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.Types
   ( IncludeActionError(..)
   , LeaderNode(..)
@@ -46,10 +42,11 @@ includetAction
 includetAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
   pendingCount <- numberOfPending node.state
-  -- if (pendingCount < maxPendingCapacity node.configuration) then
-  if (pendingCount > maxPendingCapacity node.configuration) then
+  if (pendingCount < maxPendingCapacity node.configuration) then
+  -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     (Right <$> addAction action node.state)
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
+
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.

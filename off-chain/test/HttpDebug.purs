@@ -7,26 +7,12 @@ module Seath.Test.HttpDebug
   , userHandlerSendAction
   ) where
 
-import Aeson (class EncodeAeson)
-import Contract.Address (getWalletAddressesWithNetworkTag)
-import Contract.Config (LogLevel(Info), ServerConfig, emptyHooks)
-import Contract.Monad (Aff, Contract, launchAff_, liftedM)
 import Contract.Prelude
-  ( class Monad
-  , Either(..)
-  , bind
-  , discard
-  , liftAff
-  , liftEffect
-  , log
-  , note
-  , pure
-  , (<$>)
-  , (<<<)
-  , (<>)
-  , (==)
-  , (>>=)
-  )
+
+import Aeson (class EncodeAeson, decodeJsonString)
+import Contract.Address (getWalletAddressesWithNetworkTag)
+import Contract.Config (emptyHooks)
+import Contract.Monad (Contract, launchAff_, liftedM)
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Utxos (getWalletUtxos)
@@ -37,15 +23,13 @@ import Data.Maybe (Maybe(Nothing))
 import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
 import Data.Tuple.Nested ((/\))
 import Data.UInt (fromInt) as UInt
-import Data.UUID (UUID, genUUID, parseUUID)
+import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (delay, forkAff)
 import Effect.Ref as Ref
-import Effect.Unsafe (unsafePerformEffect)
 import Payload.ResponseTypes (Response(..))
 import Prelude (show)
-import Prelude (($))
 import Seath.Core.Types (ChangeAddress(..), UserAction(..))
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
@@ -132,10 +116,10 @@ newTestLeaderNode = do
 
         }
     , configuration: LeaderConfiguration
-        { maxWaitingTimeForSignature: undefined
+        { maxWaitingTimeForSignature: 0
         , maxQueueSize: 4
-        , numberOfActionToTriggerChainBuilder: undefined
-        , maxWaitingTimeBeforeBuildChain: undefined
+        , numberOfActionToTriggerChainBuilder: 0
+        , maxWaitingTimeBeforeBuildChain: 0
 
         }
     }
@@ -171,15 +155,15 @@ userHandlerSendAction action = do
   res <- (Client.mkUserClient).leader.includeAction
     { body: IncludeRequest action }
   pure $ case res of
-    Right resp -> convertResonse resp
+    Right resp -> do
+      convertResonse resp
     Left r -> Left $ OtherError $ "Leader failed to respond: " <> show r
   where
   convertResonse (Response r) =
     if (r.body.status == "success") then
       note (OtherError "Can't parse request ID") $ parseUUID r.body.data
-    -- FIXME: parse error from errData
-    else Left $ OtherError $ "FIXME: parse error from errData: " <>
-      r.body.errData
+    else either (show >>> OtherError >>> Left) Left
+      (decodeJsonString r.body.errData)
 
 -- Plutip config
 

@@ -10,6 +10,7 @@ You can edit this file as you like.
   , "bifunctors"
   , "bigints"
   , "cardano-transaction-lib"
+  , "checked-exceptions"
   , "console"
   , "control"
   , "datetime"

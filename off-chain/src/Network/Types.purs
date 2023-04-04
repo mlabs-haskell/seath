@@ -2,29 +2,36 @@ module Seath.Network.Types where
 
 import Contract.Prelude
 
-import Contract.Monad (Contract)
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , JsonDecodeError(TypeMismatch)
+  , decodeAeson
+  , fromString
+  , getField
+  , toString
+  )
 import Contract.Transaction (FinalizedTransaction)
+import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
-import Data.Map (Map)
 import Data.Newtype (class Newtype)
-import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Prelude (class Show)
-import Seath.Core.Types (UserAction)
+-- import Prelude (class Show)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
 import Type.Function (type ($))
-import Aeson
 
 -- TODO: replace this types with real ones.
 -- The names are indicatives but can change.
+type AsyncMutableQueueRef :: forall k. k -> k
 type AsyncMutableQueueRef a = a
+
 type ControlNumber = Int
 type QueueIndex = Int
 type ChainNumber = Int
@@ -38,8 +45,21 @@ data IncludeActionError
   = RejectedServerBussy LeaderServerStateInfo
   | OtherError String
 
+instance encodeAesonIncludeActionError :: EncodeAeson IncludeActionError where
+  encodeAeson = case _ of
+    RejectedServerBussy inf -> encodeTagged' "RejectedServerBussy" inf
+    OtherError err -> encodeTagged' "OtherError" err
 
--- derive instance DecodeAeson AdditionAction
+instance decodeAesonIncludeActionError :: DecodeAeson IncludeActionError where
+  decodeAeson s = do
+    obj <- decodeAeson s
+    tag <- getField obj "tag"
+    contents <- getField obj "contents"
+    case tag of
+      "RejectedServerBussy" -> RejectedServerBussy <$> decodeAeson contents
+      "OtherError" -> OtherError <$> decodeAeson contents
+      other -> Left
+        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
 
 derive instance Generic IncludeActionError _
 
@@ -61,8 +81,20 @@ derive instance Generic LeaderServerStage _
 instance showLSS :: Show LeaderServerStage where
   show = genericShow
 
--- instance aesonLeaderServerStage :: EncodeAeson LeaderServerStage where
+instance encodeAesonLeaderServerStage :: EncodeAeson LeaderServerStage where
+  encodeAeson = show >>> fromString
 
+instance decodeAesonLeaderServerStage :: DecodeAeson LeaderServerStage where
+  decodeAeson s =
+    do
+      str <- note (TypeMismatch "Expected string") (toString s)
+      case str of
+        "WaitingForActions" -> Right WaitingForActions
+        "BuildingChain" -> Right BuildingChain
+        "WaitingForChainSignatures" -> Right WaitingForChainSignatures
+        "SubmittingChain" -> Right SubmittingChain
+        other -> Left
+          (TypeMismatch $ "Expected " <> other <> " for LeaderServerStage")
 
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
@@ -76,6 +108,7 @@ newtype LeaderServerStateInfo = LeaderServerInfo
   }
 
 derive newtype instance EncodeAeson LeaderServerStateInfo
+derive newtype instance DecodeAeson LeaderServerStateInfo
 
 derive instance Generic LeaderServerStateInfo _
 instance showLeaderServerStateInfo :: Show LeaderServerStateInfo where
@@ -140,6 +173,7 @@ numberOfPending st = OMap.length <$>
 
 derive instance Newtype (LeaderState a) _
 
+newtype LeaderConfiguration :: forall k. k -> Type
 newtype LeaderConfiguration a = LeaderConfiguration
   { maxWaitingTimeForSignature :: MiliSeconds
   , maxQueueSize :: Int
