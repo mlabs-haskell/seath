@@ -1,10 +1,12 @@
 module Seath.Network.OrderedMap
-  ( OrderedMap(OrderedMap)
+  ( OrderedMap(..)
+  , empty
   , length
+  , orderedElems
   , push
   , splitEither
-  , empty
-  ) where
+  )
+  where
 
 import Contract.Prelude
 
@@ -55,3 +57,6 @@ splitEither = undefined
 
 empty :: forall a b. OrderedMap a b
 empty = OrderedMap { map: Map.empty, array: [] }
+
+orderedElems :: forall k v. OrderedMap k v -> Array (k /\ v)
+orderedElems (OrderedMap oMap) = Array.reverse oMap.array

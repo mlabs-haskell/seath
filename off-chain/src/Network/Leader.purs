@@ -3,7 +3,9 @@ module Seath.Network.Leader
   , includetAction
   , newLeaderState
   , showDebugState
+  , startLeaderNode
   , startLeaderServer
+  , stopLeaderNode
   , stopLeaderServer
   , submitChain
   , waitForChainSignatures
@@ -17,14 +19,17 @@ import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
+import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
+import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
   ( IncludeActionError(..)
+  , LeaderConfiguration
   , LeaderNode(..)
   , LeaderServerStage(..)
   , LeaderServerStateInfo(..)
-  , LeaderState
+  , LeaderState(..)
   , SignedTransaction
   , addAction
   , maxPendingCapacity
@@ -43,10 +48,9 @@ includetAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
   pendingCount <- numberOfPending node.state
   if (pendingCount < maxPendingCapacity node.configuration) then
-  -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
+    -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     (Right <$> addAction action node.state)
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
-
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.
@@ -82,6 +86,24 @@ getNextBatchOfActions
 getNextBatchOfActions = undefined
 
 -- (getAbatchOfPendingActions undefined undefined)
+
+startLeaderNode :: forall a. LeaderConfiguration a -> Aff (LeaderNode a)
+startLeaderNode conf = do
+  pending <- liftEffect $ Ref.new OMap.empty
+  pure $ LeaderNode
+    { state: LeaderState
+        { pendingActionsRequest: pending
+        , prioritaryPendingActions: undefined
+        , signatureResponses: undefined
+        , stage: undefined
+        , numberOfActionsRequestsMade: undefined
+
+        }
+    , configuration: conf
+    }
+
+stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
+stopLeaderNode = undefined
 
 startLeaderServer :: forall a. LeaderNode a -> Aff Unit
 startLeaderServer = undefined

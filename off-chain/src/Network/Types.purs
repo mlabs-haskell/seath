@@ -2,15 +2,7 @@ module Seath.Network.Types where
 
 import Contract.Prelude
 
-import Aeson
-  ( class DecodeAeson
-  , class EncodeAeson
-  , JsonDecodeError(TypeMismatch)
-  , decodeAeson
-  , fromString
-  , getField
-  , toString
-  )
+import Aeson (class DecodeAeson, class EncodeAeson, JsonDecodeError(TypeMismatch), decodeAeson, fromString, getField, toString)
 import Contract.Transaction (FinalizedTransaction)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
@@ -21,7 +13,6 @@ import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
--- import Prelude (class Show)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
@@ -162,8 +153,7 @@ newtype LeaderState a = LeaderState
 addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
 addAction action st = liftEffect do
   actionUUID <- genUUID
-  Ref.modify_
-    (OMap.push actionUUID action)
+  pushRefMap_ actionUUID action
     (unwrap st).pendingActionsRequest
   pure actionUUID
 
@@ -217,7 +207,7 @@ newtype UserState a = UserState
     -- TODO : put the right types in the following three
     -- Maybe is : `MutableReference (OrderedMap (SomeUniqueID a) UserAction a)
     pendingResponse :: OrderedMap UUID a
-  , actionsSent :: OrderedMap UUID a
+  , actionsSent :: Ref (OrderedMap UUID a)
   -- | `transactionsSent` is intended for both the `action` and it's
   -- | corresponding `SignedTransaction` already send to the server.
   , transactionsSent :: Array a
@@ -234,6 +224,8 @@ newtype UserState a = UserState
   , numberOfActionsRequestsMade :: MutableInt
   }
 
+derive instance Newtype (UserState a) _
+
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
   , clientHandlers ::
@@ -245,8 +237,29 @@ newtype UserConfiguration a = UserConfiguration
       , getActionStatus :: UUID -> Aff StatusResponse
       }
   }
+derive instance Newtype (UserConfiguration a) _
 
 newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
   }
+
+derive instance Newtype (UserNode a) _
+
+addToSentActions :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
+addToSentActions (UserNode node) (uuid /\ action) = do
+  liftEffect $ pushRefMap_ uuid action (unwrap node.state).actionsSent
+
+readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
+readSentActions (UserNode node) = liftEffect $
+  OMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
+
+-- userHandlers :: forall a. UserNode a
+userHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
+
+pushRefMap_
+  :: forall k v. Ord k => k -> v -> Ref (OrderedMap k v) -> Effect Unit
+pushRefMap_ k v mutMap =
+  Ref.modify_
+    (OMap.push k v)
+    mutMap

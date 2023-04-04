@@ -1,6 +1,5 @@
 module Seath.Test.HttpDebug
-  ( _testUserNode
-  , config
+  ( config
   , genAction
   , main
   , runWithPlutip
@@ -35,18 +34,10 @@ import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..))
-import Seath.Network.Leader (showDebugState)
+import Seath.Network.Leader as Leader
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types
-  ( IncludeActionError(..)
-  , LeaderConfiguration(..)
-  , LeaderNode(..)
-  , LeaderState(..)
-  , UserConfiguration(..)
-  , UserNode(..)
-  , UserState(..)
-  )
-import Seath.Network.Users (sendActionToLeader)
+import Seath.Network.Types (IncludeActionError(..), LeaderConfiguration(..), LeaderNode(..), LeaderState(..), StatusResponse(..), UserConfiguration(..), UserNode(..), UserState(..))
+import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
@@ -64,10 +55,11 @@ runWithPlutip = launchAff_ $ runPlutipContract config distrib $
       serverConf :: SeathServerConfig
       serverConf = undefined
 
-      userNode :: UserNode AdditionAction
-      userNode = _testUserNode
+    (userNode :: UserNode AdditionAction) <-
+      liftAff $ Users.startUserNode _testUserConf
 
-    leaderNode <- liftEffect newTestLeaderNode
+    (leaderNode :: LeaderNode AdditionAction) <- liftAff $
+      Leader.startLeaderNode _testLeaderConf
 
     liftAff $ do
       _ <- forkAff $ do
@@ -77,10 +69,16 @@ runWithPlutip = launchAff_ $ runPlutipContract config distrib $
 
       log "Delay before user include action request"
       delay $ Milliseconds 1000.0
-      log "Fire user include action request"
-      res <- userNode `sendActionToLeader` testAction
-      log $ "Include request result: " <> show res
-      showDebugState leaderNode >>= log
+      log "Fire user include action request 1"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 1)
+        (const testAction)
+      delay $ Milliseconds 10000.0
+      log "Fire user include action request 2"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 2)
+        (const testAction)
+      Leader.showDebugState leaderNode >>= log
       log "end"
 
   where
@@ -103,47 +101,26 @@ genAction w =
 
 -- Assembling LeaderNode
 
-newTestLeaderNode :: Effect (LeaderNode AdditionAction)
-newTestLeaderNode = do
-  pending <- Ref.new OMap.empty
-  pure $ LeaderNode
-    { state: LeaderState
-        { pendingActionsRequest: pending
-        , prioritaryPendingActions: undefined
-        , signatureResponses: undefined
-        , stage: undefined
-        , numberOfActionsRequestsMade: undefined
-
-        }
-    , configuration: LeaderConfiguration
-        { maxWaitingTimeForSignature: 0
-        , maxQueueSize: 4
-        , numberOfActionToTriggerChainBuilder: 0
-        , maxWaitingTimeBeforeBuildChain: 0
-
-        }
+_testLeaderConf :: LeaderConfiguration AdditionAction
+_testLeaderConf =
+  LeaderConfiguration
+    { maxWaitingTimeForSignature: 0
+    , maxQueueSize: 4
+    , numberOfActionToTriggerChainBuilder: 0
+    , maxWaitingTimeBeforeBuildChain: 0
     }
 
 -- Assembling UserNode
-_testUserNode :: UserNode AdditionAction
-_testUserNode = UserNode
-  { state: UserState
-      { pendingResponse: undefined
-      , actionsSent: undefined
-      , transactionsSent: undefined
-      , submitedTransactions: undefined
-      , numberOfActionsRequestsMade: undefined
+_testUserConf :: UserConfiguration AdditionAction
+_testUserConf = UserConfiguration
+  { maxQueueSize: undefined
+  , clientHandlers:
+      { submitToLeader: userHandlerSendAction -- TODO: arch: naming
+      , acceptSignedTransaction: undefined
+      , rejectToSign: undefined
+      , getActionStatus: (\_uid -> pure $ ToBeProcessed 1) -- FIXME: mocked
       }
-  , configuration: UserConfiguration
-      { maxQueueSize: undefined
-      , clientHandlers:
-          { submitToLeader: userHandlerSendAction -- TODO: arch: naming
-          , acceptSignedTransaction: undefined
-          , rejectToSign: undefined
-          , getActionStatus: undefined
-          }
 
-      }
   }
 
 userHandlerSendAction

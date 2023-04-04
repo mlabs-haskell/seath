@@ -1,36 +1,35 @@
 module Seath.Network.Users
-  ( getSeathCoreConfiguration
-  , sendActionToLeader
-  , getActionStatus
-  , sendSignedTransactionToLeader
-  , sendRejectionToLeader
+  ( getActionStatus
+  , getSeathCoreConfiguration
   , makeUserAction
   , makeUserActionAndSend
+  , newUserState
+  , performAction
+  , sendActionToLeader
+  , sendRejectionToLeader
+  , sendSignedTransactionToLeader
+  , startUserNode
   , startUserServer
   , stopUserServer
-  , newUserState
   ) where
 
+import Contract.Prelude
+
 import Contract.Monad (Contract, liftedM)
-import Contract.Prelude (liftAff)
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
+import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, delay, forkAff)
 import Effect.Class (liftEffect)
+import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
-import Seath.Network.Types
-  ( IncludeActionError
-  , SignedTransaction
-  , StatusResponse
-  , UserConfiguration(..)
-  , UserNode(..)
-  , UserState
-  )
+import Seath.Network.OrderedMap as OMap
+import Seath.Network.Types (IncludeActionError, SignedTransaction, StatusResponse, UserConfiguration(..), UserNode(..), UserState(..), addToSentActions, readSentActions, userHandlers)
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -95,3 +94,47 @@ makeUserActionAndSend nodeConfig actionRaw = do
 newUserState :: forall a. Aff $ UserState a
 newUserState = undefined
 
+performAction :: forall a. UserNode a -> a -> (a -> UserAction a) -> Aff Unit
+performAction userNode action debugMakeUserAction = do
+  let userAction = debugMakeUserAction action
+  result <- userNode `sendActionToLeader` userAction
+  case result of
+    Left err -> log $ "TODO: React to error " <> show err
+    Right uid -> do
+      userNode `addToSentActions` (uid /\ action)
+
+startUserNode :: forall a. Show a => UserConfiguration a -> Aff (UserNode a)
+startUserNode conf = do
+  actionsSent <- liftEffect $ Ref.new OMap.empty
+
+  let
+    node = UserNode
+      { state: UserState
+          { pendingResponse: undefined
+          , actionsSent: actionsSent
+          , transactionsSent: undefined
+          , submitedTransactions: undefined
+          , numberOfActionsRequestsMade: undefined
+          }
+      , configuration: conf
+
+      }
+  startActionStatusCheck node
+  pure node
+
+startActionStatusCheck :: forall a. Show a => UserNode a -> Aff Unit
+startActionStatusCheck userNode = do
+  log $ "Start checking actions"
+  -- TODO: probably, need to collect this fibers to kill them properly on node stop
+  _fiber <- forkAff check
+  pure unit
+  where
+  check = do
+    sent <- readSentActions userNode
+    for_ sent $ \(uid /\ action) -> do
+      -- TODO: process response
+      res <- (userHandlers userNode).getActionStatus uid
+      log $ "User: status of action " <> show uid <> ": " <> show res
+      delay $ Milliseconds 1000.0
+    delay $ Milliseconds 5000.0
+    check
