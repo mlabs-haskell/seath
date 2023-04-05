@@ -36,7 +36,16 @@ import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..))
 import Seath.Network.Leader as Leader
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types (IncludeActionError(..), LeaderConfiguration(..), LeaderNode(..), LeaderState(..), StatusResponse(..), UserConfiguration(..), UserNode(..), UserState(..))
+import Seath.Network.Types
+  ( IncludeActionError(..)
+  , LeaderConfiguration(..)
+  , LeaderNode(..)
+  , LeaderState(..)
+  , StatusResponse(..)
+  , UserConfiguration(..)
+  , UserNode(..)
+  , UserState(..)
+  )
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
@@ -140,7 +149,7 @@ userHandlerSendAction action = do
     if (r.body.status == "success") then
       note (OtherError "Can't parse request ID") $ parseUUID r.body.data
     else either (show >>> OtherError >>> Left) Left
-      (decodeJsonString r.body.errData)
+      (decodeJsonString r.body.data)
 
 -- Plutip config
 

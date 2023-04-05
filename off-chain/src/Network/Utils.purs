@@ -1,4 +1,7 @@
-module Seath.Network.Utils (getPublicKeyHash, seathUUIDShow, seathParseUUID) where
+module Seath.Network.Utils
+  ( getPublicKeyHash
+  , seathParseUUID
+  ) where
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)

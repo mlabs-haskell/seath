@@ -29,7 +29,17 @@ import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types (IncludeActionError, SignedTransaction, StatusResponse, UserConfiguration(..), UserNode(..), UserState(..), addToSentActions, readSentActions, userHandlers)
+import Seath.Network.Types
+  ( IncludeActionError
+  , SignedTransaction
+  , StatusResponse
+  , UserConfiguration(..)
+  , UserNode(..)
+  , UserState(..)
+  , addToSentActions
+  , readSentActions
+  , userHandlers
+  )
 import Type.Function (type ($))
 import Undefined (undefined)
 

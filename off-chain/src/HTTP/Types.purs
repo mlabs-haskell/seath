@@ -55,6 +55,8 @@ instance includeContentType :: HasContentType (IncludeRequest a) where
 
 newtype UID = UID UUID
 
+derive instance Newtype UID _
+
 instance showUID :: Show UID where
   show (UID uuid) =
     replace (Pattern "(UUID ") (Replacement "")
@@ -67,7 +69,7 @@ instance eaUID :: EncodeAeson UID where
 -- Phantom types to make Spec and Handlers more readable
 -- Went with Record coz couldn't make `DecodeResponse` instance for custom `data` type
 type JSend :: forall err a. err -> a -> Type
-type JSend err a = { status :: String, data :: String, errData :: String }
+type JSend err a = { status :: String, data :: String }
 
 toJsend
   :: forall err a
@@ -76,8 +78,8 @@ toJsend
   => Either err a
   -> JSend err a
 toJsend r = case r of
-  Right a -> { status: "success", data: showAeson a, errData: "" }
-  Left err -> { status: "failure", data: "", errData: showAeson err }
+  Right a -> { status: "success", data: showAeson a }
+  Left err -> { status: "failure", data: showAeson err }
   where
   showAeson :: forall v. EncodeAeson v => v -> String
   showAeson v =

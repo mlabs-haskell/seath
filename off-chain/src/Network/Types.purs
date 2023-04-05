@@ -2,7 +2,15 @@ module Seath.Network.Types where
 
 import Contract.Prelude
 
-import Aeson (class DecodeAeson, class EncodeAeson, JsonDecodeError(TypeMismatch), decodeAeson, fromString, getField, toString)
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , JsonDecodeError(TypeMismatch)
+  , decodeAeson
+  , fromString
+  , getField
+  , toString
+  )
 import Contract.Transaction (FinalizedTransaction)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
@@ -237,6 +245,7 @@ newtype UserConfiguration a = UserConfiguration
       , getActionStatus :: UUID -> Aff StatusResponse
       }
   }
+
 derive instance Newtype (UserConfiguration a) _
 
 newtype UserNode a = UserNode
