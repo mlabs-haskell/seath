@@ -45,12 +45,13 @@ Given a UTXO that represents a state machine, its script can support integration
 
 ### Off-chain
 
-Using Seath should ideally be a simple as possible. We want to provide an off-chain framework based on [Cardano Transaction Library](https://github.com/Plutonomicon/cardano-transaction-lib) that will let dApp developers to describe state transitions in terms of _actions_ that can be then translated to Cardano transactions. Given that, Seath framework will be able to chain transactions and submit them on chain in such away, that each transaction in chain will _continue_ the state machine in sequence, but from users' perspective it will look like they all submitted transactions simultaneously, without any contention. Of course users won't blindly trust the leader to build and submit transactions. The way how the _action_ should be translated into transaction will be also defined by Seath framework user, and there full control on inputs and outputs will be provided. Then, to submit chain of transactions, each transaction will have to be signed by the user's key, and at this stage user will be able to inspect whole transaction and reject signing if something looks wrong. In this case Seath will rebuild chain of transactions excluding rejected ones.
+Using Seath should ideally be a simple as possible. We want to provide an off-chain framework based on [Cardano Transaction Library](https://github.com/Plutonomicon/cardano-transaction-lib) that will let dApp developers describe state transitions in terms of actions that can be then translated to Cardano transactions. Given that, the Seath framework will be able to chain transactions and submit them to the blockchain in such a way that each transaction will continue the state machine in sequence, while from the end users' perspective it will look like their transactions were submitted simultaneously without any contention.
+
+Of course, users will not blindly trust the leader to build and submit transactions. Firstly, the way how an action should be translated into a transaction will have been defined by developers leveraging the Seath framework, providing full control on inputs and outputs. Then, before the leader can submit the chain of transactions, each individual transaction will have to be signed by the corresponding end user's key, giving end users the opportunity to inspect the whole transaction and reject signing it if something looks wrong. In this case, Seath will rebuild the chain of transactions excluding the rejected ones.
 
 Networking in this case is a complicated topic, but for the MVP,
 it will be assumed that the leader has an openly accessible IPv4 address/port.
-The data will be sent over IPv4 to the specified address/port, and can be encrypted using
-the leader's public key.
+The data will be sent over IPv4 to the specified address/port, and can be encrypted using the leader's public key.
 
 There are two problems with this solution:
 - It assumes the leader has an IPv4 address and can open a port.
