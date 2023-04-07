@@ -30,9 +30,10 @@ import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
-  ( IncludeActionError
+  ( GetStatusError
+  , IncludeActionError
   , SignedTransaction
-  , StatusResponse
+  , ActionStatus
   , UserConfiguration(..)
   , UserNode(..)
   , UserState(..)
@@ -65,7 +66,11 @@ sendActionToLeader
 sendActionToLeader userNode action =
   (userHandlers userNode).submitToLeader action
 
-getActionStatus :: forall a. UserNode a -> UUID -> Effect StatusResponse
+-- ! misha: not sure, what it suppose to do
+-- get action according to user's internal state
+-- or get it from the leader  
+getActionStatus
+  :: forall a. UserNode a -> UUID -> Aff (Either GetStatusError ActionStatus)
 getActionStatus = undefined
 
 sendSignedTransactionToLeader

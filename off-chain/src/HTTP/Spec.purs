@@ -1,19 +1,21 @@
 module Seath.HTTP.Spec where
 
-import Contract.Prelude (Either)
-import Data.UUID (UUID)
-import Payload.Spec (POST, Routes, Spec(Spec))
-import Seath.HTTP.Types (IncludeRequest, JSend, UID(..))
-import Seath.Network.Types (IncludeActionError)
-import Type.Proxy (Proxy)
+import Payload.Spec (GET, POST, Routes, Spec(Spec))
+import Seath.HTTP.Types
+import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
 
 type LeaderRoutes a = Routes "/leader"
   { includeAction ::
       POST "/include-action"
         { body :: IncludeRequest a
-        -- , response :: Either String UUID 
         , response :: JSend IncludeActionError UID
         }
+  , actionStatus ::
+      GET "/action-status/<uid>"
+        { params :: { uid :: UID }
+        , response :: JSend GetStatusError ActionStatus
+        }
+
   }
 
 spec
@@ -23,21 +25,8 @@ spec
        }
 spec = Spec
 
-proxySpec
-  :: forall a
-   . Proxy a
-  -> Spec
-       { leader :: LeaderRoutes a
-       }
-proxySpec _ = spec
-
 -- TODO:
 -- type LeaderServerSpec a = Spec
---   { includeAction ::
---       POST "/leader/includeAction"
---         { body :: UserAction a
---         , response :: Either IncludeActionError UUID
---         }
 --   , acceptSignedTransaction ::
 --       POST "/leader/acceptSignedTransaction"
 --         { body :: SendSignedTransaction
@@ -47,11 +36,6 @@ proxySpec _ = spec
 --       GET "/leader/refuseToSign/<controlNumber>"
 --         { params :: { controlNumber :: UUID }
 --         , response :: Empty
---         }
---   , getActionStatus ::
---       GET "/leader/getActionStatus/<controlNumber>"
---         { params :: { controlNumber :: UUID }
---         , response :: StatusResponse
 --         }
 --   }
 

@@ -1,27 +1,15 @@
 module Seath.HTTP.Types where
 
 import Contract.Prelude
+import Payload.Client.EncodeParam
+import Payload.Server.Params
 import Undefined
 
-import Aeson
-  ( class DecodeAeson
-  , class EncodeAeson
-  , decodeJsonString
-  , encodeAeson
-  , fromString
-  , isString
-  , stringifyAeson
-  , toString
-  )
+import Aeson (class DecodeAeson, class EncodeAeson, decodeJsonString, encodeAeson, fromString, isString, stringifyAeson, toString)
 import Ctl.Internal.Test.UtxoDistribution (encodeDistribution)
-import Data.Bifunctor (bimap)
-import Data.String
-  ( Pattern(Pattern)
-  , Replacement(Replacement)
-  , replace
-  , replaceAll
-  )
-import Data.UUID (UUID)
+import Data.Bifunctor (bimap, lmap)
+import Data.String (Pattern(Pattern), Replacement(Replacement), replace, replaceAll)
+import Data.UUID (UUID, parseUUID)
 import Payload.Client.DecodeResponse (class DecodeResponse)
 import Payload.Client.EncodeBody (class EncodeBody)
 import Payload.ContentType (class HasContentType, json)
@@ -65,6 +53,13 @@ instance showUID :: Show UID where
 
 instance eaUID :: EncodeAeson UID where
   encodeAeson = show >>> fromString
+
+instance epUID :: EncodeParam UID where
+  encodeParam = show
+
+instance dpUID :: DecodeParam UID where
+  decodeParam uid = 
+    note ("Could not parse UUID param from " <> uid) (UID <$> parseUUID uid)
 
 -- Phantom types to make Spec and Handlers more readable
 -- Went with Record coz couldn't make `DecodeResponse` instance for custom `data` type

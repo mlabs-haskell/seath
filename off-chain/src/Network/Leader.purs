@@ -1,6 +1,7 @@
 module Seath.Network.Leader
-  ( getNextBatchOfActions
-  , includetAction
+  ( actionStatus
+  , getNextBatchOfActions
+  , includeAction
   , newLeaderState
   , showDebugState
   , startLeaderNode
@@ -9,7 +10,8 @@ module Seath.Network.Leader
   , stopLeaderServer
   , submitChain
   , waitForChainSignatures
-  ) where
+  )
+  where
 
 import Contract.Prelude
 
@@ -20,37 +22,35 @@ import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref as Ref
+import Options.Applicative (action)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types
-  ( IncludeActionError(..)
-  , LeaderConfiguration
-  , LeaderNode(..)
-  , LeaderServerStage(..)
-  , LeaderServerStateInfo(..)
-  , LeaderState(..)
-  , SignedTransaction
-  , addAction
-  , maxPendingCapacity
-  , numberOfPending
-  , signTimeout
-  )
+import Seath.Network.Types (ActionStatus(..), IncludeActionError(..), LeaderConfiguration, LeaderNode(..), LeaderServerStage(..), LeaderServerStateInfo(..), LeaderState(..), SignedTransaction, addAction, getPending, maxPendingCapacity, numberOfPending, signTimeout)
 import Type.Function (type ($))
 import Undefined (undefined)
 
-includetAction
+includeAction
   :: forall a
    . LeaderNode a
   -> UserAction a
   -> Aff (Either IncludeActionError UUID)
-includetAction ln@(LeaderNode node) action = do
+includeAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
   pendingCount <- numberOfPending node.state
   if (pendingCount < maxPendingCapacity node.configuration) then
     -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     (Right <$> addAction action node.state)
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
+
+actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
+actionStatus leaderNode actionId = do
+  pending <- getPending leaderNode
+  let maybeInPending = OMap.lookupPostion actionId pending
+  -- todo: check in other OMaps and get correct status
+  pure $ case maybeInPending of
+    Just i -> ToBeProcessed i
+    Nothing -> NotFound
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.
@@ -105,11 +105,13 @@ startLeaderNode conf = do
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
 
+-- TODO: left to not to break compilation
 startLeaderServer :: forall a. LeaderNode a -> Aff Unit
 startLeaderServer = undefined
 
 stopLeaderServer :: forall a. LeaderNode a -> Aff Unit
 stopLeaderServer = undefined
+-- TODO: left to not to break compilation - END
 
 -- | To build a new mutable `LeaderState`
 newLeaderState :: forall a. Aff $ LeaderState a

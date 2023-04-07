@@ -2,15 +2,7 @@ module Seath.Network.Types where
 
 import Contract.Prelude
 
-import Aeson
-  ( class DecodeAeson
-  , class EncodeAeson
-  , JsonDecodeError(TypeMismatch)
-  , decodeAeson
-  , fromString
-  , getField
-  , toString
-  )
+import Aeson (class DecodeAeson, class EncodeAeson, JsonDecodeError(TypeMismatch), decodeAeson, fromString, getField, toString)
 import Contract.Transaction (FinalizedTransaction)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
@@ -42,12 +34,12 @@ type MutableInt = Int
 
 data IncludeActionError
   = RejectedServerBussy LeaderServerStateInfo
-  | OtherError String
+  | IAOtherError String
 
 instance encodeAesonIncludeActionError :: EncodeAeson IncludeActionError where
   encodeAeson = case _ of
     RejectedServerBussy inf -> encodeTagged' "RejectedServerBussy" inf
-    OtherError err -> encodeTagged' "OtherError" err
+    IAOtherError err -> encodeTagged' "IAOtherError" err
 
 instance decodeAesonIncludeActionError :: DecodeAeson IncludeActionError where
   decodeAeson s = do
@@ -56,7 +48,7 @@ instance decodeAesonIncludeActionError :: DecodeAeson IncludeActionError where
     contents <- getField obj "contents"
     case tag of
       "RejectedServerBussy" -> RejectedServerBussy <$> decodeAeson contents
-      "OtherError" -> OtherError <$> decodeAeson contents
+      "IAOtherError" -> IAOtherError <$> decodeAeson contents
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
 
@@ -66,7 +58,7 @@ instance showIncludeActionError :: Show IncludeActionError where
   show = genericShow
 
 newtype AcceptSignedTransactionError = AcceptSignedTransactionError
-  StatusResponse
+  ActionStatus
 
 derive newtype instance Show AcceptSignedTransactionError
 
@@ -119,7 +111,7 @@ newtype GetActionStatus = GetActionStatus
 
 derive instance Newtype GetActionStatus _
 
-data StatusResponse
+data ActionStatus
   = AskForSignature
       {
         -- | The control number that the user attached in it's request to
@@ -135,9 +127,59 @@ data StatusResponse
   | SubmitError String
   | NotFound
 
-derive instance Generic StatusResponse _
-instance showSR :: Show StatusResponse where
+derive instance Generic ActionStatus _
+
+instance showActionStatus :: Show ActionStatus where
   show = genericShow
+
+instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
+  encodeAeson = case _ of
+    AskForSignature asForSig -> encodeTagged' "AskForSignature" "test" -- FIXME
+    ToBeProcessed i -> encodeTagged'"ToBeProcessed" i 
+    ToBeSubmited i -> encodeTagged' "ToBeSubmited" i
+    Processing -> encodeTagged' "Processing" ""
+    RejectedAtChainBuilder reason -> encodeTagged' "RejectedAtChainBuilder" reason
+    RequireNewSignature -> encodeTagged' "RequireNewSignature" ""
+    SubmitError err -> encodeTagged' "SubmitError" err
+    NotFound -> encodeTagged' "NotFound" ""
+
+instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
+  decodeAeson s = do
+    obj <- decodeAeson s
+    tag <- getField obj "tag"
+    contents <- getField obj "contents"
+    case tag of
+      "AskForSignature" -> AskForSignature <$> undefined -- FIXME
+      "ToBeProcessed" ->  ToBeProcessed <$> decodeAeson contents
+      "ToBeSubmited" -> ToBeSubmited <$> decodeAeson contents
+      "Processing" -> Right Processing
+      "RejectedAtChainBuilder" -> RejectedAtChainBuilder <$> decodeAeson contents
+      "RequireNewSignature" -> Right RequireNewSignature
+      "SubmitError" -> SubmitError <$> decodeAeson contents
+      "NotFound" -> Right NotFound
+      other -> Left
+        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
+
+data GetStatusError = GSOtherError String
+
+derive instance Generic GetStatusError _
+
+instance showStatusResponseError :: Show GetStatusError where
+  show = genericShow
+
+instance encodeAesonStatusResponseError :: EncodeAeson GetStatusError where
+  encodeAeson = case _ of
+    GSOtherError err ->  encodeTagged' "GSOtherError" err
+
+instance decodeAesonStatusResponseError :: DecodeAeson GetStatusError where
+  decodeAeson s = do
+    obj <- decodeAeson s
+    tag <- getField obj "tag"
+    contents <- getField obj "contents"
+    case tag of
+      "GSOtherError" -> GSOtherError <$> decodeAeson contents
+      other -> Left
+        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
 
 newtype SendSignedTransaction = SendSignedTransaction
   { controlNumber :: UUID
@@ -157,6 +199,11 @@ newtype LeaderState a = LeaderState
   -- see `UUID` comment.
   , numberOfActionsRequestsMade :: MutableInt
   }
+
+getPending :: forall a.LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
+getPending (LeaderNode node) = do
+  liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest
+
 
 addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
 addAction action st = liftEffect do
@@ -188,7 +235,7 @@ newtype LeaderConfiguration a = LeaderConfiguration
   --         SendSignedTransaction
   --         -> Aff $ Either AcceptSignedTransactionError Unit
   --     , rejectToSign :: UUID -> Aff Unit
-  --     , getActionStatus :: UUID -> Aff StatusResponse
+  --     , getActionStatus :: UUID -> Aff ActionStatus
   --     }
   }
 
@@ -242,7 +289,7 @@ newtype UserConfiguration a = UserConfiguration
           SendSignedTransaction
           -> Aff $ Either AcceptSignedTransactionError Unit
       , rejectToSign :: UUID -> Aff Unit
-      , getActionStatus :: UUID -> Aff StatusResponse
+      , getActionStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
       }
   }
 

@@ -2,6 +2,7 @@ module Seath.Network.OrderedMap
   ( OrderedMap(..)
   , empty
   , length
+  , lookupPostion
   , orderedElems
   , push
   , splitEither
@@ -31,6 +32,9 @@ derive instance Newtype (OrderedMap keys values) _
 
 length :: forall keys values. OrderedMap keys values -> Int
 length (OrderedMap ordMap) = Array.length ordMap.array
+
+lookupPostion :: forall k v. Ord k => k -> OrderedMap k v -> Maybe Int
+lookupPostion k (OrderedMap oMap) = fst <$> Map.lookup k oMap.map
 
 -- TODO: tests when API will stabilaze
 push
