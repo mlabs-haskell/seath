@@ -62,11 +62,8 @@ sendActionToLeader
    . UserNode a
   -> UserAction a
   -> Aff $ Either IncludeActionError UUID
-sendActionToLeader userNode action = do
-  let
-    (UserNode node) = userNode
-    (UserConfiguration conf) = node.configuration
-  conf.clientHandlers.submitToLeader action
+sendActionToLeader userNode action =
+  (userHandlers userNode).submitToLeader action
 
 getActionStatus :: forall a. UserNode a -> UUID -> Effect StatusResponse
 getActionStatus = undefined
