@@ -3,8 +3,10 @@ module Seath.Network.Types where
 import Contract.Prelude
 
 import Aeson (class DecodeAeson, class EncodeAeson, JsonDecodeError(TypeMismatch), decodeAeson, fromString, getField, toString)
+import Contract.Address (PubKeyHash(..))
 import Contract.Transaction (FinalizedTransaction)
 import Ctl.Internal.Helpers (encodeTagged')
+import Ctl.Internal.Types.PubKeyHash (PaymentPubKeyHash(..))
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
@@ -13,7 +15,7 @@ import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Seath.Core.Types (UserAction)
+import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
 import Type.Function (type ($))
@@ -212,9 +214,8 @@ addAction action st = liftEffect do
     (unwrap st).pendingActionsRequest
   pure actionUUID
 
-numberOfPending :: forall a. LeaderState a -> Aff Int
-numberOfPending st = OMap.length <$>
-  (liftEffect $ Ref.read (unwrap st).pendingActionsRequest)
+numberOfPending :: forall a.LeaderNode a -> Aff Int
+numberOfPending node = OMap.length <$> getPending node
 
 derive instance Newtype (LeaderState a) _
 
@@ -224,6 +225,7 @@ newtype LeaderConfiguration a = LeaderConfiguration
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
+  , leaderPkh :: PubKeyHash
 
   -- FIXME: not sure we should do it like this.
   -- We will need user node to build webserver. So if we are passing web-server

@@ -106,7 +106,7 @@ newMainTest config = do
   _ <- liftAff $ startLeaderServer (unwrap leader).node
   _ <- liftAff $ traverse (\x -> startUserServer (unwrap x).node) participants
 
-  sendedActions <- liftAff $ performFromParticipantsWithValue
+  sendedActions <- performFromParticipantsWithValue
     sendActionToLeader
     (zip participants actions)
   recivedActions <- liftAff $ getNextBatchOfActions (unwrap leader).node
@@ -287,7 +287,6 @@ runnerConfiguration2CoreConfiguration config = do
     , stateVaildatorHash: vaildatorHash
     , actionHandler: handleAction
     , queryBlockchainState: queryBlockchainState
-    , numberOfBuiltChains: 0
     }
 
 checkFinalState

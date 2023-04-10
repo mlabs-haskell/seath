@@ -10,17 +10,18 @@ module Seath.Network.Leader
   , stopLeaderServer
   , submitChain
   , waitForChainSignatures
-  )
-  where
+  ) where
 
 import Contract.Prelude
 
+import Contract.Monad (Contract)
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
+import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, delay, forkAff)
 import Effect.Ref as Ref
 import Options.Applicative (action)
 import Seath.Core.Types (UserAction)
@@ -37,7 +38,7 @@ includeAction
   -> Aff (Either IncludeActionError UUID)
 includeAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
-  pendingCount <- numberOfPending node.state
+  pendingCount <- numberOfPending ln
   if (pendingCount < maxPendingCapacity node.configuration) then
     -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     (Right <$> addAction action node.state)
@@ -87,20 +88,35 @@ getNextBatchOfActions = undefined
 
 -- (getAbatchOfPendingActions undefined undefined)
 
-startLeaderNode :: forall a. LeaderConfiguration a -> Aff (LeaderNode a)
+startLeaderNode :: forall a. LeaderConfiguration a -> Contract (LeaderNode a)
 startLeaderNode conf = do
   pending <- liftEffect $ Ref.new OMap.empty
-  pure $ LeaderNode
-    { state: LeaderState
-        { pendingActionsRequest: pending
-        , prioritaryPendingActions: undefined
-        , signatureResponses: undefined
-        , stage: undefined
-        , numberOfActionsRequestsMade: undefined
+  let
+    node = LeaderNode
+      { state: LeaderState
+          { pendingActionsRequest: pending
+          , prioritaryPendingActions: undefined
+          , signatureResponses: undefined
+          , stage: undefined
+          , numberOfActionsRequestsMade: undefined
 
-        }
-    , configuration: conf
-    }
+          }
+      , configuration: conf
+      }
+  initChainBuilder node
+  pure node
+
+initChainBuilder :: forall a. LeaderNode a -> Contract Unit
+initChainBuilder leaderNode = liftAff do
+  _fiber <- forkAff go
+  pure unit
+  where
+  go = do
+    pending <- getPending leaderNode
+    when (OMap.length pending >= 2) do --todo: get real one from config
+      log "Making chain"
+    delay $ Milliseconds 1000.0
+    go
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
@@ -111,6 +127,7 @@ startLeaderServer = undefined
 
 stopLeaderServer :: forall a. LeaderNode a -> Aff Unit
 stopLeaderServer = undefined
+
 -- TODO: left to not to break compilation - END
 
 -- | To build a new mutable `LeaderState`
@@ -119,16 +136,15 @@ newLeaderState = undefined
 
 showDebugState :: forall a. LeaderNode a -> Aff String
 showDebugState leaderNode = do
-  let state = (unwrap leaderNode).state
-  pending <- numberOfPending state
+  pending <- numberOfPending leaderNode
   pure $ "\nLeader debug state:"
     <> "\n Num of pending actions: "
     <> show pending
 
 -- TODO: partially mocked
 leaderStateInfo :: forall a. LeaderNode a -> Aff LeaderServerStateInfo
-leaderStateInfo (LeaderNode node) = do
-  numberOfActionsToProcess <- numberOfPending node.state
+leaderStateInfo leaderNode@(LeaderNode node) = do
+  numberOfActionsToProcess <- numberOfPending leaderNode
   let maxNumberOfPendingActions = maxPendingCapacity node.configuration
   let maxTimeOutForSignature = signTimeout node.configuration
   let serverStage = WaitingForActions -- TODO: get the real one

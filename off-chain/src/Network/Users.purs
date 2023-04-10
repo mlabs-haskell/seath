@@ -15,25 +15,27 @@ module Seath.Network.Users
 
 import Contract.Prelude
 
+import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Monad (Contract, liftedM)
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
+import Data.Array (head)
 import Data.Either (Either)
 import Data.Function (($))
-import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
+import Data.Time.Duration (Milliseconds(..))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (Aff, delay, forkAff)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
-import Seath.Core.Types (CoreConfiguration, UserAction)
+import Seath.Core.Types (ChangeAddress(..), CoreConfiguration, UserAction(..))
 import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
-  ( GetStatusError
+  ( ActionStatus
+  , GetStatusError
   , IncludeActionError
   , SignedTransaction
-  , ActionStatus
   , UserConfiguration(..)
   , UserNode(..)
   , UserState(..)
@@ -41,6 +43,7 @@ import Seath.Network.Types
   , readSentActions
   , userHandlers
   )
+import Seath.Network.Utils (getPublicKeyHash)
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -62,9 +65,9 @@ sendActionToLeader
   :: forall a
    . UserNode a
   -> UserAction a
-  -> Aff $ Either IncludeActionError UUID
+  -> Contract $ Either IncludeActionError UUID
 sendActionToLeader userNode action =
-  (userHandlers userNode).submitToLeader action
+  liftAff $ (userHandlers userNode).submitToLeader action
 
 -- ! misha: not sure, what it suppose to do
 -- get action according to user's internal state
@@ -100,18 +103,19 @@ makeUserActionAndSend nodeConfig actionRaw = do
   walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
   let
     action = makeUserAction nodeConfig actionRaw walletUTxOs
-  liftAff $ sendActionToLeader nodeConfig action
+  sendActionToLeader nodeConfig action
 
 -- | Return a new mutable `userState`
 newUserState :: forall a. Aff $ UserState a
 newUserState = undefined
 
-performAction :: forall a. UserNode a -> a -> (a -> UserAction a) -> Aff Unit
-performAction userNode action debugMakeUserAction = do
-  let userAction = debugMakeUserAction action
+performAction :: forall a. Show a => UserNode a -> a -> Contract Unit
+performAction userNode action = do
+  userAction <- mkAction action
+  log $ "Making action: " <> show userAction
   result <- userNode `sendActionToLeader` userAction
-  case result of
-    Left err -> log $ "TODO: React to error " <> show err
+  liftAff $ case result of
+    Left err -> log $ "TODO: React to error: " <> show err
     Right uid -> do
       userNode `addToSentActions` (uid /\ action)
 
@@ -150,3 +154,16 @@ startActionStatusCheck userNode = do
       delay $ Milliseconds 1000.0
     delay $ Milliseconds 5000.0
     check
+
+mkAction :: forall a. a -> Contract (UserAction a)
+mkAction action = do
+  ownUtxos <- liftedM "Error making action: no UTxOs found" getWalletUtxos
+  publicKeyHash <- getPublicKeyHash
+  changeAddress <- liftedM "can't get Change address" $ head <$>
+    getWalletAddressesWithNetworkTag
+  pure $ UserAction
+    { action: action
+    , publicKey: publicKeyHash
+    , userUTxOs: ownUtxos
+    , changeAddress: ChangeAddress changeAddress
+    }

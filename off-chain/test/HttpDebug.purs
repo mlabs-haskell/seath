@@ -7,22 +7,19 @@ module Seath.Test.HttpDebug
   ) where
 
 import Contract.Prelude
+import Seath.Core.Types
 
-import Aeson
-  ( class DecodeAeson
-  , class EncodeAeson
-  , decodeAeson
-  , decodeJsonString
-  )
+import Aeson (class DecodeAeson, class EncodeAeson, decodeAeson, decodeJsonString)
 import Affjax as Affjax
 import Affjax.ResponseFormat as ResponseFormat
-import Contract.Address (getWalletAddressesWithNetworkTag)
+import Contract.Address (PaymentPubKey(..), PaymentPubKeyHash(..), PubKeyHash(..), getWalletAddressesWithNetworkTag)
 import Contract.Config (emptyHooks)
 import Contract.Monad (Contract, launchAff_, liftedM)
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
+import Ctl.Internal.Types.ScriptLookups (ownPaymentPubKeyHash)
 import Data.Array (head)
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
@@ -44,17 +41,7 @@ import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..), JSend, UID(..))
 import Seath.Network.Leader as Leader
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types
-  ( ActionStatus(..)
-  , GetStatusError(..)
-  , IncludeActionError(..)
-  , LeaderConfiguration(..)
-  , LeaderNode(..)
-  , LeaderState(..)
-  , UserConfiguration(..)
-  , UserNode(..)
-  , UserState(..)
-  )
+import Seath.Network.Types (ActionStatus(..), GetStatusError(..), IncludeActionError(..), LeaderConfiguration(..), LeaderNode(..), LeaderState(..), UserConfiguration(..), UserNode(..), UserState(..))
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
@@ -67,8 +54,12 @@ main = do
 
 runWithPlutip :: Effect Unit
 runWithPlutip = launchAff_ $ runPlutipContract config distrib $
-  \(a /\ _b) -> do
-    testAction <- genAction a
+  \(a /\ b) -> do
+    -- testAction <- genAction a
+    leaderPKH <- withKeyWallet a getPublicKeyHash
+
+
+
     let
       serverConf :: SeathServerConfig
       serverConf = undefined
@@ -76,30 +67,33 @@ runWithPlutip = launchAff_ $ runPlutipContract config distrib $
     (userNode :: UserNode AdditionAction) <-
       liftAff $ Users.startUserNode _testUserConf
 
-    (leaderNode :: LeaderNode AdditionAction) <- liftAff $
-      Leader.startLeaderNode _testLeaderConf
+    let leaderConf = _testLeaderConf  leaderPKH
+    (leaderNode :: LeaderNode AdditionAction) <- Leader.startLeaderNode leaderConf
 
-    liftAff $ do
-      _ <- forkAff $ do
+    _ <- liftAff $ forkAff $ do
         log "Starting server"
         liftEffect $ Server.runServer serverConf leaderNode
         log "Leader server started"
+    withKeyWallet b $ do
+      log' "Delay before user include action request"
+      delay' 1000.0
 
-      log "Delay before user include action request"
-      delay $ Milliseconds 1000.0
-      log "Fire user include action request 1"
+      log' "Fire user include action request 1"
       Users.performAction userNode
         (AddAmount $ BigInt.fromInt 1)
-        (const testAction)
-      delay $ Milliseconds 5000.0
-      log "Fire user include action request 2"
+
+      delay' 5000.0
+      log' "Fire user include action request 2"
       Users.performAction userNode
         (AddAmount $ BigInt.fromInt 2)
-        (const testAction)
-      Leader.showDebugState leaderNode >>= log
-      log "end"
+
+    liftAff $ Leader.showDebugState leaderNode >>= log
+
+    log "end"
 
   where
+  log' = liftAff <<< log
+  delay' = liftAff <<< delay <<< Milliseconds
   distrib =
     ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ])
 
@@ -107,7 +101,7 @@ genAction :: KeyWallet -> Contract (UserAction AdditionAction)
 genAction w =
   withKeyWallet w $ do
     ownUtxos <- liftedM "no UTxOs found" getWalletUtxos
-    publicKeyHash <- withKeyWallet w getPublicKeyHash
+    publicKeyHash <- getPublicKeyHash
     changeAddress <- liftedM "can't get Change address" $ head <$>
       getWalletAddressesWithNetworkTag
     pure $ UserAction
@@ -119,13 +113,14 @@ genAction w =
 
 -- Assembling LeaderNode
 
-_testLeaderConf :: LeaderConfiguration AdditionAction
-_testLeaderConf =
+_testLeaderConf :: PubKeyHash -> LeaderConfiguration AdditionAction
+_testLeaderConf leaderPKH =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 0
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 0
     , maxWaitingTimeBeforeBuildChain: 0
+    , leaderPkh: leaderPKH
     }
 
 -- Assembling UserNode
@@ -136,7 +131,6 @@ _testUserConf = UserConfiguration
       { submitToLeader: userHandlerSendAction -- TODO: arch: naming
       , acceptSignedTransaction: undefined
       , rejectToSign: undefined
-      -- , getActionStatus: (\_uid -> pure $ ToBeProcessed 1) -- FIXME: mocked
       , getActionStatus: userHandlerGetStatus
       }
 
