@@ -6,33 +6,14 @@ module Seath.Test.HttpDebug
   , userHandlerSendAction
   ) where
 
+import Contract.Prelude
+
 import Aeson (class DecodeAeson, class EncodeAeson, decodeJsonString)
 import Affjax as Affjax
 import Affjax.ResponseFormat as ResponseFormat
 import Contract.Address (PubKeyHash, getWalletAddressesWithNetworkTag)
 import Contract.Config (emptyHooks)
 import Contract.Monad (Contract, launchAff_, liftedM, runContractInEnv)
-import Contract.Prelude
-  ( Aff
-  , Either(..)
-  , LogLevel(..)
-  , bind
-  , discard
-  , either
-  , fst
-  , liftAff
-  , liftEffect
-  , log
-  , note
-  , pure
-  , ($)
-  , (<$>)
-  , (<<<)
-  , (<>)
-  , (==)
-  , (>>=)
-  , (>>>)
-  )
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
 import Contract.Utxos (getWalletUtxos)
@@ -48,7 +29,7 @@ import Data.UInt (fromInt) as UInt
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect (Effect)
-import Effect.Aff (delay, forkAff)
+import Effect.Aff (delay, forkAff, try)
 import Payload.ResponseTypes (Response(..))
 import Prelude (show)
 import Seath.Core.ChainBuilder as ChainBuilder
@@ -62,6 +43,7 @@ import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..), JSend, UID(..))
 import Seath.Network.Leader as Leader
+import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
   ( ActionStatus
   , GetStatusError(..)
@@ -70,6 +52,8 @@ import Seath.Network.Types
   , LeaderNode
   , UserConfiguration(..)
   , UserNode
+  , getPending
+  , readSentActions
   )
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
@@ -94,22 +78,24 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
     utxos <- runContractInEnv env $ withKeyWallet leader getWalletUtxos
     log $ "UTXOS: show " <> show utxos
 
+    -- log $ "UTXOS: show " <> show utxos
+
     (userNode :: UserNode AdditionAction) <-
       Users.startUserNode _testUserConf
 
     coreConfig <- runContractInEnv env $ withKeyWallet leader $
       getTestCoreConfig leaderPKH
     let
-      chainBuilder actions =
+      buildChain actions =
         runContractInEnv env $ withKeyWallet leader $ fst
           <$> ChainBuilder.buildChain coreConfig actions Nothing
+
     let leaderConf = _testLeaderConf leaderPKH
-    (leaderNode :: LeaderNode AdditionAction) <- runContractInEnv env
-      $ withKeyWallet leader
-      $ Leader.startLeaderNode
-          chainBuilder
-          -- (pure []) -- dummy
-          leaderConf
+    (leaderNode :: LeaderNode AdditionAction) <-
+      Leader.startLeaderNode
+        buildChain
+        -- (pure []) -- dummy
+        leaderConf
 
     _ <- liftAff $ forkAff $ do
       log "Starting server"
@@ -117,21 +103,30 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
         serverConf :: SeathServerConfig
         serverConf = undefined
       liftEffect $ Server.runServer serverConf leaderNode
+
       log "Leader server started"
-    -- runContractInEnv env $ withKeyWallet user $ do
-    --   log' "Delay before user include action request"
-    --   delay' 1000.0
 
-    --   log' "Fire user include action request 1"
-    --   Users.performAction userNode
-    --     (AddAmount $ BigInt.fromInt 1)
+    runContractInEnv env $ withKeyWallet user $ do
+      log' "Delay before user include action request"
+      delay' 1000.0
 
-    --   -- delay' 5000.0
-    --   log' "Fire user include action request 2"
-    --   Users.performAction userNode
-    --     (AddAmount $ BigInt.fromInt 2)
+      log' "Fire user include action request 1"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 1)
 
-    -- liftAff $ Leader.showDebugState leaderNode >>= log
+      -- delay' 5000.0
+      log' "Fire user include action request 2"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 2)
+
+    liftAff $ Leader.showDebugState leaderNode >>= log
+
+    userActions <- (map snd <<< OMap.orderedElems) <$> (getPending leaderNode)
+
+    log $ "User actions: " <> show userActions
+
+    tryBuildResult <- try $ buildChain userActions
+    log $ "Try build result: " <> show tryBuildResult
 
     log "end"
 
@@ -165,7 +160,7 @@ _testLeaderConf leaderPKH =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 0
     , maxQueueSize: 4
-    , numberOfActionToTriggerChainBuilder: 2
+    , numberOfActionToTriggerChainBuilder: 3
     , maxWaitingTimeBeforeBuildChain: 0
     , leaderPkh: leaderPKH
     }

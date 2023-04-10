@@ -292,7 +292,7 @@ derive instance Newtype (LeaderConfiguration a) _
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
-  , testChainBuidler ::
+  , testChainBuild ::
       Array (UserAction a)
       -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }

@@ -122,8 +122,8 @@ startLeaderNode
        -> Aff (Array (FinalizedTransaction /\ UserAction a))
      )
   -> LeaderConfiguration a
-  -> Contract (LeaderNode a)
-startLeaderNode chainBuilder conf = do
+  -> Aff (LeaderNode a)
+startLeaderNode chainBuild conf = do
   pending <- liftEffect $ Ref.new OMap.empty
   currentBatch <- liftEffect $ Ref.new OMap.empty
   chainedTransactions <- liftEffect $ Ref.new []
@@ -140,30 +140,23 @@ startLeaderNode chainBuilder conf = do
 
           }
       , configuration: conf
-      , testChainBuidler: chainBuilder
+      , testChainBuild: chainBuild
       }
   initChainBuilder node
   pure node
 
-initChainBuilder :: forall a. Show a => LeaderNode a -> Contract Unit
+initChainBuilder :: forall a. Show a => LeaderNode a -> Aff Unit
 initChainBuilder leaderNode@(LeaderNode node) = do
   log $ "initChainBuilder"
-  _fiber <- liftAff $ forkAff (go)
+  _fiber <- forkAff (go)
   pure unit
   where
   go = do
-    log $ "Check can batch"
-
     batchEmpty <- currentBatchEmpty leaderNode
     when (not batchEmpty) do --todo: get real one from config
-      log $ "CAN batch: getCurrentBatch"
       batch <- getCurrentBatch leaderNode
-      log $ "CAN batch: make actions"
       let actions = snd <$> OMap.orderedElems batch
-      log $ "CAN batch: run batcher"
-      txsAndActions <- node.testChainBuidler actions
-      -- (txsAndActions /\ _ /\ _) <- (runContractInEnv env $ ChainBuilder.buildChain config actions Nothing)
-
+      txsAndActions <- node.testChainBuild actions
       log $ "The chain: " <> show txsAndActions
     delay $ Milliseconds 1000.0
     (go)

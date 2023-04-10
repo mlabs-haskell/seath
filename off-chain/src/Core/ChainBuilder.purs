@@ -17,7 +17,7 @@ import Contract.Transaction
   , createAdditionalUtxos
   )
 import Contract.TxConstraints (mustBeSignedBy, mustSpendPubKeyOutput)
-import Contract.Utxos (UtxoMap)
+import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Data.Array (fold, snoc, uncons)
@@ -65,6 +65,8 @@ buildChain
            userStateType
        )
 buildChain configW@(CoreConfiguration config) actions mState = do
+  utxos <- getWalletUtxos
+  logInfo' $ "buildChain UTXOs: " <> show utxos
   lastResult <- case mState of
     Just state -> pure state
     Nothing -> config.queryBlockchainState
