@@ -20,6 +20,7 @@ import Contract.TxConstraints (mustBeSignedBy, mustSpendPubKeyOutput)
 import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Applicative (pure)
 import Control.Monad (bind)
+import Ctl.Internal.Contract.Wallet (ownPubKeyHashes)
 import Data.Array (fold, snoc, uncons)
 import Data.Eq ((==))
 import Data.Functor ((<$>))
@@ -67,6 +68,8 @@ buildChain
 buildChain configW@(CoreConfiguration config) actions mState = do
   utxos <- getWalletUtxos
   logInfo' $ "buildChain UTXOs: " <> show utxos
+  ownPKs <- ownPubKeyHashes
+  logInfo' $ "buildChain own PKHs: " <> show ownPKs
   lastResult <- case mState of
     Just state -> pure state
     Nothing -> config.queryBlockchainState

@@ -66,6 +66,7 @@ includeAction ln@(LeaderNode node) action = do
   if (pendingCount < maxPendingCapacity node.configuration) then do
     -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     result <- (Right <$> addAction action node.state)
+    -- FIXME: bad thing to do, addition sohuld not trigger chaining
     isCanChain <- canChain ln
     when isCanChain $ fillCurrentBacth ln
     pure result

@@ -125,9 +125,22 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
 
     log $ "User actions: " <> show userActions
 
-    tryBuildResult <- try $ buildChain userActions
-    log $ "Try build result: " <> show tryBuildResult
 
+    -- FIXME: debug core chaining failure - BEGIN
+    -- it works well and performs chaining with calling it directly
+    tryBuildResult <- try $ buildChain userActions
+    log $ "Try build result 1: " <> show tryBuildResult
+
+    -- it works well and performs chaining when calling as handler for LedaerNode
+    tryBuildResult2 <- try $ (unwrap leaderNode).testChainBuild userActions
+    log $ "Try build result 2: " <> show tryBuildResult2
+
+    -- but it will break if user will submit 3d action and trigger chaning
+    -- trigger for chaining is currently goes off on 3d action
+    runContractInEnv env $ withKeyWallet user $ do
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 1)
+    -- debug core chaining failure - END
     log "end"
 
   where
