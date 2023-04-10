@@ -75,6 +75,7 @@ main = do
 runWithPlutip :: Effect Unit
 runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
   \env (leader /\ user) -> do
+  -- TODO: ? wait till funds appear in wallets
     leaderPKH <- runContractInEnv env $ withKeyWallet leader getPublicKeyHash
     utxos <- runContractInEnv env $ withKeyWallet leader getWalletUtxos
     log $ "UTXOS: show " <> show utxos
@@ -125,7 +126,6 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
 
     log $ "User actions: " <> show userActions
 
-
     -- FIXME: debug core chaining failure - BEGIN
     -- it works well and performs chaining with calling it directly
     tryBuildResult <- try $ buildChain userActions
@@ -135,11 +135,12 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
     tryBuildResult2 <- try $ (unwrap leaderNode).testChainBuild userActions
     log $ "Try build result 2: " <> show tryBuildResult2
 
-    -- but it will break if user will submit 3d action and trigger chaning
-    -- trigger for chaining is currently goes off on 3d action
-    runContractInEnv env $ withKeyWallet user $ do
-      Users.performAction userNode
-        (AddAmount $ BigInt.fromInt 1)
+    -- but it will break if forkAff
+    _ <- forkAff $
+      do
+        log "!! With forkAff"
+        runContractInEnv env $ withKeyWallet leader $ 
+          fst <$> ChainBuilder.buildChain coreConfig userActions Nothing
     -- debug core chaining failure - END
     log "end"
 
