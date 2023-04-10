@@ -58,6 +58,7 @@ import Seath.Network.Types
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions as Addition
+import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types
   ( AdditionAction(..)
@@ -78,7 +79,7 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
     utxos <- runContractInEnv env $ withKeyWallet leader getWalletUtxos
     log $ "UTXOS: show " <> show utxos
 
-    -- log $ "UTXOS: show " <> show utxos
+    _ <- runContractInEnv env $ withKeyWallet leader $ initialSeathContract
 
     (userNode :: UserNode AdditionAction) <-
       Users.startUserNode _testUserConf
@@ -94,7 +95,6 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
     (leaderNode :: LeaderNode AdditionAction) <-
       Leader.startLeaderNode
         buildChain
-        -- (pure []) -- dummy
         leaderConf
 
     _ <- liftAff $ forkAff $ do
