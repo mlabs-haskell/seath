@@ -6,22 +6,40 @@ module Seath.Test.HttpDebug
   , userHandlerSendAction
   ) where
 
-import Contract.Prelude
-import Seath.Core.Types
-
-import Aeson (class DecodeAeson, class EncodeAeson, decodeAeson, decodeJsonString)
+import Aeson (class DecodeAeson, class EncodeAeson, decodeJsonString)
 import Affjax as Affjax
 import Affjax.ResponseFormat as ResponseFormat
-import Contract.Address (PaymentPubKey(..), PaymentPubKeyHash(..), PubKeyHash(..), getWalletAddressesWithNetworkTag)
+import Contract.Address (PubKeyHash, getWalletAddressesWithNetworkTag)
 import Contract.Config (emptyHooks)
-import Contract.Monad (Contract, launchAff_, liftedM)
+import Contract.Monad (Contract, launchAff_, liftedM, runContractInEnv)
+import Contract.Prelude
+  ( Aff
+  , Either(..)
+  , LogLevel(..)
+  , bind
+  , discard
+  , either
+  , fst
+  , liftAff
+  , liftEffect
+  , log
+  , note
+  , pure
+  , ($)
+  , (<$>)
+  , (<<<)
+  , (<>)
+  , (==)
+  , (>>=)
+  , (>>>)
+  )
 import Contract.Test (withKeyWallet)
-import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
+import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
-import Ctl.Internal.Types.ScriptLookups (ownPaymentPubKeyHash)
 import Data.Array (head)
 import Data.Bifunctor (lmap)
+import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Maybe (Maybe(Nothing))
 import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
@@ -31,21 +49,38 @@ import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (delay, forkAff)
-import Effect.Ref as Ref
 import Payload.ResponseTypes (Response(..))
 import Prelude (show)
-import Seath.Core.Types (ChangeAddress(..), UserAction(..))
+import Seath.Core.ChainBuilder as ChainBuilder
+import Seath.Core.Types
+  ( ChangeAddress(..)
+  , CoreConfiguration(..)
+  , UserAction(..)
+  )
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(..), JSend, UID(..))
 import Seath.Network.Leader as Leader
-import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types (ActionStatus(..), GetStatusError(..), IncludeActionError(..), LeaderConfiguration(..), LeaderNode(..), LeaderState(..), UserConfiguration(..), UserNode(..), UserState(..))
+import Seath.Network.Types
+  ( ActionStatus
+  , GetStatusError(..)
+  , IncludeActionError(..)
+  , LeaderConfiguration(..)
+  , LeaderNode
+  , UserConfiguration(..)
+  , UserNode
+  )
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
+import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
-import Seath.Test.Examples.Addition.Types (AdditionAction(..))
+import Seath.Test.Examples.Addition.Types
+  ( AdditionAction(..)
+  , AdditionDatum
+  , AdditionRedeemer
+  , AdditionValidator
+  )
 import Undefined (undefined)
 
 main :: Effect Unit
@@ -53,46 +88,58 @@ main = do
   runWithPlutip
 
 runWithPlutip :: Effect Unit
-runWithPlutip = launchAff_ $ runPlutipContract config distrib $
-  \(a /\ b) -> do
-    -- testAction <- genAction a
-    leaderPKH <- withKeyWallet a getPublicKeyHash
-
-
-
-    let
-      serverConf :: SeathServerConfig
-      serverConf = undefined
+runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
+  \env (leader /\ user) -> do
+    leaderPKH <- runContractInEnv env $ withKeyWallet leader getPublicKeyHash
+    utxos <- runContractInEnv env $ withKeyWallet leader getWalletUtxos
+    log $ "UTXOS: show " <> show utxos
 
     (userNode :: UserNode AdditionAction) <-
-      liftAff $ Users.startUserNode _testUserConf
+      Users.startUserNode _testUserConf
 
-    let leaderConf = _testLeaderConf  leaderPKH
-    (leaderNode :: LeaderNode AdditionAction) <- Leader.startLeaderNode leaderConf
+    coreConfig <- runContractInEnv env $ withKeyWallet leader $
+      getTestCoreConfig leaderPKH
+    let
+      chainBuilder actions =
+        runContractInEnv env $ withKeyWallet leader $ fst
+          <$> ChainBuilder.buildChain coreConfig actions Nothing
+    let leaderConf = _testLeaderConf leaderPKH
+    (leaderNode :: LeaderNode AdditionAction) <- runContractInEnv env
+      $ withKeyWallet leader
+      $ Leader.startLeaderNode
+          chainBuilder
+          -- (pure []) -- dummy
+          leaderConf
 
     _ <- liftAff $ forkAff $ do
-        log "Starting server"
-        liftEffect $ Server.runServer serverConf leaderNode
-        log "Leader server started"
-    withKeyWallet b $ do
-      log' "Delay before user include action request"
-      delay' 1000.0
+      log "Starting server"
+      let
+        serverConf :: SeathServerConfig
+        serverConf = undefined
+      liftEffect $ Server.runServer serverConf leaderNode
+      log "Leader server started"
+    -- runContractInEnv env $ withKeyWallet user $ do
+    --   log' "Delay before user include action request"
+    --   delay' 1000.0
 
-      log' "Fire user include action request 1"
-      Users.performAction userNode
-        (AddAmount $ BigInt.fromInt 1)
+    --   log' "Fire user include action request 1"
+    --   Users.performAction userNode
+    --     (AddAmount $ BigInt.fromInt 1)
 
-      delay' 5000.0
-      log' "Fire user include action request 2"
-      Users.performAction userNode
-        (AddAmount $ BigInt.fromInt 2)
+    --   -- delay' 5000.0
+    --   log' "Fire user include action request 2"
+    --   Users.performAction userNode
+    --     (AddAmount $ BigInt.fromInt 2)
 
-    liftAff $ Leader.showDebugState leaderNode >>= log
+    -- liftAff $ Leader.showDebugState leaderNode >>= log
 
     log "end"
 
   where
+  log' :: String -> Contract Unit
   log' = liftAff <<< log
+
+  delay' :: Number -> Contract Unit
   delay' = liftAff <<< delay <<< Milliseconds
   distrib =
     ([ BigInt.fromInt 1_000_000_000 ] /\ [ BigInt.fromInt 1_000_000_000 ])
@@ -118,7 +165,7 @@ _testLeaderConf leaderPKH =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 0
     , maxQueueSize: 4
-    , numberOfActionToTriggerChainBuilder: 0
+    , numberOfActionToTriggerChainBuilder: 2
     , maxWaitingTimeBeforeBuildChain: 0
     , leaderPkh: leaderPKH
     }
@@ -189,6 +236,26 @@ userHandlerGetStatus uuid = do
   where
   decode :: forall a. DecodeAeson a => String -> (Either GetStatusError a)
   decode = lmap (show >>> GSOtherError) <<< decodeJsonString
+
+getTestCoreConfig
+  ∷ PubKeyHash
+  → Contract
+      ( CoreConfiguration
+          AdditionAction
+          BigInt
+          AdditionValidator
+          AdditionDatum
+          AdditionRedeemer
+      )
+getTestCoreConfig leaderPublicKeyHash = do
+  vaildatorHash <- Addition.fixedValidatorHash
+
+  pure $ CoreConfiguration
+    { leader: leaderPublicKeyHash
+    , stateVaildatorHash: vaildatorHash
+    , actionHandler: Addition.handleAction
+    , queryBlockchainState: Addition.queryBlockchainState
+    }
 
 -- Plutip config
 config :: PlutipConfig

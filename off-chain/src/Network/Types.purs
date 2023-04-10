@@ -2,8 +2,17 @@ module Seath.Network.Types where
 
 import Contract.Prelude
 
-import Aeson (class DecodeAeson, class EncodeAeson, JsonDecodeError(TypeMismatch), decodeAeson, fromString, getField, toString)
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , JsonDecodeError(TypeMismatch)
+  , decodeAeson
+  , fromString
+  , getField
+  , toString
+  )
 import Contract.Address (PubKeyHash(..))
+import Contract.Monad (Contract)
 import Contract.Transaction (FinalizedTransaction)
 import Ctl.Internal.Helpers (encodeTagged')
 import Ctl.Internal.Types.PubKeyHash (PaymentPubKeyHash(..))
@@ -137,10 +146,11 @@ instance showActionStatus :: Show ActionStatus where
 instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
   encodeAeson = case _ of
     AskForSignature asForSig -> encodeTagged' "AskForSignature" "test" -- FIXME
-    ToBeProcessed i -> encodeTagged'"ToBeProcessed" i 
+    ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
     ToBeSubmited i -> encodeTagged' "ToBeSubmited" i
     Processing -> encodeTagged' "Processing" ""
-    RejectedAtChainBuilder reason -> encodeTagged' "RejectedAtChainBuilder" reason
+    RejectedAtChainBuilder reason -> encodeTagged' "RejectedAtChainBuilder"
+      reason
     RequireNewSignature -> encodeTagged' "RequireNewSignature" ""
     SubmitError err -> encodeTagged' "SubmitError" err
     NotFound -> encodeTagged' "NotFound" ""
@@ -152,10 +162,11 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
     contents <- getField obj "contents"
     case tag of
       "AskForSignature" -> AskForSignature <$> undefined -- FIXME
-      "ToBeProcessed" ->  ToBeProcessed <$> decodeAeson contents
+      "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
       "ToBeSubmited" -> ToBeSubmited <$> decodeAeson contents
       "Processing" -> Right Processing
-      "RejectedAtChainBuilder" -> RejectedAtChainBuilder <$> decodeAeson contents
+      "RejectedAtChainBuilder" -> RejectedAtChainBuilder <$> decodeAeson
+        contents
       "RequireNewSignature" -> Right RequireNewSignature
       "SubmitError" -> SubmitError <$> decodeAeson contents
       "NotFound" -> Right NotFound
@@ -171,7 +182,7 @@ instance showStatusResponseError :: Show GetStatusError where
 
 instance encodeAesonStatusResponseError :: EncodeAeson GetStatusError where
   encodeAeson = case _ of
-    GSOtherError err ->  encodeTagged' "GSOtherError" err
+    GSOtherError err -> encodeTagged' "GSOtherError" err
 
 instance decodeAesonStatusResponseError :: DecodeAeson GetStatusError where
   decodeAeson s = do
@@ -194,6 +205,9 @@ newtype LeaderState a = LeaderState
   { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
   -- For actions that were part of a previous built chain 
   -- and were removed since a previous action failed.
+  , currentBatch :: Ref $ OrderedMap UUID (UserAction a)
+  , chainedTransactions ::
+      Ref $ Array (FinalizedTransaction /\ UserAction a) -- TODO: probably better type needed with UUID
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
   , signatureResponses :: Ref $ OrderedMap UUID (UserAction a)
   , stage :: LeaderServerStage
@@ -202,10 +216,27 @@ newtype LeaderState a = LeaderState
   , numberOfActionsRequestsMade :: MutableInt
   }
 
-getPending :: forall a.LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
+getCurrentBatch
+  :: forall a. LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
+getCurrentBatch (LeaderNode node) =
+  liftEffect $ Ref.read (unwrap node.state).currentBatch
+
+currentBatchEmpty :: forall a. LeaderNode a -> Aff Boolean
+currentBatchEmpty (LeaderNode node) =
+  OMap.isEmpty <$> (liftEffect $ Ref.read (unwrap node.state).currentBatch)
+
+fillCurrentBacth :: forall a. LeaderNode a -> Aff Unit
+fillCurrentBacth ln@(LeaderNode node) = do
+  pending <- getPending ln
+  let
+    batchSize =
+      (unwrap (node.configuration)).numberOfActionToTriggerChainBuilder
+  liftEffect $
+    Ref.write (OMap.take batchSize pending) (unwrap (node.state)).currentBatch
+
+getPending :: forall a. LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 getPending (LeaderNode node) = do
   liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest
-
 
 addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
 addAction action st = liftEffect do
@@ -214,7 +245,16 @@ addAction action st = liftEffect do
     (unwrap st).pendingActionsRequest
   pure actionUUID
 
-numberOfPending :: forall a.LeaderNode a -> Aff Int
+canChain :: forall a. LeaderNode a -> Aff Boolean
+canChain ln@(LeaderNode node) = do
+  numPending <- numberOfPending ln
+  batchEmpty <- currentBatchEmpty ln
+  pure $
+    batchEmpty
+      && numPending >=
+        (unwrap (node.configuration)).numberOfActionToTriggerChainBuilder
+
+numberOfPending :: forall a. LeaderNode a -> Aff Int
 numberOfPending node = OMap.length <$> getPending node
 
 derive instance Newtype (LeaderState a) _
@@ -224,7 +264,7 @@ newtype LeaderConfiguration a = LeaderConfiguration
   { maxWaitingTimeForSignature :: MiliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
-  , maxWaitingTimeBeforeBuildChain :: Int
+  , maxWaitingTimeBeforeBuildChain :: Int -- TODO: how to handle 0 ?
   , leaderPkh :: PubKeyHash
 
   -- FIXME: not sure we should do it like this.
@@ -252,6 +292,9 @@ derive instance Newtype (LeaderConfiguration a) _
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
+  , testChainBuidler ::
+      Array (UserAction a)
+      -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }
 
 derive instance Newtype (LeaderNode a) _

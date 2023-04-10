@@ -5,10 +5,24 @@ import Payload.Client.EncodeParam
 import Payload.Server.Params
 import Undefined
 
-import Aeson (class DecodeAeson, class EncodeAeson, decodeJsonString, encodeAeson, fromString, isString, stringifyAeson, toString)
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , decodeJsonString
+  , encodeAeson
+  , fromString
+  , isString
+  , stringifyAeson
+  , toString
+  )
 import Ctl.Internal.Test.UtxoDistribution (encodeDistribution)
 import Data.Bifunctor (bimap, lmap)
-import Data.String (Pattern(Pattern), Replacement(Replacement), replace, replaceAll)
+import Data.String
+  ( Pattern(Pattern)
+  , Replacement(Replacement)
+  , replace
+  , replaceAll
+  )
 import Data.UUID (UUID, parseUUID)
 import Payload.Client.DecodeResponse (class DecodeResponse)
 import Payload.Client.EncodeBody (class EncodeBody)
@@ -58,7 +72,7 @@ instance epUID :: EncodeParam UID where
   encodeParam = show
 
 instance dpUID :: DecodeParam UID where
-  decodeParam uid = 
+  decodeParam uid =
     note ("Could not parse UUID param from " <> uid) (UID <$> parseUUID uid)
 
 -- Phantom types to make Spec and Handlers more readable

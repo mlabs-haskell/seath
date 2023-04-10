@@ -1,11 +1,13 @@
 module Seath.Network.OrderedMap
   ( OrderedMap(..)
   , empty
+  , isEmpty
   , length
   , lookupPostion
   , orderedElems
   , push
   , splitEither
+  , take
   ) where
 
 import Contract.Prelude
@@ -16,6 +18,7 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
+import Pipes.Prelude (fold')
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -63,3 +66,10 @@ empty = OrderedMap { map: Map.empty, array: [] }
 
 orderedElems :: forall k v. OrderedMap k v -> Array (k /\ v)
 orderedElems (OrderedMap oMap) = Array.reverse oMap.array
+
+isEmpty :: forall k v. OrderedMap k v -> Boolean
+isEmpty (OrderedMap oMap) = Map.isEmpty oMap.map
+
+take :: forall k v. Ord k => Int -> OrderedMap k v -> OrderedMap k v
+take n (OrderedMap oMap) = foldr (uncurry push) empty
+  (Array.take n oMap.array)

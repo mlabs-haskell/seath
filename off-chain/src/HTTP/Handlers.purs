@@ -1,7 +1,6 @@
 module Seath.HTTP.Handlers where
 
 import Prelude
-import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError, LeaderNode)
 
 import Contract.Prelude (Either(..), log, unwrap)
 import Data.Bifunctor (rmap)
@@ -9,6 +8,12 @@ import Data.Either (Either)
 import Effect.Aff (Aff)
 import Seath.HTTP.Types (IncludeRequest, JSend, UID(UID), toJsend)
 import Seath.Network.Leader as Leader
+import Seath.Network.Types
+  ( ActionStatus
+  , GetStatusError
+  , IncludeActionError
+  , LeaderNode
+  )
 import Undefined (undefined)
 
 mkHandlers leaderNode =
@@ -46,7 +51,8 @@ actionStatus
   -> Aff (JSend GetStatusError ActionStatus)
 actionStatus leaderNode request = do
   log $ "Leader HTTP-server: action status request: " <> show request
-  (result :: ActionStatus) <- leaderNode `Leader.actionStatus` (unwrap request.params.uid)
+  (result :: ActionStatus) <- leaderNode `Leader.actionStatus`
+    (unwrap request.params.uid)
   let response = toJsend $ (Right result :: Either GetStatusError ActionStatus)
   log $ "Leader HTTP-server: action status response: " <> show response
   pure response

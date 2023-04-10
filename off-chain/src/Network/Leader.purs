@@ -14,8 +14,12 @@ module Seath.Network.Leader
 
 import Contract.Prelude
 
-import Contract.Monad (Contract)
+import Contract.Monad (Contract, runContractInEnv)
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
+import Control.Monad.Reader (asks)
+import Control.Monad.Reader.Class (ask)
+import Ctl.Internal.Types.ScriptLookups (ownPaymentPubKeyHash)
+import Data.Array as Array
 import Data.Either (Either)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple.Nested (type (/\))
@@ -24,10 +28,30 @@ import Data.Unit (Unit)
 import Effect.Aff (Aff, delay, forkAff)
 import Effect.Ref as Ref
 import Options.Applicative (action)
+import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types (ActionStatus(..), IncludeActionError(..), LeaderConfiguration, LeaderNode(..), LeaderServerStage(..), LeaderServerStateInfo(..), LeaderState(..), SignedTransaction, addAction, getPending, maxPendingCapacity, numberOfPending, signTimeout)
+import Seath.Network.Types
+  ( ActionStatus(..)
+  , IncludeActionError(..)
+  , LeaderConfiguration
+  , LeaderNode(..)
+  , LeaderServerStage(..)
+  , LeaderServerStateInfo(..)
+  , LeaderState(..)
+  , SignedTransaction
+  , addAction
+  , canChain
+  , currentBatchEmpty
+  , fillCurrentBacth
+  , getCurrentBatch
+  , getPending
+  , maxPendingCapacity
+  , numberOfPending
+  , signTimeout
+  )
+import Seath.Network.Utils (getPublicKeyHash)
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -39,9 +63,12 @@ includeAction
 includeAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
   pendingCount <- numberOfPending ln
-  if (pendingCount < maxPendingCapacity node.configuration) then
+  if (pendingCount < maxPendingCapacity node.configuration) then do
     -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
-    (Right <$> addAction action node.state)
+    result <- (Right <$> addAction action node.state)
+    isCanChain <- canChain ln
+    when isCanChain $ fillCurrentBacth ln
+    pure result
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
 
 actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
@@ -88,13 +115,24 @@ getNextBatchOfActions = undefined
 
 -- (getAbatchOfPendingActions undefined undefined)
 
-startLeaderNode :: forall a. LeaderConfiguration a -> Contract (LeaderNode a)
-startLeaderNode conf = do
+startLeaderNode
+  :: forall a
+   . Show a
+  => ( Array (UserAction a)
+       -> Aff (Array (FinalizedTransaction /\ UserAction a))
+     )
+  -> LeaderConfiguration a
+  -> Contract (LeaderNode a)
+startLeaderNode chainBuilder conf = do
   pending <- liftEffect $ Ref.new OMap.empty
+  currentBatch <- liftEffect $ Ref.new OMap.empty
+  chainedTransactions <- liftEffect $ Ref.new []
   let
     node = LeaderNode
       { state: LeaderState
           { pendingActionsRequest: pending
+          , currentBatch: currentBatch
+          , chainedTransactions: chainedTransactions
           , prioritaryPendingActions: undefined
           , signatureResponses: undefined
           , stage: undefined
@@ -102,21 +140,33 @@ startLeaderNode conf = do
 
           }
       , configuration: conf
+      , testChainBuidler: chainBuilder
       }
   initChainBuilder node
   pure node
 
-initChainBuilder :: forall a. LeaderNode a -> Contract Unit
-initChainBuilder leaderNode = liftAff do
-  _fiber <- forkAff go
+initChainBuilder :: forall a. Show a => LeaderNode a -> Contract Unit
+initChainBuilder leaderNode@(LeaderNode node) = do
+  log $ "initChainBuilder"
+  _fiber <- liftAff $ forkAff (go)
   pure unit
   where
   go = do
-    pending <- getPending leaderNode
-    when (OMap.length pending >= 2) do --todo: get real one from config
-      log "Making chain"
+    log $ "Check can batch"
+
+    batchEmpty <- currentBatchEmpty leaderNode
+    when (not batchEmpty) do --todo: get real one from config
+      log $ "CAN batch: getCurrentBatch"
+      batch <- getCurrentBatch leaderNode
+      log $ "CAN batch: make actions"
+      let actions = snd <$> OMap.orderedElems batch
+      log $ "CAN batch: run batcher"
+      txsAndActions <- node.testChainBuidler actions
+      -- (txsAndActions /\ _ /\ _) <- (runContractInEnv env $ ChainBuilder.buildChain config actions Nothing)
+
+      log $ "The chain: " <> show txsAndActions
     delay $ Milliseconds 1000.0
-    go
+    (go)
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
