@@ -8,53 +8,37 @@ import Contract.Config
   , mkCtlBackendParams
   , testnetConfig
   )
-import Contract.Monad (launchAff_, runContract)
-import Contract.Wallet (KeyWallet)
+import Contract.Monad (launchAff_, withContractEnv)
 import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (drop, (!!))
-import Data.Array.NonEmpty as NE
-import Data.BigInt as BigInt
-import Data.Log.Level as LogLevel
 import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect.Aff (error)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
-import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
-import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
-import Seath.Test.Examples.Addition.Types (AdditionAction, AdditionState)
-import Seath.Test.Types (RunnerConfiguration(RunnerConfiguration))
 import Seath.Test.Utils (makeKeyWallet)
+import Test.Examples.Addition.SeathNetwork as SeathNet
 
 run :: Effect Unit
 run = launchAff_ $ do
   seathKeys <- mekeSeathKeys "./test/keys/seath_keys"
-  runnerConf <- liftMaybe (error "Could not build runner config") $ mkRunnerConf
-    seathKeys
+  (admin /\ leader /\ users) <-
+    liftMaybe (error "Could not build runner config") $ mkRunnerConf
+      seathKeys
 
-  runContract config (SeathAddition.mainTest runnerConf)
+  withContractEnv config $ \env -> do
+    SeathNet.mainTest env admin leader users
 
   where
   mekeSeathKeys keysDir = do
     keyDirs <- readdir keysDir
     for keyDirs $ \keyDir -> makeKeyWallet $ Path.concat [ keysDir, keyDir ]
 
-  mkRunnerConf
-    :: Array KeyWallet
-    -> Maybe (RunnerConfiguration AdditionState AdditionAction)
   mkRunnerConf keys = do
     admin <- keys !! 0
     leader <- keys !! 1
-    participants <- NE.fromArray $ drop 2 keys
-    pure $
-      RunnerConfiguration
-        { admin: admin
-        , leader: undefined leader
-        , participants: undefined participants
-        , minAdaRequired: BigInt.fromInt 200
-        , expectedStateChange: (+) (length participants * stateChangePerAction)
-        , logLevel: LogLevel.Debug
-        }
+    users <- pure $ drop 2 keys
+    pure (admin /\ leader /\ users)
 
 config :: ContractParams
 config = testnetConfig

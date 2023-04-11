@@ -3,7 +3,11 @@ module Seath.Test.PlutipRunner (run) where
 import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), emptyHooks)
 import Contract.Monad (Contract, launchAff_, liftedM)
-import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
+import Contract.Test.Plutip
+  ( PlutipConfig
+  , runPlutipContract
+  , withPlutipContractEnv
+  )
 import Contract.Wallet (KeyWallet, withKeyWallet)
 import Control.Alternative (pure)
 import Control.Monad (bind)
@@ -42,37 +46,16 @@ import Seath.Test.Types
   , RunnerConfiguration(RunnerConfiguration)
   )
 import Seath.Test.Utils (gen2Contract)
+import Test.Examples.Addition.SeathNetwork as SeathNet
 import Type.Function (type ($))
 import Undefined (undefined)
 
 run :: Effect Unit
 run = launchAff_
-  $ runPlutipContract config (makeDistribution 4)
+  $ withPlutipContractEnv config (makeDistribution 4)
   $
-    \((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
-      participantsWallets' <- liftMaybe (error "No participants found")
-        (NE.fromArray participantsWallets)
-      leaderNode <- makeLeaderNode
-      let
-        numberOfParticipants = length participantsWallets'
-        indexes = range 0 numberOfParticipants
-        indexedWallets = zip indexes participantsWallets'
-
-      participants <- makeParticipantsFromIndexedWallets indexedWallets
-
-      let
-        runnerConf =
-          RunnerConfiguration
-            { admin: adminWallet
-            , leader: Leader { wallet: leaderWallet, node: leaderNode }
-            , participants
-            , minAdaRequired: BigInt.fromInt 200
-            , expectedStateChange: (+)
-                (BigInt.fromInt numberOfParticipants * stateChangePerAction)
-            , logLevel: LogLevel.Debug
-            }
-
-      SeathAddition.mainTest runnerConf
+    \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
+      SeathNet.mainTest env adminWallet leaderWallet participantsWallets
 
 config :: PlutipConfig
 config =
