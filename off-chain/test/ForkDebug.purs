@@ -30,12 +30,12 @@ import Node.FS.Aff (readdir)
 import Node.Path as Path
 import Prelude (show)
 import Seath.Test.Utils (makeKeyWallet)
-import Undefined (undefined)
 
 main :: Effect Unit
 main = do
   -- runWithPlutip
-  runTestnet
+  -- runTestnet
+  testFork
 
 runWithPlutip :: Effect Unit
 runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
@@ -117,3 +117,15 @@ contractConfig = testnetConfig
       }
   , logLevel = Info
   }
+
+testFork :: Effect Unit
+testFork = launchAff_ $ do
+  withContractEnv contractConfig $ \_env -> do
+    _ <- forkAff loop
+    delay (Milliseconds 2000.0)
+    log "end"
+  where
+    loop = do
+      log "loop"
+      delay (Milliseconds 500.0)
+      loop
