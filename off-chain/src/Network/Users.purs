@@ -30,10 +30,10 @@ import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
-  ( GetStatusError
+  ( ActionStatus
+  , GetStatusError
   , IncludeActionError
   , SignedTransaction
-  , ActionStatus
   , UserConfiguration(..)
   , UserNode(..)
   , UserState(..)

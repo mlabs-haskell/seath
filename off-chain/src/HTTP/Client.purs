@@ -3,17 +3,100 @@ module Seath.HTTP.Client where
 import Prelude
 import Type.Proxy
 
+import Aeson (class EncodeAeson)
+import Data.Either (Either)
 import Effect (Effect)
+import Effect.Aff (Aff)
+import Payload.Client (ClientError, Options)
 import Payload.Client as Client
 import Payload.Client.ClientApi (class ClientApi)
+import Payload.Headers (Headers)
+import Payload.ResponseTypes (Response)
 import Payload.Server as Payload
+import Payload.Spec (GET, POST, Spec)
 import Seath.HTTP.Handlers as Handlers
+import Seath.HTTP.Spec (LeaderRoutes)
 import Seath.HTTP.Spec as Spec
-import Seath.Network.Types (UserNode)
+import Seath.HTTP.Types (IncludeRequest, JSend, UID)
+import Seath.Network.Types
+  ( ActionStatus
+  , GetStatusError
+  , IncludeActionError
+  , UserNode
+  )
 import Seath.Test.Examples.Addition.Types (AdditionAction)
 
-mkUserClient =
+mkUserClient
+  :: forall a
+   . EncodeAeson a
+  => Proxy a
+  -> { leader ::
+         { includeAction ::
+             { body :: IncludeRequest a }
+             -> Aff
+                  (Either ClientError (Response (JSend IncludeActionError UID)))
+         , includeAction_ ::
+             { extraHeaders :: Headers }
+             -> { body :: IncludeRequest a }
+             -> Aff
+                  (Either ClientError (Response (JSend IncludeActionError UID)))
+         , actionStatus ::
+             { params :: { uid :: UID } }
+             -> Aff
+                  ( Either ClientError
+                      (Response (JSend GetStatusError ActionStatus))
+                  )
+         , actionStatus_ ::
+             { extraHeaders :: Headers }
+             -> { params :: { uid :: UID } }
+             -> Aff
+                  ( Either ClientError
+                      (Response (JSend GetStatusError ActionStatus))
+                  )
+         }
+     }
+mkUserClient _ =
   let
+    opts :: Options
     opts = Client.defaultOpts { baseUrl = "http://localhost:3000" } -- FIXME: hardcoded
+
+    -- Do not erase type here, if things go wrong with types, things can go quite 
+    -- dark without this.
+    mkClient
+      :: ( Options
+           -> Spec
+                { leader :: LeaderRoutes a
+                }
+           -> { leader ::
+                  { includeAction ::
+                      { body :: IncludeRequest a }
+                      -> Aff
+                           ( Either ClientError
+                               (Response (JSend IncludeActionError UID))
+                           )
+                  , includeAction_ ::
+                      { extraHeaders :: Headers }
+                      -> { body :: IncludeRequest a }
+                      -> Aff
+                           ( Either ClientError
+                               (Response (JSend IncludeActionError UID))
+                           )
+                  , actionStatus ::
+                      { params :: { uid :: UID } }
+                      -> Aff
+                           ( Either ClientError
+                               (Response (JSend GetStatusError ActionStatus))
+                           )
+                  , actionStatus_ ::
+                      { extraHeaders :: Headers }
+                      -> { params :: { uid :: UID } }
+                      -> Aff
+                           ( Either ClientError
+                               (Response (JSend GetStatusError ActionStatus))
+                           )
+                  }
+              }
+         )
+    mkClient = Client.mkClient
   in
-    Client.mkClient opts (Spec.spec)
+    mkClient opts (Spec.spec)

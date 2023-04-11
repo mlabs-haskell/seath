@@ -10,8 +10,7 @@ module Seath.Network.Leader
   , stopLeaderServer
   , submitChain
   , waitForChainSignatures
-  )
-  where
+  ) where
 
 import Contract.Prelude
 
@@ -26,7 +25,21 @@ import Options.Applicative (action)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types (ActionStatus(..), IncludeActionError(..), LeaderConfiguration, LeaderNode(..), LeaderServerStage(..), LeaderServerStateInfo(..), LeaderState(..), SignedTransaction, addAction, getPending, maxPendingCapacity, numberOfPending, signTimeout)
+import Seath.Network.Types
+  ( ActionStatus(..)
+  , IncludeActionError(..)
+  , LeaderConfiguration
+  , LeaderNode(..)
+  , LeaderServerStage(..)
+  , LeaderServerStateInfo(..)
+  , LeaderState(..)
+  , SignedTransaction
+  , addAction
+  , getPending
+  , maxPendingCapacity
+  , numberOfPending
+  , signTimeout
+  )
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -111,6 +124,7 @@ startLeaderServer = undefined
 
 stopLeaderServer :: forall a. LeaderNode a -> Aff Unit
 stopLeaderServer = undefined
+
 -- TODO: left to not to break compilation - END
 
 -- | To build a new mutable `LeaderState`

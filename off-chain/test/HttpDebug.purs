@@ -59,6 +59,7 @@ import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
+import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
 
 main :: Effect Unit
@@ -148,7 +149,7 @@ userHandlerSendAction
   => UserAction a
   -> Aff (Either IncludeActionError UUID)
 userHandlerSendAction action = do
-  res <- (Client.mkUserClient).leader.includeAction
+  res <- ((Client.mkUserClient) (Proxy :: Proxy a)).leader.includeAction
     { body: IncludeRequest action }
   pure $ case res of
     Right resp -> do
@@ -170,15 +171,17 @@ userHandlerSendAction action = do
     Aeson.EncodeAeson t3
   The instance head contains unknown type variables. Consider adding a type annotation.
 -}
--- userHandlerGetStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
--- userHandlerGetStatus uuid = do
---   res <- (Client.mkUserClient).leader.actionStatus  { params: {uid: UID uuid} }
---   pure $ case res of
---     Right resp -> do
---       log $ "Get staus resp: " <> show resp
---       Right Processing
---       -- convertResonse resp
---     Left r -> Left $ GSOtherError $ "Leader failed to respond: " <> show r
+userHandlerGetStatus2 :: UUID -> Aff (Either GetStatusError ActionStatus)
+userHandlerGetStatus2 uuid = do
+  res <-
+    ((Client.mkUserClient) (Proxy :: Proxy AdditionAction)).leader.actionStatus
+      { params: { uid: UID uuid } }
+  pure $ case res of
+    Right resp -> do
+      log $ "Get staus resp: " <> show resp
+      Right Processing
+    -- convertResonse resp
+    Left r -> Left $ GSOtherError $ "Leader failed to respond: " <> show r
 
 userHandlerGetStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
 userHandlerGetStatus uuid = do
