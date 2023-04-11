@@ -48,7 +48,7 @@ push key value (OrderedMap ordMap) =
   let
     currIndex = Array.length ordMap.array
     map = Map.insert key (currIndex /\ value) ordMap.map
-    array = Array.cons (key /\ value) ordMap.array
+    array = Array.snoc ordMap.array (key /\ value)
   in
     OrderedMap { map, array }
 
@@ -62,4 +62,4 @@ empty :: forall a b. OrderedMap a b
 empty = OrderedMap { map: Map.empty, array: [] }
 
 orderedElems :: forall k v. OrderedMap k v -> Array (k /\ v)
-orderedElems (OrderedMap oMap) = Array.reverse oMap.array
+orderedElems (OrderedMap oMap) = oMap.array

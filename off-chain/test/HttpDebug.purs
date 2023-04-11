@@ -167,15 +167,14 @@ userHandlerGetStatus2 uuid = do
     ((Client.mkUserClient) (Proxy :: Proxy AdditionAction)).leader.actionStatus
       { params: { uid: UID uuid } }
   pure $ case res of
-    Right resp ->  convertResonse resp
+    Right resp -> convertResonse resp
     Left r -> Left $ GSOtherError $ "Leader failed to respond: " <> show r
-    where
-    convertResonse (Response r) =
-      if (r.body.status == "success") then
-        lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
-      else either (show >>> GSOtherError >>> Left) Left
-        (decodeJsonString r.body.data)
-
+  where
+  convertResonse (Response r) =
+    if (r.body.status == "success") then
+      lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
+    else either (show >>> GSOtherError >>> Left) Left
+      (decodeJsonString r.body.data)
 
 -- Plutip config
 config :: PlutipConfig
