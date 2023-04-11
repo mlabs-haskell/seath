@@ -20,37 +20,20 @@ import Control.Monad.Reader (asks)
 import Control.Monad.Reader.Class (ask)
 import Ctl.Internal.Types.ScriptLookups (ownPaymentPubKeyHash)
 import Data.Array as Array
+import Data.Bifunctor (rmap)
 import Data.Either (Either)
 import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, delay, forkAff)
+import Effect.Aff (Aff, delay, forkAff, try)
 import Effect.Ref as Ref
 import Options.Applicative (action)
 import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types
-  ( ActionStatus(..)
-  , IncludeActionError(..)
-  , LeaderConfiguration
-  , LeaderNode(..)
-  , LeaderServerStage(..)
-  , LeaderServerStateInfo(..)
-  , LeaderState(..)
-  , SignedTransaction
-  , addAction
-  , canChain
-  , currentBatchEmpty
-  , fillCurrentBacth
-  , getCurrentBatch
-  , getPending
-  , maxPendingCapacity
-  , numberOfPending
-  , signTimeout
-  )
+import Seath.Network.Types (ActionStatus(..), IncludeActionError(..), LeaderConfiguration, LeaderNode(..), LeaderServerStage(..), LeaderServerStateInfo(..), LeaderState(..), SignedTransaction, addAction, canChain, currentBatchEmpty, fillCurrentBacth, getCurrentBatch, getPending, maxPendingCapacity, numberOfPending, signTimeout)
 import Seath.Network.Utils (getPublicKeyHash)
 import Type.Function (type ($))
 import Undefined (undefined)
@@ -156,9 +139,11 @@ initChainBuilder leaderNode@(LeaderNode node) = do
     batchEmpty <- currentBatchEmpty leaderNode
     when (not batchEmpty) do --todo: get real one from config
       batch <- getCurrentBatch leaderNode
+      -- batch <- getPending leaderNode
       let actions = snd <$> OMap.orderedElems batch
-      txsAndActions <- node.testChainBuild actions
-      log $ "The chain: " <> show txsAndActions
+      log $ "Batch len: " <> show (Array.length actions)
+      txsAndActions <- try $ node.testChainBuild actions
+      log $ "The chain: " <> show (rmap Array.length txsAndActions)
     delay $ Milliseconds 1000.0
     (go)
 

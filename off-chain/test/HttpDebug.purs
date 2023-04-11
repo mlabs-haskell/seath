@@ -12,25 +12,52 @@ import Aeson (class DecodeAeson, class EncodeAeson, decodeJsonString)
 import Affjax as Affjax
 import Affjax.ResponseFormat as ResponseFormat
 import Contract.Address (PubKeyHash, getWalletAddressesWithNetworkTag)
-import Contract.Config (emptyHooks)
+import Contract.Config
+  ( ContractParams
+  , defaultOgmiosWsConfig
+  , emptyHooks
+  , mkCtlBackendParams
+  , testnetConfig
+  )
+import Contract.Config (ContractParams, emptyHooks)
+import Contract.Log (logInfo')
 import Contract.Monad (Contract, launchAff_, liftedM, runContractInEnv)
+import Contract.Monad (launchAff_, runContractInEnv, withContractEnv)
+import Contract.Test (withKeyWallet)
 import Contract.Test (withKeyWallet)
 import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
+import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
+import Contract.Utxos (getWalletUtxos)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
+import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head)
+import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
+import Data.BigInt as BigInt
 import Data.Maybe (Maybe(Nothing))
+import Data.Maybe (Maybe(Nothing))
+import Data.Time.Duration (Milliseconds(..))
 import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
+import Data.Time.Duration (Seconds(Seconds))
 import Data.Tuple.Nested ((/\))
+import Data.Tuple.Nested ((/\))
+import Data.UInt (fromInt) as UInt
 import Data.UInt (fromInt) as UInt
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
+import Data.Unit (Unit)
 import Effect (Effect)
+import Effect (Effect)
+import Effect.Aff (delay, error)
 import Effect.Aff (delay, forkAff, try)
+import Effect.Aff (forkAff)
+import Node.FS.Aff (readdir)
+import Node.Path as Path
 import Payload.ResponseTypes (Response(..))
+import Prelude (show)
 import Prelude (show)
 import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types
@@ -66,21 +93,24 @@ import Seath.Test.Examples.Addition.Types
   , AdditionRedeemer
   , AdditionValidator
   )
+import Seath.Test.Utils (makeKeyWallet)
+import Undefined (undefined)
 import Undefined (undefined)
 
 main :: Effect Unit
 main = do
-  runWithPlutip
+  -- runWithPlutip
+  runWithPreprod
 
 runWithPlutip :: Effect Unit
 runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
   \env (leader /\ user) -> do
-  -- TODO: ? wait till funds appear in wallets
+    -- TODO: ? wait till funds appear in wallets
     leaderPKH <- runContractInEnv env $ withKeyWallet leader getPublicKeyHash
     utxos <- runContractInEnv env $ withKeyWallet leader getWalletUtxos
     log $ "UTXOS: show " <> show utxos
 
-    _ <- runContractInEnv env $ withKeyWallet leader $ initialSeathContract
+    -- _ <- runContractInEnv env $ withKeyWallet leader $ initialSeathContract
 
     (userNode :: UserNode AdditionAction) <-
       Users.startUserNode _testUserConf
@@ -139,9 +169,10 @@ runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
     _ <- forkAff $
       do
         log "!! With forkAff"
-        runContractInEnv env $ withKeyWallet leader $ 
+        runContractInEnv env $ withKeyWallet leader $
           fst <$> ChainBuilder.buildChain coreConfig userActions Nothing
     -- debug core chaining failure - END
+    delay (Milliseconds 10000.0)
     log "end"
 
   where
@@ -166,6 +197,109 @@ genAction w =
       , userUTxOs: ownUtxos
       , changeAddress: ChangeAddress changeAddress
       }
+
+runWithPreprod :: Effect Unit
+runWithPreprod = launchAff_ do
+  seathKeys <- mekeSeathKeys "./test/keys/seath_keys"
+  withContractEnv contractConfig $ \env -> do
+    leader <- liftMaybe (error "No key for leader") (seathKeys !! 0)
+    user <- liftMaybe (error "No key for user") (seathKeys !! 1)
+    leaderPKH <- runContractInEnv env $ withKeyWallet leader getPublicKeyHash
+    utxos <- runContractInEnv env $ withKeyWallet leader getWalletUtxos
+    log $ "UTXOS: show " <> show utxos
+
+    -- _ <- runContractInEnv env $ withKeyWallet leader $ initialSeathContract
+
+    (userNode :: UserNode AdditionAction) <-
+      Users.startUserNode _testUserConf
+
+    coreConfig <- runContractInEnv env $ withKeyWallet leader $
+      getTestCoreConfig leaderPKH
+    let
+      buildChain actions =
+        runContractInEnv env $ withKeyWallet leader $ fst
+          <$> ChainBuilder.buildChain coreConfig actions Nothing
+
+    let leaderConf = _testLeaderConf leaderPKH
+    (leaderNode :: LeaderNode AdditionAction) <-
+      Leader.startLeaderNode
+        buildChain
+        leaderConf
+
+    _ <- liftAff $ forkAff $ do
+      log "Starting server"
+      let
+        serverConf :: SeathServerConfig
+        serverConf = undefined
+      liftEffect $ Server.runServer serverConf leaderNode
+
+      log "Leader server started"
+
+    runContractInEnv env $ withKeyWallet user $ do
+      log' "Delay before user include action request"
+      delay' 1000.0
+
+      log' "Fire user include action request 1"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 1)
+
+      -- delay' 5000.0
+      log' "Fire user include action request 2"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 2)
+
+      log' "Fire user include action request 3"
+      Users.performAction userNode
+        (AddAmount $ BigInt.fromInt 3)
+
+    liftAff $ Leader.showDebugState leaderNode >>= log
+
+    userActions <- (map snd <<< OMap.orderedElems) <$> (getPending leaderNode)
+
+    log $ "User actions: " <> show userActions
+
+    -- FIXME: debug core chaining failure - BEGIN
+    -- it works well and performs chaining with calling it directly
+    -- tryBuildResult <- try $ buildChain userActions
+    -- log $ "Try build result 1: " <> show tryBuildResult
+
+    -- -- it works well and performs chaining when calling as handler for LedaerNode
+    -- tryBuildResult2 <- try $ (unwrap leaderNode).testChainBuild userActions
+    -- log $ "Try build result 2: " <> show tryBuildResult2
+
+    -- but it will break if forkAff
+    -- _ <- forkAff $
+    --   do
+    --     log "!! With forkAff"
+    --     res <- try $ runContractInEnv env $ withKeyWallet leader $
+    --       fst <$> ChainBuilder.buildChain coreConfig userActions Nothing
+    --     log $ "Try build result 2: " <> show res
+    -- -- debug core chaining failure - END
+    delay (Milliseconds 100000.0)
+    log "end"
+  where
+  log' :: String -> Contract Unit
+  log' = liftAff <<< log
+
+  delay' :: Number -> Contract Unit
+  delay' = liftAff <<< delay <<< Milliseconds
+  mekeSeathKeys keysDir = do
+    keyDirs <- readdir keysDir
+    for keyDirs $ \keyDir -> makeKeyWallet $ Path.concat [ keysDir, keyDir ]
+
+contractConfig :: ContractParams
+contractConfig = testnetConfig
+  { backendParams = mkCtlBackendParams
+      { ogmiosConfig: defaultOgmiosWsConfig
+      , kupoConfig:
+          { port: UInt.fromInt 1442
+          , host: "localhost"
+          , secure: false
+          , path: Nothing
+          }
+      }
+  , logLevel = Info
+  }
 
 -- Assembling LeaderNode
 

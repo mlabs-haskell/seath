@@ -66,10 +66,6 @@ buildChain
            userStateType
        )
 buildChain configW@(CoreConfiguration config) actions mState = do
-  utxos <- getWalletUtxos
-  logInfo' $ "buildChain UTXOs: " <> show utxos
-  ownPKs <- ownPubKeyHashes
-  logInfo' $ "buildChain own PKHs: " <> show ownPKs
   lastResult <- case mState of
     Just state -> pure state
     Nothing -> config.queryBlockchainState
