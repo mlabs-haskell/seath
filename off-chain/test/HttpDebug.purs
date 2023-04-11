@@ -137,8 +137,7 @@ _testUserConf = UserConfiguration
       { submitToLeader: userHandlerSendAction -- TODO: arch: naming
       , acceptSignedTransaction: undefined
       , rejectToSign: undefined
-      -- , getActionStatus: (\_uid -> pure $ ToBeProcessed 1) -- FIXME: mocked
-      , getActionStatus: userHandlerGetStatus
+      , getActionStatus: userHandlerGetStatus2
       }
 
   }
@@ -162,42 +161,21 @@ userHandlerSendAction action = do
     else either (show >>> IAOtherError >>> Left) Left
       (decodeJsonString r.body.data)
 
-{- FIXME 
-  used Affjax insted - can't compile with 
-
-  res <- (Client.mkUserClient).leader.actionStatus  { params: {uid: UID uuid} }
-          ^^^^^^^^^^^^^^^^^^^
-  No type class instance was found for
-    Aeson.EncodeAeson t3
-  The instance head contains unknown type variables. Consider adding a type annotation.
--}
 userHandlerGetStatus2 :: UUID -> Aff (Either GetStatusError ActionStatus)
 userHandlerGetStatus2 uuid = do
   res <-
     ((Client.mkUserClient) (Proxy :: Proxy AdditionAction)).leader.actionStatus
       { params: { uid: UID uuid } }
   pure $ case res of
-    Right resp -> do
-      log $ "Get staus resp: " <> show resp
-      Right Processing
-    -- convertResonse resp
+    Right resp ->  convertResonse resp
     Left r -> Left $ GSOtherError $ "Leader failed to respond: " <> show r
-
-userHandlerGetStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
-userHandlerGetStatus uuid = do
-  let url = "http://localhost:3000/leader/action-status/" <> show (UID uuid)
-  resp <- Affjax.get ResponseFormat.string url
-  pure $ case resp of
-    Left _ -> Left $ GSOtherError "Got Affjax error"
-    Right r -> do
-      (jsend :: JSend GetStatusError ActionStatus) <- decode r.body
-      if (jsend.status == "success") then
-        decode jsend.data
+    where
+    convertResonse (Response r) =
+      if (r.body.status == "success") then
+        lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
       else either (show >>> GSOtherError >>> Left) Left
-        (decode jsend.data)
-  where
-  decode :: forall a. DecodeAeson a => String -> (Either GetStatusError a)
-  decode = lmap (show >>> GSOtherError) <<< decodeJsonString
+        (decodeJsonString r.body.data)
+
 
 -- Plutip config
 config :: PlutipConfig
