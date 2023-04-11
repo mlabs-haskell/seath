@@ -11,9 +11,13 @@ import Contract.Prelude
 import Aeson (class EncodeAeson, decodeJsonString)
 import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (emptyHooks)
-import Contract.Monad (Contract, launchAff_, liftedM)
+import Contract.Monad (Contract, launchAff_, liftedM, runContractInEnv)
 import Contract.Test (withKeyWallet)
-import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
+import Contract.Test.Plutip
+  ( PlutipConfig
+  , runPlutipContract
+  , withPlutipContractEnv
+  )
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Data.Array (head)
@@ -57,15 +61,18 @@ main = do
   runWithPlutip
 
 runWithPlutip :: Effect Unit
-runWithPlutip = launchAff_ $ runPlutipContract config distrib $
-  \(a /\ _b) -> do
-    testAction <- genAction a
+runWithPlutip = launchAff_ $ withPlutipContractEnv config distrib $
+  \env (leader /\ user) -> do
     let
       serverConf :: SeathServerConfig
       serverConf = undefined
 
+      makeAction action =
+        runContractInEnv env $ withKeyWallet leader
+          $ mkActionContract action
+
     (userNode :: UserNode AdditionAction) <-
-      liftAff $ Users.startUserNode _testUserConf
+      liftAff $ Users.startUserNode makeAction _testUserConf
 
     (leaderNode :: LeaderNode AdditionAction) <- liftAff $
       Leader.startLeaderNode _testLeaderConf
@@ -81,12 +88,10 @@ runWithPlutip = launchAff_ $ runPlutipContract config distrib $
       log "Fire user include action request 1"
       Users.performAction userNode
         (AddAmount $ BigInt.fromInt 1)
-        (const testAction)
       delay $ Milliseconds 5000.0
       log "Fire user include action request 2"
       Users.performAction userNode
         (AddAmount $ BigInt.fromInt 2)
-        (const testAction)
       Leader.showDebugState leaderNode >>= log
       log "end"
 
@@ -198,3 +203,16 @@ config =
   , clusterConfig:
       { slotLength: Seconds 1.0 }
   }
+
+mkActionContract :: forall a. a -> Contract (UserAction a)
+mkActionContract action = do
+  ownUtxos <- liftedM "Error making action: no UTxOs found" getWalletUtxos
+  publicKeyHash <- getPublicKeyHash
+  changeAddress <- liftedM "can't get Change address" $ head <$>
+    getWalletAddressesWithNetworkTag
+  pure $ UserAction
+    { action: action
+    , publicKey: publicKeyHash
+    , userUTxOs: ownUtxos
+    , changeAddress: (wrap changeAddress)
+    }

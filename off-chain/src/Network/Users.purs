@@ -104,17 +104,22 @@ makeUserActionAndSend nodeConfig actionRaw = do
 newUserState :: forall a. Aff $ UserState a
 newUserState = undefined
 
-performAction :: forall a. UserNode a -> a -> (a -> UserAction a) -> Aff Unit
-performAction userNode action debugMakeUserAction = do
-  let userAction = debugMakeUserAction action
+performAction :: forall a. UserNode a -> a -> Aff Unit
+performAction userNode action = do
+  userAction <- (unwrap userNode).makeAction action
   result <- userNode `sendActionToLeader` userAction
   case result of
     Left err -> log $ "TODO: React to error " <> show err
     Right uid -> do
       userNode `addToSentActions` (uid /\ action)
 
-startUserNode :: forall a. Show a => UserConfiguration a -> Aff (UserNode a)
-startUserNode conf = do
+startUserNode
+  :: forall a
+   . Show a
+  => (a -> Aff (UserAction a))
+  -> UserConfiguration a
+  -> Aff (UserNode a)
+startUserNode makeAction conf = do
   actionsSent <- liftEffect $ Ref.new OMap.empty
 
   let
@@ -127,6 +132,7 @@ startUserNode conf = do
           , numberOfActionsRequestsMade: undefined
           }
       , configuration: conf
+      , makeAction: makeAction
 
       }
   startActionStatusCheck node
@@ -148,3 +154,4 @@ startActionStatusCheck userNode = do
       delay $ Milliseconds 1000.0
     delay $ Milliseconds 5000.0
     check
+

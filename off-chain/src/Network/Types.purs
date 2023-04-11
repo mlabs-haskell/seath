@@ -307,6 +307,7 @@ derive instance Newtype (UserConfiguration a) _
 newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
+  , makeAction :: a -> Aff (UserAction a)
   }
 
 derive instance Newtype (UserNode a) _
