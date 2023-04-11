@@ -1,51 +1,22 @@
 module Seath.Test.PlutipRunner (run) where
 
-import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), emptyHooks)
-import Contract.Monad (Contract, launchAff_, liftedM)
-import Contract.Test.Plutip
-  ( PlutipConfig
-  , runPlutipContract
-  , withPlutipContractEnv
-  )
-import Contract.Wallet (KeyWallet, withKeyWallet)
-import Control.Alternative (pure)
-import Control.Monad (bind)
-import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (head)
-import Data.Array.NonEmpty (NonEmptyArray, length, range, zip)
-import Data.Array.NonEmpty as NE
-import Data.BigInt as BigInt
-import Data.Functor ((<$>))
-import Data.Log.Level as LogLevel
+import Contract.Monad (Contract, launchAff_)
+import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
+import Contract.Wallet (KeyWallet)
+import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Maybe (Maybe(Nothing))
-import Data.Newtype (wrap)
-import Data.Ring ((*), (+))
-import Data.Show (show)
 import Data.Time.Duration (Seconds(Seconds))
-import Data.Traversable (traverse)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect (Effect)
-import Effect.Aff (error)
+import Effect.Aff (supervise)
 import Prelude (($))
 import Seath.Network.Types (LeaderNode, UserNode)
-import Seath.Network.Utils (getPublicKeyHash)
-import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
-import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
 import Seath.Test.Examples.Addition.Types (AdditionAction)
-import Seath.Test.QuickCheck
-  ( genLeaderNodeWith
-  , genUserNodeWith
-  , makeDistribution
-  )
-import Seath.Test.Types
-  ( Leader(Leader)
-  , Participant
-  , RunnerConfiguration(RunnerConfiguration)
-  )
-import Seath.Test.Utils (gen2Contract)
+import Seath.Test.QuickCheck (makeDistribution)
+import Seath.Test.Types (Participant)
 import Test.Examples.Addition.SeathNetwork as SeathNet
 import Type.Function (type ($))
 import Undefined (undefined)
@@ -55,7 +26,11 @@ run = launchAff_
   $ withPlutipContractEnv config (makeDistribution 4)
   $
     \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
-      SeathNet.mainTest env adminWallet leaderWallet participantsWallets
+      ( supervise -- ! misha: I've added it here so we get the same behavior as with `withContractEnv``
+
+          $ SeathNet.mainTest env adminWallet leaderWallet
+              participantsWallets
+      )
 
 config :: PlutipConfig
 config =

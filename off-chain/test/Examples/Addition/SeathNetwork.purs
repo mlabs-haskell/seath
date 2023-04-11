@@ -13,7 +13,7 @@ import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
 import Data.Map as Map
-import Data.Time.Duration (Milliseconds(Milliseconds))
+import Data.Time.Duration (Milliseconds(..))
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect.Aff (delay, error, forkAff)
@@ -27,7 +27,16 @@ import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(IncludeRequest), UID(UID))
 import Seath.Network.Leader as Leader
-import Seath.Network.Types (ActionStatus, GetStatusError(..), IncludeActionError(..), LeaderConfiguration(..), LeaderNode, UserConfiguration(..), UserNode)
+import Seath.Network.Types
+  ( ActionStatus
+  , GetStatusError(..)
+  , IncludeActionError(..)
+  , LeaderConfiguration(..)
+  , LeaderNode
+  , MiliSeconds
+  , UserConfiguration(..)
+  , UserNode
+  )
 import Seath.Network.Users as Users
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Contract as Addition
@@ -38,7 +47,7 @@ import Undefined (undefined)
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin _leader users = do
 
-  checkInitSctipt env admin 
+  checkInitSctipt env admin
 
   let
     serverConf :: SeathServerConfig
@@ -74,6 +83,8 @@ mainTest env admin _leader users = do
     Users.performAction userNode
       (AddAmount $ BigInt.fromInt 2)
     Leader.showDebugState leaderNode >>= log
+
+  delay (Milliseconds 10000.0)
   log "end"
 
 -- LeaderNode config
