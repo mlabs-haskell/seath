@@ -60,29 +60,30 @@ mainTest env admin _leader users = do
       runContractInEnv env $ withKeyWallet user
         $ CoreUtils.mkActionContract action
 
+  log "Starting user node"
   (userNode :: UserNode AdditionAction) <- liftAff $ Users.startUserNode
     makeAction
     _testUserConf
 
+  log "Starting leader node"
   (leaderNode :: LeaderNode AdditionAction) <- liftAff $
     Leader.startLeaderNode _testLeaderConf
 
-  liftAff $ do
-    _ <- forkAff $ do
-      log "Starting server"
-      liftEffect $ Server.runServer serverConf leaderNode
-      log "Leader server started"
+  void $ forkAff $ do
+    log "Starting server"
+    liftEffect $ Server.runServer serverConf leaderNode
+    log "Leader server started"
 
-    log "Delay before user include action request"
-    delay $ Milliseconds 1000.0
-    log "Fire user include action request 1"
-    Users.performAction userNode
-      (AddAmount $ BigInt.fromInt 1)
-    delay $ Milliseconds 5000.0
-    log "Fire user include action request 2"
-    Users.performAction userNode
-      (AddAmount $ BigInt.fromInt 2)
-    Leader.showDebugState leaderNode >>= log
+  log "Delay before user include action request"
+  delay $ Milliseconds 1000.0
+  log "Fire user include action request 1"
+  Users.performAction userNode
+    (AddAmount $ BigInt.fromInt 1)
+  delay $ Milliseconds 1000.0
+  log "Fire user include action request 2"
+  Users.performAction userNode
+    (AddAmount $ BigInt.fromInt 2)
+  Leader.showDebugState leaderNode >>= log
 
   delay (Milliseconds 10000.0)
   log "end"

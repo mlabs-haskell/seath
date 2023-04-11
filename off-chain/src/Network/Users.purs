@@ -151,7 +151,7 @@ startActionStatusCheck userNode = do
       -- TODO: process response
       res <- (userHandlers userNode).getActionStatus uid
       log $ "User: status of action " <> show uid <> ": " <> show res
-      delay $ Milliseconds 1000.0
-    delay $ Milliseconds 5000.0
+      delay $ Milliseconds 500.0
+    delay $ Milliseconds 2000.0
     check
 
