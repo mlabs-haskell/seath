@@ -1,10 +1,8 @@
 module Seath.HTTP.Handlers where
 
-import Prelude
+import Contract.Prelude
 
-import Contract.Prelude (Either(..), log, unwrap)
 import Data.Bifunctor (rmap)
-import Data.Either (Either)
 import Effect.Aff (Aff)
 import Seath.HTTP.Types (IncludeRequest, JSend, UID(UID), toJsend)
 import Seath.Network.Leader as Leader

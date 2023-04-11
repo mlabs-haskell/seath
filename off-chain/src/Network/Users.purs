@@ -20,7 +20,7 @@ import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
-import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
+import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
@@ -34,9 +34,9 @@ import Seath.Network.Types
   , GetStatusError
   , IncludeActionError
   , SignedTransaction
-  , UserConfiguration(..)
-  , UserNode(..)
-  , UserState(..)
+  , UserConfiguration
+  , UserNode(UserNode)
+  , UserState(UserState)
   , addToSentActions
   , readSentActions
   , userHandlers
@@ -66,9 +66,7 @@ sendActionToLeader
 sendActionToLeader userNode action =
   (userHandlers userNode).submitToLeader action
 
--- ! misha: not sure, what it suppose to do
--- get action according to user's internal state
--- or get it from the leader  
+-- Query server for action status
 getActionStatus
   :: forall a. UserNode a -> UUID -> Aff (Either GetStatusError ActionStatus)
 getActionStatus = undefined

@@ -8,14 +8,7 @@ module Seath.Test.HttpDebug
 
 import Contract.Prelude
 
-import Aeson
-  ( class DecodeAeson
-  , class EncodeAeson
-  , decodeAeson
-  , decodeJsonString
-  )
-import Affjax as Affjax
-import Affjax.ResponseFormat as ResponseFormat
+import Aeson (class EncodeAeson, decodeJsonString)
 import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (emptyHooks)
 import Contract.Monad (Contract, launchAff_, liftedM)
@@ -27,33 +20,30 @@ import Data.Array (head)
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
 import Data.Maybe (Maybe(Nothing))
-import Data.Time.Duration (Milliseconds(..), Seconds(Seconds))
+import Data.Time.Duration (Milliseconds(Milliseconds), Seconds(Seconds))
 import Data.Tuple.Nested ((/\))
 import Data.UInt (fromInt) as UInt
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (delay, forkAff)
-import Effect.Ref as Ref
 import Payload.ResponseTypes (Response(..))
 import Prelude (show)
 import Seath.Core.Types (ChangeAddress(..), UserAction(..))
+import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.Types (IncludeRequest(..), JSend, UID(..))
+import Seath.HTTP.Types (IncludeRequest(IncludeRequest), UID(UID))
 import Seath.Network.Leader as Leader
-import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
-  ( ActionStatus(..)
+  ( ActionStatus
   , GetStatusError(..)
   , IncludeActionError(..)
   , LeaderConfiguration(..)
-  , LeaderNode(..)
-  , LeaderState(..)
+  , LeaderNode
   , UserConfiguration(..)
-  , UserNode(..)
-  , UserState(..)
+  , UserNode
   )
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
@@ -134,21 +124,26 @@ _testUserConf :: UserConfiguration AdditionAction
 _testUserConf = UserConfiguration
   { maxQueueSize: undefined
   , clientHandlers:
-      { submitToLeader: userHandlerSendAction -- TODO: arch: naming
+      { submitToLeader: userHandlerSendAction httpClient -- TODO: arch: naming
       , acceptSignedTransaction: undefined
       , rejectToSign: undefined
-      , getActionStatus: userHandlerGetStatus2
+      , getActionStatus: userHandlerGetStatus httpClient
       }
 
   }
+  where
+  httpClient :: UserClient AdditionAction
+  httpClient = Client.mkUserClient (Proxy :: Proxy AdditionAction)
+    "http://localhost:3000"
 
 userHandlerSendAction
   :: forall a
    . EncodeAeson a
-  => UserAction a
+  => UserClient a
+  -> UserAction a
   -> Aff (Either IncludeActionError UUID)
-userHandlerSendAction action = do
-  res <- ((Client.mkUserClient) (Proxy :: Proxy a)).leader.includeAction
+userHandlerSendAction clent action = do
+  res <- clent.leader.includeAction
     { body: IncludeRequest action }
   pure $ case res of
     Right resp -> do
@@ -161,10 +156,13 @@ userHandlerSendAction action = do
     else either (show >>> IAOtherError >>> Left) Left
       (decodeJsonString r.body.data)
 
-userHandlerGetStatus2 :: UUID -> Aff (Either GetStatusError ActionStatus)
-userHandlerGetStatus2 uuid = do
+userHandlerGetStatus
+  :: UserClient AdditionAction
+  -> UUID
+  -> Aff (Either GetStatusError ActionStatus)
+userHandlerGetStatus client uuid = do
   res <-
-    ((Client.mkUserClient) (Proxy :: Proxy AdditionAction)).leader.actionStatus
+    client.leader.actionStatus
       { params: { uid: UID uuid } }
   pure $ case res of
     Right resp -> convertResonse resp

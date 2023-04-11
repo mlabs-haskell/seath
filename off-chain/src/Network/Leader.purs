@@ -21,18 +21,17 @@ import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref as Ref
-import Options.Applicative (action)
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
-  ( ActionStatus(..)
-  , IncludeActionError(..)
+  ( ActionStatus(ToBeProcessed, NotFound)
+  , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
-  , LeaderNode(..)
-  , LeaderServerStage(..)
-  , LeaderServerStateInfo(..)
-  , LeaderState(..)
+  , LeaderNode(LeaderNode)
+  , LeaderServerStage(WaitingForActions)
+  , LeaderServerStateInfo(LeaderServerInfo)
+  , LeaderState(LeaderState)
   , SignedTransaction
   , addAction
   , getPending
