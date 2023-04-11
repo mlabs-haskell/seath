@@ -108,6 +108,7 @@ mkAdditionValidator ::
   ScriptContext ->
   Bool
 mkAdditionValidator _ datum redeemer context =
+  Trace.trace "Demo 2" $
   case filter hasOutputDatum $ getOutputs context of
     [getDatumHash -> Just datHash] ->
       Trace.trace "Checking redeemer and Datum" $

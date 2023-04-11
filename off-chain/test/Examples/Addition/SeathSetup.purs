@@ -3,16 +3,17 @@ module Seath.Test.Examples.Addition.SeathSetup
   , Participant(Participant)
   , genAction
   , genUserActions
-  , getPublicKeyHash
-  , submitChain
-  , logBlockchainState
   , getBlockhainState
-  , BlockhainState(BlockhainState)
+  , getPublicKeyHash
+  , getWalletAddress
+  , logBlockchainState
   , stateChangePerAction
+  , submitChain
   ) where
 
 import Contract.Address
   ( PubKeyHash
+  , getNetworkId
   , getWalletAddresses
   , getWalletAddressesWithNetworkTag
   , toPubKeyHash
@@ -33,6 +34,7 @@ import Contract.Wallet.Key (KeyWallet)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
+import Ctl.Internal.Serialization.Address (addressBech32)
 import Data.Array (head, length, range, zip, zipWith)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
@@ -46,7 +48,8 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Prelude (discard, flip, ($))
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
-import Seath.Types (UserAction(UserAction))
+import Seath.Types (BlockhainState(BlockhainState), UserAction(UserAction))
+import Test.Examples.DemoShow (dShow)
 
 newtype Leader = Leader KeyWallet
 
@@ -85,6 +88,12 @@ getPublicKeyHash kw = withKeyWallet kw do
     getWalletAddresses
   liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
 
+getWalletAddress :: KeyWallet -> Contract String
+getWalletAddress kw = withKeyWallet kw do
+  netId <- getNetworkId
+  let serializableAddr = (unwrap kw).address netId
+  pure $ addressBech32 serializableAddr
+
 signTransactions
   :: Leader
   -> Array (Participant /\ FinalizedTransaction)
@@ -99,24 +108,14 @@ submitChain
   -> Array FinalizedTransaction
   -> Contract Unit
   -> Contract (Array TransactionHash)
-submitChain leader participants txs log = do
+submitChain leader participants txs _log = do
   allSigned <- signTransactions leader (zip participants txs)
   withKeyWallet (unwrap leader) $ traverse submitAndWait allSigned
   where
   submitAndWait balancedAndSignedTransaction = do
-    log
-    -- logInfo' $ "submiting: " <> show balancedAndSignedTransaction
     transactionId <- submit balancedAndSignedTransaction
-    -- awaitTxConfirmed transactionId
-    logInfo' $ "Submited chaned Tx ID: " <> show transactionId
+    logInfo' $ "Submited chaned Tx ID: " <> dShow transactionId
     pure $ transactionId
-
-newtype BlockhainState s = BlockhainState
-  { leaderUTXOs :: Maybe UtxoMap
-  , usersUTXOs :: Array (Maybe UtxoMap)
-  , scriptState :: UtxoMap /\ s
-
-  }
 
 getBlockhainState
   :: forall s

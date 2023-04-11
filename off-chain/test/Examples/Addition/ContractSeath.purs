@@ -6,18 +6,18 @@ import Contract.Prelude
   ( either
   , hush
   , isJust
-  , unless
   , unwrap
   , when
   , (/=)
   , (<$>)
+  , (<<<)
   , (>>=)
   )
 import Contract.Transaction (awaitTxConfirmed)
 import Contract.Wallet (withKeyWallet)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
-import Data.Array (last, unzip)
+import Data.Array (last, length, unzip)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.Either (note)
@@ -38,12 +38,11 @@ import Seath.Test.Examples.Addition.Actions
   )
 import Seath.Test.Examples.Addition.Contract (initialSeathContract)
 import Seath.Test.Examples.Addition.SeathSetup
-  ( BlockhainState(BlockhainState)
-  , Leader(Leader)
+  ( Leader(Leader)
   , Participant(Participant)
   , getBlockhainState
   , getPublicKeyHash
-  , logBlockchainState
+  , getWalletAddress
   )
 import Seath.Test.Examples.Addition.SeathSetup as SeathSetup
 import Seath.Test.Examples.Addition.Types
@@ -51,19 +50,22 @@ import Seath.Test.Examples.Addition.Types
   , AdditionState
   )
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Test.TestSetup (RunnerConfig(RunnerConfig), runnerConfInfo)
-import Seath.Types (SeathConfig(SeathConfig))
+import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
+import Seath.Types (BlockhainState(BlockhainState), SeathConfig(SeathConfig))
+import Test.Examples.DemoShow (class DemoShow, dShow)
 
 mainTest :: RunnerConfig AdditionState -> Contract Unit
 mainTest config = do
   -- todo: check that parties participants have enough funds by config.minAdaRequired
-  logInfo' $ "Running with " <> runnerConfInfo config
+  logInfo' $ "Starting Seath execution with: " <> dShow config
 
   let
     leaderKeyWallet = (unwrap config).seathLeader
     leader = Leader leaderKeyWallet
   vaildatorHash <- fixedValidatorHash
   leaderPublicKeyHash <- getPublicKeyHash leaderKeyWallet
+  bech32address <- getWalletAddress leaderKeyWallet
+  logInfo' $ "Leader address: " <> bech32address
   let
     participants = NE.toArray $ map Participant
       (unwrap config).seathParticipants
@@ -73,42 +75,63 @@ mainTest config = do
       , actionHandler: handleAction
       , queryBlockchainState: queryBlockchainState
       }
-    getState = getBlockhainState leader participants queryBlockchainState
-    logState = getState >>= logBlockchainState
 
+    getState = getBlockhainState leader participants queryBlockchainState
+
+    demoLog :: forall a. DemoShow a => a -> Contract Unit
+    demoLog = logInfo' <<< dShow
+
+    -- logInf = logInfo' <<< show
+    logInf = demoLog
+
+    demoLogState = getState >>= demoLog
+    -- logState = getState >>= logBlockchainState
+    logState = demoLogState
+
+  logInfo' "Checking script state"
   existingState <- hush <$> try getState
 
-  unless (isJust existingState) $ do
-    logInfo' "No initialized state found - running initialization"
-    -- contract initialization by some admin
+  if (isJust existingState) then
+    logInfo' "State already initialized"
+  else do
+    logInfo'
+      "No initialized state found - running initialization with admin wallet"
     _ <- withKeyWallet (unwrap config).admin initialSeathContract
     logInfo' "Initialization - DONE"
 
   -- Seath round logic
+  logInfo' "Getting state before Seath execution"
   startState <- getState
-  logBlockchainState startState -- state before Seath execution
+  logInf startState
 
+  logInfo' $ "Generating User actions"
   actions <- SeathSetup.genUserActions participants
-  logInfo' $ "User actions: " <> show actions
+  logInf actions
 
+  logInfo' $ "Building transaction chain from actions with leader"
   (finalizedTxsAndActions /\ _) <- withKeyWallet leaderKeyWallet $ buildChain
     seathConfig
     actions
     Nothing
   let finalizedTxs /\ _ = unzip finalizedTxsAndActions
-  -- logInfo' $ "BuildChainResult: " <> show finalizedTxs
+  logInfo' $ "Submitting chain of " <> show (length finalizedTxsAndActions) <>
+    " transactions with leader"
   txIds <- SeathSetup.submitChain leader participants finalizedTxs logState
-
+  logInf txIds
   case last txIds of
     Nothing -> throwContractError
       "No IDs vere received after chain submission. Something is wrong."
     Just txId -> do
+      logInfo' "Getting state right after chain submission"
+      demoLogState
+      logInfo' "Awaiting confirmation of the last transaction in chain"
       awaitTxConfirmed txId
+      logInfo' "Getting final state"
       endState <- getState
-      logBlockchainState endState
+      logInf endState
       checkFinalState config startState endState
 
-  logInfo' "end"
+  logInfo' "Happy end!"
 
 checkFinalState
   :: RunnerConfig AdditionState

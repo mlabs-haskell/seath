@@ -1,13 +1,15 @@
 module Seath.Types
-  ( UserAction(UserAction)
-  , StateReturn(StateReturn)
-  , SeathConfig(SeathConfig)
+  ( BlockhainState(BlockhainState)
   , ChainBuilderState(ChainBuilderState)
+  , SeathConfig(SeathConfig)
+  , StateReturn(StateReturn)
+  , UserAction(UserAction)
   ) where
 
 import Contract.Address (AddressWithNetworkTag, PubKeyHash)
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
+import Contract.Prelude (Maybe)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)
@@ -91,3 +93,10 @@ instance
         Array (FinalizedTransaction /\ UserAction actionType)
     , lastResult :: UtxoMap /\ userStateType
     }
+
+newtype BlockhainState s = BlockhainState
+  { leaderUTXOs :: Maybe UtxoMap
+  , usersUTXOs :: Array (Maybe UtxoMap)
+  , sctiptState :: UtxoMap /\ s
+
+  }
