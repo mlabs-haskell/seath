@@ -3,13 +3,16 @@ module Test.Examples.Addition.SeathNetwork (mainTest) where
 import Contract.Prelude
 
 import Aeson (class EncodeAeson, decodeJsonString)
-import Contract.Monad (ContractEnv, runContractInEnv)
+import Contract.Log (logInfo')
+import Contract.Monad (ContractEnv, runContractInEnv, throwContractError)
 import Contract.Test (withKeyWallet)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe)
+import Control.Monad.Error.Class (try)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
+import Data.Map as Map
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
@@ -24,22 +27,19 @@ import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(IncludeRequest), UID(UID))
 import Seath.Network.Leader as Leader
-import Seath.Network.Types
-  ( ActionStatus
-  , GetStatusError(..)
-  , IncludeActionError(..)
-  , LeaderConfiguration(..)
-  , LeaderNode
-  , UserConfiguration(..)
-  , UserNode
-  )
+import Seath.Network.Types (ActionStatus, GetStatusError(..), IncludeActionError(..), LeaderConfiguration(..), LeaderNode, UserConfiguration(..), UserNode)
 import Seath.Network.Users as Users
+import Seath.Test.Examples.Addition.Actions as Addition
+import Seath.Test.Examples.Addition.Contract as Addition
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
 import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
-mainTest env _admin _leader users = do
+mainTest env admin _leader users = do
+
+  checkInitSctipt env admin 
+
   let
     serverConf :: SeathServerConfig
     serverConf = undefined
@@ -140,3 +140,13 @@ userHandlerGetStatus client uuid = do
       lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
     else either (show >>> GSOtherError >>> Left) Left
       (decodeJsonString r.body.data)
+
+checkInitSctipt :: ContractEnv -> KeyWallet -> Aff Unit
+checkInitSctipt env admin = runContractInEnv env $ withKeyWallet admin $ do
+  scriptState <- try $ Addition.queryBlockchainState
+  case scriptState of
+    Left _ -> do
+      logInfo' "Initializing Addition script state"
+      void $ Addition.initialSeathContract
+    Right _ -> do
+      logInfo' "Addition script state already initialized"
