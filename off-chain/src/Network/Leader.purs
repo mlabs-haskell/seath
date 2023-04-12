@@ -1,5 +1,6 @@
 module Seath.Network.Leader
-  ( acceptSignedTransaction
+  ( acceptRefuseToSign
+  , acceptSignedTransaction
   , actionStatus
   , getNextBatchOfActions
   , includeAction
@@ -74,6 +75,14 @@ acceptSignedTransaction
 acceptSignedTransaction _leaderNode signedTx = do
   log $ "Leader accepts Signed Transaction " <> show
     (unwrap signedTx).controlNumber
+
+acceptRefuseToSign
+  :: forall a
+   . LeaderNode a
+  -> UUID
+  -> Aff Unit
+acceptRefuseToSign leaderNode uuid = do
+  log $ "Leader accepts signing refusal for " <> show uuid
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.

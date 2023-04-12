@@ -2,6 +2,7 @@ module Seath.HTTP.Spec where
 
 import Seath.HTTP.Types
 
+import Payload.ResponseTypes (Empty)
 import Payload.Spec (GET, POST, Routes, Spec(Spec))
 import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
 
@@ -21,6 +22,11 @@ type LeaderRoutes a = Routes "/leader"
         { body :: SendSignedRequest
         , response :: JSend String String
         }
+  , refuseToSign ::
+      GET "/refuse-to-sign/<uid>"
+        { params :: { uid :: UID }
+        , response :: Empty
+        }
 
   }
 
@@ -36,11 +42,6 @@ spec = Spec
 --   , acceptSignedTransaction ::
 --       POST "/leader/acceptSignedTransaction"
 --         { body :: SendSignedTransaction
---         , response :: Empty
---         }
---   , rejectToSign ::
---       GET "/leader/refuseToSign/<controlNumber>"
---         { params :: { controlNumber :: UUID }
 --         , response :: Empty
 --         }
 --   }

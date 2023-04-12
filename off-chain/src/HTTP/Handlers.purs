@@ -4,6 +4,7 @@ import Contract.Prelude
 
 import Data.Bifunctor (rmap)
 import Effect.Aff (Aff)
+import Payload.ResponseTypes (Empty(Empty))
 import Seath.HTTP.Types
   ( IncludeRequest
   , JSend
@@ -25,6 +26,7 @@ mkHandlers leaderNode =
       { includeAction: includeAction leaderNode
       , actionStatus: actionStatus leaderNode
       , acceptSignedTransaction: acceptSignedTransaction leaderNode
+      , refuseToSign: refuseToSign leaderNode
       }
   }
 
@@ -54,8 +56,18 @@ acceptSignedTransaction leaderNode req = do
   log $ "Leader HTTP-server: accept signed Tx response: " <> show response
   pure response
 
-refuseToSign :: forall anything. anything
-refuseToSign = undefined
+refuseToSign
+  :: forall a
+   . LeaderNode a
+  -> { params :: { uid :: UID } }
+  -> Aff Empty
+refuseToSign leaderNode request = do
+  let uuid = unwrap request.params.uid
+  log $ "Leader HTTP-server: refuse to sign request: "
+    <> show uuid
+  leaderNode `Leader.acceptRefuseToSign` uuid
+  log "Leader HTTP-server: refuse to sign request acknowledged"
+  pure Empty
 
 actionStatus
   :: forall a

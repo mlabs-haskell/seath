@@ -9,11 +9,11 @@ import Effect.Aff (Aff)
 import Payload.Client (ClientError, Options)
 import Payload.Client as Client
 import Payload.Headers (Headers)
-import Payload.ResponseTypes (Response)
+import Payload.ResponseTypes (Empty, Response)
 import Payload.Spec (Spec)
 import Seath.HTTP.Spec (LeaderRoutes)
 import Seath.HTTP.Spec as Spec
-import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest(..), UID)
+import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, UID)
 import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
 import Type.Proxy (Proxy)
 
@@ -50,6 +50,15 @@ type UserClient a =
           -> { body :: SendSignedRequest }
           -> Aff
                (Either ClientError (Response (JSend String String)))
+      , refuseToSign ::
+          { params :: { uid :: UID } }
+          -> Aff
+               (Either ClientError (Response Empty))
+      , refuseToSign_ ::
+          { extraHeaders :: Headers }
+          -> { params :: { uid :: UID } }
+          -> Aff
+               (Either ClientError (Response Empty))
       }
   }
 
@@ -107,6 +116,15 @@ mkUserClient _ serverUrl =
                       -> { body :: SendSignedRequest }
                       -> Aff
                            (Either ClientError (Response (JSend String String)))
+                  , refuseToSign ::
+                      { params :: { uid :: UID } }
+                      -> Aff
+                           (Either ClientError (Response Empty))
+                  , refuseToSign_ ::
+                      { extraHeaders :: Headers }
+                      -> { params :: { uid :: UID } }
+                      -> Aff
+                           (Either ClientError (Response Empty))
                   }
               }
          )

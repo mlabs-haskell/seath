@@ -6,3 +6,7 @@ content-type: application/json
 ###
 GET http://0.0.0.0:3000/leader/action-status/7b71822f-81ae-4cbd-831a-cf507007e861 HTTP/1.1
 content-type: application/json
+
+###
+GET http://0.0.0.0:3000/leader/refuse-to-sign/7b71822f-81ae-4cbd-831a-cf507007e861 HTTP/1.1
+content-type: application/json
