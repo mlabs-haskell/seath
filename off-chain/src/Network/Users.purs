@@ -1,22 +1,16 @@
 module Seath.Network.Users
   ( getActionStatus
   , getSeathCoreConfiguration
-  , makeUserAction
-  , makeUserActionAndSend
   , newUserState
   , performAction
   , sendActionToLeader
   , sendRejectionToLeader
   , sendSignedTransactionToLeader
   , startUserNode
-  , startUserServer
-  , stopUserServer
   ) where
 
 import Contract.Prelude
 
-import Contract.Monad (Contract, liftedM)
-import Contract.Utxos (UtxoMap, getWalletUtxos)
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
@@ -28,7 +22,7 @@ import Effect.Aff (Aff, delay, forkAff, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
-import Seath.Network.OrderedMap as OMap
+import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
   ( ActionStatus
   , GetStatusError
@@ -38,17 +32,11 @@ import Seath.Network.Types
   , UserNode(UserNode)
   , UserState(UserState)
   , addToSentActions
+  , getUserHandlers
   , readSentActions
-  , userHandlers
   )
 import Type.Function (type ($))
 import Undefined (undefined)
-
-startUserServer :: forall a. UserNode a -> Aff Unit
-startUserServer = undefined
-
-stopUserServer :: forall a. UserNode a -> Aff Unit
-stopUserServer = undefined
 
 getSeathCoreConfiguration
   :: forall actionType userStateType validatorType datumType redeemerType
@@ -64,7 +52,7 @@ sendActionToLeader
   -> UserAction a
   -> Aff $ Either IncludeActionError UUID
 sendActionToLeader userNode action =
-  (userHandlers userNode).submitToLeader action
+  (getUserHandlers userNode).submitToLeader action
 
 -- Query server for action status
 getActionStatus
@@ -88,19 +76,8 @@ sendRejectionToLeader
   -> UUID
   -> Aff Unit
 sendRejectionToLeader userNode uuid = do
-  res <- try $ (userHandlers userNode).refuseToSign uuid
+  res <- try $ (getUserHandlers userNode).refuseToSign uuid
   log $ "User: refusing to sing " <> show uuid <> ", result: " <> show res
-
-makeUserAction :: forall a. UserNode a -> a -> UtxoMap -> UserAction a
-makeUserAction nodeConfig action userUTxOs = undefined
-
-makeUserActionAndSend
-  :: forall a. UserNode a -> a -> Contract $ Either IncludeActionError UUID
-makeUserActionAndSend nodeConfig actionRaw = do
-  walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
-  let
-    action = makeUserAction nodeConfig actionRaw walletUTxOs
-  liftAff $ sendActionToLeader nodeConfig action
 
 -- | Return a new mutable `userState`
 newUserState :: forall a. Aff $ UserState a
@@ -122,16 +99,15 @@ startUserNode
   -> UserConfiguration a
   -> Aff (UserNode a)
 startUserNode makeAction conf = do
-  actionsSent <- liftEffect $ Ref.new OMap.empty
-
+  actionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  submitedTransactions <- liftEffect $ Ref.new OrderedMap.empty
   let
     node = UserNode
       { state: UserState
-          { pendingResponse: undefined
-          , actionsSent: actionsSent
-          , transactionsSent: undefined
-          , submitedTransactions: undefined
-          , numberOfActionsRequestsMade: undefined
+          { actionsSent
+          , transactionsSent
+          , submitedTransactions
           }
       , configuration: conf
       , makeAction: makeAction
@@ -149,9 +125,9 @@ startActionStatusCheck userNode = do
   where
   check = do
     sent <- readSentActions userNode
-    for_ sent $ \(uid /\ action) -> do
+    for_ sent $ \(uid /\ _) -> do
       -- TODO: process response
-      res <- (userHandlers userNode).getActionStatus uid
+      res <- (getUserHandlers userNode).getActionStatus uid
       log $ "User: status of action " <> show uid <> ": " <> show res
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0

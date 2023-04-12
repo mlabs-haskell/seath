@@ -14,15 +14,15 @@ import Control.Monad.Error.Class (liftMaybe, throwError, try)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
-import Data.Time.Duration (Milliseconds(..))
+import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect.Aff (delay, error, forkAff)
-import Payload.ResponseTypes (Response(..))
+import Payload.ResponseTypes (Response(Response))
 import Prelude (show)
 import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
-import Seath.Core.Utils as CoreUtils
+import Seath.Core.Utils as Core.Utils
 import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
@@ -31,18 +31,18 @@ import Seath.HTTP.Types (IncludeRequest(IncludeRequest))
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
   ( ActionStatus
-  , GetStatusError(..)
-  , IncludeActionError(..)
-  , LeaderConfiguration(..)
+  , GetStatusError(GSOtherError)
+  , IncludeActionError(IAOtherError)
+  , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode
-  , UserConfiguration(..)
+  , UserConfiguration(UserConfiguration)
   , UserNode
   , readSentActions
   )
 import Seath.Network.Users as Users
-import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition
-import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition
-import Seath.Test.Examples.Addition.Types (AdditionAction(..))
+import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
+import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
+import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
 
@@ -60,7 +60,7 @@ mainTest env admin _leader users = do
   let
     makeAction action =
       runContractInEnv env $ withKeyWallet user
-        $ CoreUtils.mkActionContract action
+        $ Core.Utils.makeActionContract action
 
   log "Starting user node"
   (userNode :: UserNode AdditionAction) <- liftAff $ Users.startUserNode
@@ -174,10 +174,10 @@ userHandlerRefuseToSign client uuid = do
 
 checkInitSctipt :: ContractEnv -> KeyWallet -> Aff Unit
 checkInitSctipt env admin = runContractInEnv env $ withKeyWallet admin $ do
-  scriptState <- try $ Addition.queryBlockchainState
+  scriptState <- try $ Addition.Actions.queryBlockchainState
   case scriptState of
     Left _ -> do
       logInfo' "Initializing Addition script state"
-      void $ Addition.initialSeathContract
+      void $ Addition.Contract.initialSeathContract
     Right _ -> do
       logInfo' "Addition script state already initialized"

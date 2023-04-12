@@ -23,25 +23,13 @@ import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Seath.Common.Types (UID(..))
+import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
-import Seath.Network.OrderedMap as OMap
+import Seath.Network.OrderedMap as OrderedMap
 import Type.Function (type ($))
 
--- TODO: replace this types with real ones.
--- The names are indicatives but can change.
-type AsyncMutableQueueRef :: forall k. k -> k
-type AsyncMutableQueueRef a = a
-
-type ControlNumber = Int
-type QueueIndex = Int
-type ChainNumber = Int
-type ChainIndex = Int
-type RequestCounter = Int
-type MiliSeconds = Int
-type Time = Int
-type MutableInt = Int
+type MilliSeconds = Int
 
 data IncludeActionError
   = RejectedServerBussy LeaderServerStateInfo
@@ -105,9 +93,9 @@ derive newtype instance Show SignedTransaction
 derive instance Generic SignedTransaction _
 
 newtype LeaderServerStateInfo = LeaderServerInfo
-  { numberOfActionsToProcess :: QueueIndex
-  , maxNumberOfPendingActions :: QueueIndex
-  , maxTimeOutForSignature :: MiliSeconds
+  { numberOfActionsToProcess :: Int
+  , maxNumberOfPendingActions :: Int
+  , maxTimeOutForSignature :: MilliSeconds
   , serverStage :: LeaderServerStage
   }
 
@@ -119,17 +107,14 @@ instance showLeaderServerStateInfo :: Show LeaderServerStateInfo where
   show = genericShow
 
 newtype GetActionStatus = GetActionStatus
-  { controlNumber :: UUID
+  { uuid :: UUID
   }
 
 derive instance Newtype GetActionStatus _
 
 data ActionStatus
   = AskForSignature
-      {
-        -- | The control number that the user attached in it's request to
-        -- | process the action.
-        controlNumber :: UUID
+      { uuid :: UUID
       , transaction :: FinalizedTransaction
       }
   | ToBeProcessed Int
@@ -160,7 +145,7 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
 
     where
     encodeAskForSig
-      :: { controlNumber :: UUID
+      :: { uuid :: UUID
          , transaction :: FinalizedTransaction
          }
       -> Aeson
@@ -170,9 +155,8 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
         tx = unwrap askForSig.transaction
       in
         encodeAeson
-          { "controlNumber": encodeAeson (UID askForSig.controlNumber)
+          { "uuid": encodeAeson (UID askForSig.uuid)
           , "transaction": encodeAeson tx
-
           }
 
 instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
@@ -215,7 +199,7 @@ instance decodeAesonStatusResponseError :: DecodeAeson GetStatusError where
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
 
 newtype SendSignedTransaction = SendSignedTransaction
-  { controlNumber :: UUID
+  { uuid :: UUID
   , transaction :: SignedTransaction
   }
 
@@ -233,7 +217,6 @@ newtype LeaderState a = LeaderState
   , stage :: LeaderServerStage
   -- We really need to think if we really want this,
   -- see `UUID` comment.
-  , numberOfActionsRequestsMade :: MutableInt
   }
 
 getPending :: forall a. LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
@@ -244,9 +227,9 @@ takeFromPending
   :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 takeFromPending n ln@(LeaderNode node) = do
   pending <- getPending ln
-  liftEffect $ Ref.modify_ (const (OMap.drop n pending))
+  liftEffect $ Ref.modify_ (const (OrderedMap.drop n pending))
     (unwrap node.state).pendingActionsRequest
-  pure $ OMap.take n pending
+  pure $ OrderedMap.take n pending
 
 addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
 addAction action st = liftEffect do
@@ -256,30 +239,17 @@ addAction action st = liftEffect do
   pure actionUUID
 
 numberOfPending :: forall a. LeaderNode a -> Aff Int
-numberOfPending (LeaderNode node) = OMap.length <$>
+numberOfPending (LeaderNode node) = OrderedMap.length <$>
   (liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest)
 
 derive instance Newtype (LeaderState a) _
 
 newtype LeaderConfiguration :: forall k. k -> Type
 newtype LeaderConfiguration a = LeaderConfiguration
-  { maxWaitingTimeForSignature :: MiliSeconds
+  { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
-
-  -- FIXME: not sure we should do it like this.
-  -- We will need user node to build webserver. So if we are passing web-server
-  -- handlers here, we'll get circular dependency.
-  -- I think we need only hadlers for 3d party services, that leader will need to call. 
-  -- , serverHandlers ::
-  --     { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
-  --     , acceptSignedTransaction ::
-  --         SendSignedTransaction
-  --         -> Aff $ Either AcceptSignedTransactionError Unit
-  --     , refuseToSign :: UUID -> Aff Unit
-  --     , getActionStatus :: UUID -> Aff ActionStatus
-  --     }
   }
 
 maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
@@ -303,16 +273,13 @@ derive instance Newtype (LeaderNode a) _
 
 newtype UserState a = UserState
   {
-    -- | This three types must store the state of the sent transactions.
-    -- | `actionSent` is for actions that are confirmed to be received
-    -- | by the leader but aren't in processes right now.
-    -- TODO : put the right types in the following three
-    -- Maybe is : `MutableReference (OrderedMap (SomeUniqueID a) UserAction a)
-    pendingResponse :: OrderedMap UUID a
-  , actionsSent :: Ref (OrderedMap UUID a)
-  -- | `transactionsSent` is intended for both the `action` and it's
-  -- | corresponding `SignedTransaction` already send to the server.
-  , transactionsSent :: Array a
+    -- | `actionsSent` pourpose is to store the actions already
+    -- | send the to the `leader`that are confirmed to be accepted
+    -- | but are still waiting to reach the requirement of signature.
+    actionsSent :: Ref (OrderedMap UUID a)
+  -- | For actions whose transaction is already signed and sent 
+  -- | to the server.
+  , transactionsSent :: Ref (OrderedMap UUID a)
   -- | Those signed transactions are confirmed to be in the chain 
   -- | ready for submission.
   -- | Once a transaction is confirmed to be done, we can safely 
@@ -321,23 +288,23 @@ newtype UserState a = UserState
   -- Well maybe we can put a extra call back in the interface that
   -- is automatically called wen the transaction is confirmed in the 
   -- blockchain and then we autoremove this transactions.
-  , submitedTransactions :: Array a
-  -- | This is used to fill a requests as the `ControlNumber`
-  , numberOfActionsRequestsMade :: MutableInt
+  , submitedTransactions :: Ref (OrderedMap UUID a)
   }
 
 derive instance Newtype (UserState a) _
 
+type UserHandlers a =
+  { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
+  , acceptSignedTransaction ::
+      SendSignedTransaction
+      -> Aff $ Either AcceptSignedTransactionError Unit
+  , refuseToSign :: UUID -> Aff Unit
+  , getActionStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
+  }
+
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
-  , clientHandlers ::
-      { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
-      , acceptSignedTransaction ::
-          SendSignedTransaction
-          -> Aff $ Either AcceptSignedTransactionError Unit
-      , refuseToSign :: UUID -> Aff Unit
-      , getActionStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
-      }
+  , clientHandlers :: UserHandlers a
   }
 
 derive instance Newtype (UserConfiguration a) _
@@ -356,14 +323,14 @@ addToSentActions (UserNode node) (uuid /\ action) = do
 
 readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
 readSentActions (UserNode node) = liftEffect $
-  OMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
+  OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
 
--- userHandlers :: forall a. UserNode a
-userHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
+getUserHandlers :: forall a. UserNode a -> UserHandlers a
+getUserHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
 
 pushRefMap_
   :: forall k v. Ord k => k -> v -> Ref (OrderedMap k v) -> Effect Unit
 pushRefMap_ k v mutMap =
   Ref.modify_
-    (OMap.push k v)
+    (OrderedMap.push k v)
     mutMap

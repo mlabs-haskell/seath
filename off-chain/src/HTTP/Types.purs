@@ -84,7 +84,7 @@ instance encSendSignedReq ::
       (FinalizedTransaction tx) = unwrap s.transaction
     in
       show $ encodeAeson
-        { "controlNumber": encodeAeson (UID s.controlNumber)
+        { "uuid": encodeAeson (UID s.uuid)
         , "transaction": encodeAeson tx
         }
 

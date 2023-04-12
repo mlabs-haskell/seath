@@ -12,7 +12,7 @@ import Effect (Effect)
 import Effect.Aff (supervise)
 import Prelude (($))
 import Seath.Test.Utils (makeDistribution)
-import Test.Examples.Addition.SeathNetwork as SeathNet
+import Test.Examples.Addition.SeathNetwork (mainTest)
 
 run :: Effect Unit
 run = launchAff_
@@ -21,7 +21,7 @@ run = launchAff_
     \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
       ( supervise -- ! misha: I've added it here so we get the same behavior as with `withContractEnv``
 
-          $ SeathNet.mainTest env adminWallet leaderWallet
+          $ mainTest env adminWallet leaderWallet
               participantsWallets
       )
 

@@ -26,7 +26,7 @@ import Effect.Aff (Aff, delay, forkAff)
 import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
-import Seath.Network.OrderedMap as OMap
+import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
   ( ActionStatus(NotFound, ToBeProcessed)
   , IncludeActionError(RejectedServerBussy)
@@ -64,8 +64,8 @@ includeAction ln@(LeaderNode node) action = do
 actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
 actionStatus leaderNode actionId = do
   pending <- getPending leaderNode
-  let maybeInPending = OMap.lookupPostion actionId pending
-  -- todo: check in other OMaps and get correct status
+  let maybeInPending = OrderedMap.lookupPostion actionId pending
+  -- todo: check in other OrderedMaps and get correct status
   pure $ case maybeInPending of
     Just i -> ToBeProcessed i
     Nothing -> NotFound
@@ -77,7 +77,7 @@ acceptSignedTransaction
   -> Aff Unit
 acceptSignedTransaction _leaderNode signedTx = do
   log $ "Leader accepts Signed Transaction " <> show
-    (unwrap signedTx).controlNumber
+    (unwrap signedTx).uuid
 
 acceptRefuseToSign
   :: forall a
@@ -125,7 +125,7 @@ getNextBatchOfActions = undefined
 startLeaderNode
   :: forall a. Show a => LeaderConfiguration a -> Aff (LeaderNode a)
 startLeaderNode conf = do
-  pending <- liftEffect $ Ref.new OMap.empty
+  pending <- liftEffect $ Ref.new OrderedMap.empty
   let
     node = LeaderNode
       { state: LeaderState
@@ -133,8 +133,6 @@ startLeaderNode conf = do
           , prioritaryPendingActions: undefined
           , signatureResponses: undefined
           , stage: undefined
-          , numberOfActionsRequestsMade: undefined
-
           }
       , configuration: conf
       }
@@ -155,7 +153,7 @@ startBatcherThread ln = do
     pendingNum <- numberOfPending ln
     if pendingNum >= tHold then do
       toProcess <- takeFromPending tHold ln
-      log $ "------> To process: " <> show (OMap.orderedElems toProcess)
+      log $ "------> To process: " <> show (OrderedMap.orderedElems toProcess)
     else pure unit
     delay (Milliseconds 3000.0)
     loop

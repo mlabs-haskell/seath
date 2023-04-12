@@ -1,7 +1,7 @@
 module Seath.Core.Utils
   ( findOwnOutputs
   , getFinalizedTransactionHash
-  , mkActionContract
+  , makeActionContract
   ) where
 
 import Contract.Address
@@ -49,8 +49,8 @@ getFinalizedTransactionHash fTx = do
   liftEffect $ Ctl.Internal.Hashing.transactionHash <$>
     Ctl.Internal.Serialization.convertTransaction (unwrap fTx)
 
-mkActionContract :: forall a. a -> Contract (UserAction a)
-mkActionContract action = do
+makeActionContract :: forall a. a -> Contract (UserAction a)
+makeActionContract action = do
   ownUtxos <- liftedM "Error making action: no UTxOs found" getWalletUtxos
   publicKeyHash <- getPublicKeyHash
   changeAddress <- liftedM "can't get Change address" $ head <$>

@@ -1,16 +1,16 @@
 module Seath.Core.Types
-  ( ChainBuilderState(..)
-  , ChangeAddress(..)
-  , CoreConfiguration(..)
-  , StateReturn(..)
-  , UserAction(..)
+  ( ChainBuilderState(ChainBuilderState)
+  , ChangeAddress(ChangeAddress)
+  , CoreConfiguration(CoreConfiguration)
+  , StateReturn(StateReturn)
+  , UserAction(UserAction)
   , changeAddress'
   ) where
 
 import Aeson
   ( class DecodeAeson
   , class EncodeAeson
-  , JsonDecodeError(..)
+  , JsonDecodeError(TypeMismatch)
   , fromString
   , toString
   )
@@ -22,22 +22,18 @@ import Contract.Address
   )
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
-import Contract.Prelude
-  ( class Newtype
-  , Either(..)
-  , bind
-  , maybe
-  , pure
-  , unwrap
-  , ($)
-  )
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)
 import Contract.TxConstraints (TxConstraints)
 import Contract.Utxos (UtxoMap)
+import Control.Applicative (pure)
+import Control.Monad (bind)
+import Data.Either (Either(Left))
+import Data.Function (($))
+import Data.Maybe (maybe)
 import Data.Monoid ((<>))
-import Data.Newtype (class Newtype)
+import Data.Newtype (class Newtype, unwrap)
 import Data.Show (class Show, show)
 import Data.Tuple.Nested (type (/\))
 
