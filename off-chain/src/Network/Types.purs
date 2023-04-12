@@ -5,13 +5,15 @@ import Contract.Prelude
 import Aeson
   ( class DecodeAeson
   , class EncodeAeson
+  , Aeson
   , JsonDecodeError(TypeMismatch)
   , decodeAeson
+  , encodeAeson
   , fromString
   , getField
   , toString
   )
-import Contract.Transaction (FinalizedTransaction)
+import Contract.Transaction (FinalizedTransaction(..), Transaction(..))
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
@@ -21,6 +23,7 @@ import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
+import Seath.Common.Types (UID(..))
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
@@ -144,7 +147,8 @@ instance showActionStatus :: Show ActionStatus where
 
 instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
   encodeAeson = case _ of
-    AskForSignature asForSig -> encodeTagged' "AskForSignature" "test" -- FIXME
+    AskForSignature askForSig -> encodeTagged' "AskForSignature"
+      (encodeAskForSig askForSig)
     ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
     ToBeSubmited i -> encodeTagged' "ToBeSubmited" i
     Processing -> encodeTagged' "Processing" ""
@@ -153,6 +157,23 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     RequireNewSignature -> encodeTagged' "RequireNewSignature" ""
     SubmitError err -> encodeTagged' "SubmitError" err
     NotFound -> encodeTagged' "NotFound" ""
+
+    where
+    encodeAskForSig
+      :: { controlNumber :: UUID
+         , transaction :: FinalizedTransaction
+         }
+      -> Aeson
+    encodeAskForSig askForSig =
+      let
+        tx :: Transaction
+        tx = unwrap askForSig.transaction
+      in
+        encodeAeson
+          { "controlNumber": encodeAeson (UID askForSig.controlNumber)
+          , "transaction": encodeAeson tx
+
+          }
 
 instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
   decodeAeson s = do

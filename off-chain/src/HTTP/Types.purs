@@ -7,18 +7,15 @@ import Aeson
   , class EncodeAeson
   , decodeJsonString
   , encodeAeson
-  , fromString
   , toString
   )
 import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
 import Data.Bifunctor (bimap)
-import Data.String (Pattern(Pattern), Replacement(Replacement), replace)
-import Data.UUID (UUID, parseUUID)
 import Payload.Client.EncodeBody (class EncodeBody)
 import Payload.Client.EncodeParam (class EncodeParam)
 import Payload.ContentType (class HasContentType, json)
 import Payload.Server.DecodeBody (class DecodeBody)
-import Payload.Server.Params (class DecodeParam)
+import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.Network.Types (SendSignedTransaction(..))
 import Undefined (undefined)
@@ -48,26 +45,6 @@ instance includeContentType :: HasContentType (IncludeRequest a) where
 
 instance EncodeParam (IncludeRequest a) where
   encodeParam = undefined
-
-newtype UID = UID UUID
-
-derive instance Newtype UID _
-
-instance showUID :: Show UID where
-  show (UID uuid) =
-    replace (Pattern "(UUID ") (Replacement "")
-      $ replace (Pattern ")") (Replacement "")
-      $ show uuid
-
-instance eaUID :: EncodeAeson UID where
-  encodeAeson = show >>> fromString
-
-instance epUID :: EncodeParam UID where
-  encodeParam = show
-
-instance dpUID :: DecodeParam UID where
-  decodeParam uid =
-    note ("Could not parse UUID param from " <> uid) (UID <$> parseUUID uid)
 
 -- Phantom types to make Spec and Handlers more readable
 -- Went with Record coz couldn't make `DecodeResponse` instance for custom `data` type

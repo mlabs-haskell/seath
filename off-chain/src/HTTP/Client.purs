@@ -9,11 +9,12 @@ import Effect.Aff (Aff)
 import Payload.Client (ClientError, Options)
 import Payload.Client as Client
 import Payload.Headers (Headers)
-import Payload.ResponseTypes (Empty, Response)
+import Payload.ResponseTypes (Response)
 import Payload.Spec (Spec)
+import Seath.Common.Types (UID)
 import Seath.HTTP.Spec (LeaderRoutes)
 import Seath.HTTP.Spec as Spec
-import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, UID)
+import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest)
 import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
 import Type.Proxy (Proxy)
 

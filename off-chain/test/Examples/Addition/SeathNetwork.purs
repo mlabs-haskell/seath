@@ -10,8 +10,7 @@ import Contract.Log (logInfo')
 import Contract.Monad (ContractEnv, runContractInEnv)
 import Contract.Test (withKeyWallet)
 import Contract.Wallet (KeyWallet)
-import Control.Monad.Error.Class (liftMaybe, throwError)
-import Control.Monad.Error.Class (try)
+import Control.Monad.Error.Class (liftMaybe, throwError, try)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
@@ -21,13 +20,14 @@ import Data.Unit (Unit)
 import Effect.Aff (delay, error, forkAff)
 import Payload.ResponseTypes (Response(..))
 import Prelude (show)
+import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.Core.Utils as CoreUtils
 import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.Types (IncludeRequest(IncludeRequest), UID(UID))
+import Seath.HTTP.Types (IncludeRequest(IncludeRequest))
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
   ( ActionStatus

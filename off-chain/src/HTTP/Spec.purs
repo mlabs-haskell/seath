@@ -1,9 +1,8 @@
 module Seath.HTTP.Spec where
 
-import Seath.HTTP.Types
-
-import Payload.ResponseTypes (Empty)
 import Payload.Spec (GET, POST, Routes, Spec(Spec))
+import Seath.Common.Types (UID)
+import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest)
 import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
 
 type LeaderRoutes a = Routes "/leader"

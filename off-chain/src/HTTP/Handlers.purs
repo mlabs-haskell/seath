@@ -4,14 +4,8 @@ import Contract.Prelude
 
 import Data.Bifunctor (rmap)
 import Effect.Aff (Aff)
-import Payload.ResponseTypes (Empty(Empty))
-import Seath.HTTP.Types
-  ( IncludeRequest
-  , JSend
-  , SendSignedRequest
-  , UID(UID)
-  , toJsend
-  )
+import Seath.Common.Types (UID(UID))
+import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, toJsend)
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
   ( ActionStatus
@@ -51,7 +45,7 @@ acceptSignedTransaction
   -> Aff (JSend String String)
 acceptSignedTransaction leaderNode req = do
   log $ "Leader HTTP-server: accept signed Tx request: " <> show req
-  result <- leaderNode `Leader.acceptSignedTransaction` (unwrap req.body)
+  _result <- leaderNode `Leader.acceptSignedTransaction` (unwrap req.body)
   let response = toJsend (Right "" :: Either String String)
   log $ "Leader HTTP-server: accept signed Tx response: " <> show response
   pure response
