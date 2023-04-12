@@ -24,7 +24,7 @@ import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
-import Effect.Aff (Aff, delay, forkAff)
+import Effect.Aff (Aff, delay, forkAff, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
@@ -87,7 +87,9 @@ sendRejectionToLeader
    . UserNode a
   -> UUID
   -> Aff Unit
-sendRejectionToLeader = undefined
+sendRejectionToLeader userNode uuid = do
+  res <- try $ (userHandlers userNode).refuseToSign uuid
+  log $ "User: refusing to sing " <> show uuid <> ", result: " <> show res
 
 makeUserAction :: forall a. UserNode a -> a -> UtxoMap -> UserAction a
 makeUserAction nodeConfig action userUTxOs = undefined

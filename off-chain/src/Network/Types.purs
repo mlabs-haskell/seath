@@ -248,7 +248,7 @@ newtype LeaderConfiguration a = LeaderConfiguration
   --     , acceptSignedTransaction ::
   --         SendSignedTransaction
   --         -> Aff $ Either AcceptSignedTransactionError Unit
-  --     , rejectToSign :: UUID -> Aff Unit
+  --     , refuseToSign :: UUID -> Aff Unit
   --     , getActionStatus :: UUID -> Aff ActionStatus
   --     }
   }
@@ -302,7 +302,7 @@ newtype UserConfiguration a = UserConfiguration
       , acceptSignedTransaction ::
           SendSignedTransaction
           -> Aff $ Either AcceptSignedTransactionError Unit
-      , rejectToSign :: UUID -> Aff Unit
+      , refuseToSign :: UUID -> Aff Unit
       , getActionStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
       }
   }

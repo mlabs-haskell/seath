@@ -25,7 +25,7 @@ type LeaderRoutes a = Routes "/leader"
   , refuseToSign ::
       GET "/refuse-to-sign/<uid>"
         { params :: { uid :: UID }
-        , response :: Empty
+        , response :: (JSend String String)
         }
 
   }

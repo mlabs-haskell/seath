@@ -53,12 +53,12 @@ type UserClient a =
       , refuseToSign ::
           { params :: { uid :: UID } }
           -> Aff
-               (Either ClientError (Response Empty))
+               (Either ClientError (Response (JSend String String)))
       , refuseToSign_ ::
           { extraHeaders :: Headers }
           -> { params :: { uid :: UID } }
           -> Aff
-               (Either ClientError (Response Empty))
+               (Either ClientError (Response (JSend String String)))
       }
   }
 
@@ -119,12 +119,12 @@ mkUserClient _ serverUrl =
                   , refuseToSign ::
                       { params :: { uid :: UID } }
                       -> Aff
-                           (Either ClientError (Response Empty))
+                           (Either ClientError (Response (JSend String String)))
                   , refuseToSign_ ::
                       { extraHeaders :: Headers }
                       -> { params :: { uid :: UID } }
                       -> Aff
-                           (Either ClientError (Response Empty))
+                           (Either ClientError (Response (JSend String String)))
                   }
               }
          )

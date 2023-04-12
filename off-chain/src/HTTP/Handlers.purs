@@ -60,14 +60,14 @@ refuseToSign
   :: forall a
    . LeaderNode a
   -> { params :: { uid :: UID } }
-  -> Aff Empty
+  -> Aff (JSend String String)
 refuseToSign leaderNode request = do
   let uuid = unwrap request.params.uid
   log $ "Leader HTTP-server: refuse to sign request: "
     <> show uuid
   leaderNode `Leader.acceptRefuseToSign` uuid
   log "Leader HTTP-server: refuse to sign request acknowledged"
-  pure Empty
+  pure <<< toJsend $ (Right "" :: Either String String)
 
 actionStatus
   :: forall a

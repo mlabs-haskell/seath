@@ -1,18 +1,20 @@
-module Test.Examples.Addition.SeathNetwork (mainTest) where
+module Test.Examples.Addition.SeathNetwork
+  ( mainTest
+  , userHandlerRefuseToSign
+  ) where
 
 import Contract.Prelude
 
 import Aeson (class EncodeAeson, decodeJsonString)
 import Contract.Log (logInfo')
-import Contract.Monad (ContractEnv, runContractInEnv, throwContractError)
+import Contract.Monad (ContractEnv, runContractInEnv)
 import Contract.Test (withKeyWallet)
 import Contract.Wallet (KeyWallet)
-import Control.Monad.Error.Class (liftMaybe)
+import Control.Monad.Error.Class (liftMaybe, throwError)
 import Control.Monad.Error.Class (try)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt as BigInt
-import Data.Map as Map
 import Data.Time.Duration (Milliseconds(..))
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
@@ -33,13 +35,13 @@ import Seath.Network.Types
   , IncludeActionError(..)
   , LeaderConfiguration(..)
   , LeaderNode
-  , MiliSeconds
   , UserConfiguration(..)
   , UserNode
+  , readSentActions
   )
 import Seath.Network.Users as Users
-import Seath.Test.Examples.Addition.Actions as Addition
-import Seath.Test.Examples.Addition.Contract as Addition
+import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition
+import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition
 import Seath.Test.Examples.Addition.Types (AdditionAction(..))
 import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
@@ -85,6 +87,11 @@ mainTest env admin _leader users = do
     (AddAmount $ BigInt.fromInt 2)
   Leader.showDebugState leaderNode >>= log
 
+  uids <- (map fst) <$> readSentActions userNode
+  maybe (throwError $ error "ff")
+    (Users.sendRejectionToLeader userNode)
+    (uids !! 0)
+
   delay (Milliseconds 10000.0)
   log "end"
 
@@ -105,7 +112,7 @@ _testUserConf = UserConfiguration
   , clientHandlers:
       { submitToLeader: userHandlerSendAction httpClient
       , acceptSignedTransaction: undefined
-      , rejectToSign: undefined
+      , refuseToSign: userHandlerRefuseToSign httpClient
       , getActionStatus: userHandlerGetStatus httpClient
       }
 
@@ -152,6 +159,18 @@ userHandlerGetStatus client uuid = do
       lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
     else either (show >>> GSOtherError >>> Left) Left
       (decodeJsonString r.body.data)
+
+userHandlerRefuseToSign
+  :: UserClient AdditionAction
+  -> UUID
+  -> Aff Unit
+userHandlerRefuseToSign client uuid = do
+  res <-
+    client.leader.refuseToSign
+      { params: { uid: UID uuid } }
+  case res of
+    Right _ -> pure unit
+    Left r -> throwError (error $ show r)
 
 checkInitSctipt :: ContractEnv -> KeyWallet -> Aff Unit
 checkInitSctipt env admin = runContractInEnv env $ withKeyWallet admin $ do
