@@ -27,7 +27,24 @@ import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types (ActionStatus(NotFound, ToBeProcessed), IncludeActionError(RejectedServerBussy), LeaderConfiguration, LeaderNode(LeaderNode), LeaderServerStage(WaitingForActions), LeaderServerStateInfo(LeaderServerInfo), LeaderState(LeaderState), SendSignedTransaction, SignedTransaction, addAction, chaintriggerTreshold, getPending, maxPendingCapacity, numberOfPending, signTimeout, takeFromPending)
+import Seath.Network.Types
+  ( ActionStatus(NotFound, ToBeProcessed)
+  , IncludeActionError(RejectedServerBussy)
+  , LeaderConfiguration
+  , LeaderNode(LeaderNode)
+  , LeaderServerStage(WaitingForActions)
+  , LeaderServerStateInfo(LeaderServerInfo)
+  , LeaderState(LeaderState)
+  , SendSignedTransaction
+  , SignedTransaction
+  , addAction
+  , chaintriggerTreshold
+  , getPending
+  , maxPendingCapacity
+  , numberOfPending
+  , signTimeout
+  , takeFromPending
+  )
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -105,21 +122,23 @@ getNextBatchOfActions = undefined
 
 -- (getAbatchOfPendingActions undefined undefined)
 
-startLeaderNode :: forall a. Show a => LeaderConfiguration a -> Aff (LeaderNode a)
+startLeaderNode
+  :: forall a. Show a => LeaderConfiguration a -> Aff (LeaderNode a)
 startLeaderNode conf = do
   pending <- liftEffect $ Ref.new OMap.empty
-  let node = LeaderNode
-          { state: LeaderState
-              { pendingActionsRequest: pending
-              , prioritaryPendingActions: undefined
-              , signatureResponses: undefined
-              , stage: undefined
-              , numberOfActionsRequestsMade: undefined
+  let
+    node = LeaderNode
+      { state: LeaderState
+          { pendingActionsRequest: pending
+          , prioritaryPendingActions: undefined
+          , signatureResponses: undefined
+          , stage: undefined
+          , numberOfActionsRequestsMade: undefined
 
-              }
-          , configuration: conf
           }
-          
+      , configuration: conf
+      }
+
   -- ! this is early and experimental to see if batching will work correctly
   -- ! uncomment if needed
   -- startBatcherThread node
@@ -134,12 +153,11 @@ startBatcherThread ln = do
   loop = do
     let tHold = chaintriggerTreshold ln
     pendingNum <- numberOfPending ln
-    if pendingNum >= tHold
-      then do 
-        toProcess <- takeFromPending tHold ln
-        log $ "------> To process: " <> show (OMap.orderedElems toProcess)
-      else pure unit
-    delay (Milliseconds 3000.0) 
+    if pendingNum >= tHold then do
+      toProcess <- takeFromPending tHold ln
+      log $ "------> To process: " <> show (OMap.orderedElems toProcess)
+    else pure unit
+    delay (Milliseconds 3000.0)
     loop
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit

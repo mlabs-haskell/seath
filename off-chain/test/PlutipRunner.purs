@@ -49,4 +49,3 @@ config =
       { slotLength: Seconds 1.0 }
   }
 
-

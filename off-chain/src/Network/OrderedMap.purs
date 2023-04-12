@@ -8,8 +8,7 @@ module Seath.Network.OrderedMap
   , push
   , splitEither
   , take
-  )
-  where
+  ) where
 
 import Contract.Prelude
 

@@ -1,11 +1,14 @@
 module Seath.Test.Utils
   ( runnerConfInfo
   , makeKeyWallet
-  ,makeDistribution
+  , makeDistribution
   ) where
 
 import Contract.Wallet (KeyWallet, privateKeysToKeyWallet)
-import Contract.Wallet.KeyFile (privatePaymentKeyFromFile, privateStakeKeyFromFile)
+import Contract.Wallet.KeyFile
+  ( privatePaymentKeyFromFile
+  , privateStakeKeyFromFile
+  )
 import Control.Alternative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
@@ -40,7 +43,6 @@ makeKeyWallet keysDir = do
         [ keysDir, "stake.skey" ]
     )
   pure $ privateKeysToKeyWallet payment mbStake
-
 
 type Distribution = ((Array BigInt /\ Array BigInt) /\ Array (Array BigInt))
 
