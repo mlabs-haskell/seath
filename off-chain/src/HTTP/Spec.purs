@@ -16,6 +16,11 @@ type LeaderRoutes a = Routes "/leader"
         { params :: { uid :: UID }
         , response :: JSend GetStatusError ActionStatus
         }
+  , acceptSignedTransaction ::
+      POST "/accept-signed-tx"
+        { body :: SendSignedRequest
+        , response :: JSend String String
+        }
 
   }
 

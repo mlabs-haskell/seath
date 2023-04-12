@@ -97,6 +97,8 @@ instance decodeAesonLeaderServerStage :: DecodeAeson LeaderServerStage where
 
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
+derive instance Newtype SignedTransaction _
+derive newtype instance Show SignedTransaction
 derive instance Generic SignedTransaction _
 
 newtype LeaderServerStateInfo = LeaderServerInfo
@@ -195,6 +197,9 @@ newtype SendSignedTransaction = SendSignedTransaction
   { controlNumber :: UUID
   , transaction :: SignedTransaction
   }
+
+derive instance Newtype SendSignedTransaction _
+derive newtype instance Show SendSignedTransaction
 
 -- I suspect that this `a` is a type like :
 -- `UUID /\ UserAction a`

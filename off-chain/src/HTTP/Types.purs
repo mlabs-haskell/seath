@@ -1,9 +1,6 @@
 module Seath.HTTP.Types where
 
 import Contract.Prelude
-import Payload.Client.EncodeParam
-import Payload.Server.Params
-import Undefined
 
 import Aeson
   ( class DecodeAeson
@@ -11,26 +8,20 @@ import Aeson
   , decodeJsonString
   , encodeAeson
   , fromString
-  , isString
-  , stringifyAeson
   , toString
   )
-import Ctl.Internal.Test.UtxoDistribution (encodeDistribution)
-import Data.Bifunctor (bimap, lmap)
-import Data.String
-  ( Pattern(Pattern)
-  , Replacement(Replacement)
-  , replace
-  , replaceAll
-  )
+import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
+import Data.Bifunctor (bimap)
+import Data.String (Pattern(Pattern), Replacement(Replacement), replace)
 import Data.UUID (UUID, parseUUID)
-import Payload.Client.DecodeResponse (class DecodeResponse)
 import Payload.Client.EncodeBody (class EncodeBody)
+import Payload.Client.EncodeParam (class EncodeParam)
 import Payload.ContentType (class HasContentType, json)
-import Payload.ResponseTypes (Json(..), Response(..), ResponseBody(..))
 import Payload.Server.DecodeBody (class DecodeBody)
-import Payload.Server.Response (class EncodeResponse, encodeResponse, ok)
+import Payload.Server.Params (class DecodeParam)
 import Seath.Core.Types (UserAction)
+import Seath.Network.Types (SendSignedTransaction(..))
+import Undefined (undefined)
 
 -- Include action
 -- ! acrh: newtype wrapper made to avoid having DecodeBody/EncodeBody
@@ -99,3 +90,26 @@ toJsend r = case r of
       encoded = encodeAeson v
     in -- FIXME: how to avoid extra quotes? 
       fromMaybe (show encoded) (toString encoded)
+
+newtype SendSignedRequest = SendSignedRequest SendSignedTransaction
+
+derive instance Newtype SendSignedRequest _
+derive newtype instance Show SendSignedRequest
+instance decSendSignedReq ::
+  DecodeBody SendSignedRequest where
+  decodeBody s = undefined
+
+instance encSendSignedReq ::
+  EncodeBody SendSignedRequest where
+  encodeBody sendSigReq =
+    let
+      (SendSignedTransaction s) = unwrap sendSigReq
+      (FinalizedTransaction tx) = unwrap s.transaction
+    in
+      show $ encodeAeson
+        { "controlNumber": encodeAeson (UID s.controlNumber)
+        , "transaction": encodeAeson tx
+        }
+
+instance sendSignedReqContentType :: HasContentType SendSignedRequest where
+  getContentType _ = json

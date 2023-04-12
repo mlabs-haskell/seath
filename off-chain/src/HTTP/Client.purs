@@ -13,7 +13,7 @@ import Payload.ResponseTypes (Response)
 import Payload.Spec (Spec)
 import Seath.HTTP.Spec (LeaderRoutes)
 import Seath.HTTP.Spec as Spec
-import Seath.HTTP.Types (IncludeRequest, JSend, UID)
+import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest(..), UID)
 import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
 import Type.Proxy (Proxy)
 
@@ -41,6 +41,15 @@ type UserClient a =
                ( Either ClientError
                    (Response (JSend GetStatusError ActionStatus))
                )
+      , acceptSignedTransaction ::
+          { body :: SendSignedRequest }
+          -> Aff
+               (Either ClientError (Response (JSend String String)))
+      , acceptSignedTransaction_ ::
+          { extraHeaders :: Headers }
+          -> { body :: SendSignedRequest }
+          -> Aff
+               (Either ClientError (Response (JSend String String)))
       }
   }
 
@@ -89,6 +98,15 @@ mkUserClient _ serverUrl =
                            ( Either ClientError
                                (Response (JSend GetStatusError ActionStatus))
                            )
+                  , acceptSignedTransaction ::
+                      { body :: SendSignedRequest }
+                      -> Aff
+                           (Either ClientError (Response (JSend String String)))
+                  , acceptSignedTransaction_ ::
+                      { extraHeaders :: Headers }
+                      -> { body :: SendSignedRequest }
+                      -> Aff
+                           (Either ClientError (Response (JSend String String)))
                   }
               }
          )

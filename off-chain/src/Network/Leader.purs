@@ -1,5 +1,6 @@
 module Seath.Network.Leader
-  ( actionStatus
+  ( acceptSignedTransaction
+  , actionStatus
   , getNextBatchOfActions
   , includeAction
   , newLeaderState
@@ -25,13 +26,14 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
 import Seath.Network.Types
-  ( ActionStatus(ToBeProcessed, NotFound)
+  ( ActionStatus(NotFound, ToBeProcessed)
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
   , LeaderServerStage(WaitingForActions)
   , LeaderServerStateInfo(LeaderServerInfo)
   , LeaderState(LeaderState)
+  , SendSignedTransaction
   , SignedTransaction
   , addAction
   , getPending
@@ -63,6 +65,15 @@ actionStatus leaderNode actionId = do
   pure $ case maybeInPending of
     Just i -> ToBeProcessed i
     Nothing -> NotFound
+
+acceptSignedTransaction
+  :: forall a
+   . LeaderNode a
+  -> SendSignedTransaction
+  -> Aff Unit
+acceptSignedTransaction _leaderNode signedTx = do
+  log $ "Leader accepts Signed Transaction " <> show
+    (unwrap signedTx).controlNumber
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.
