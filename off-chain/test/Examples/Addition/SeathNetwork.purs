@@ -92,7 +92,7 @@ mainTest env admin _leader users = do
     (Users.sendRejectionToLeader userNode)
     (uids !! 0)
 
-  delay (Milliseconds 10000.0)
+  delay (Milliseconds 15000.0)
   log "end"
 
 -- LeaderNode config
@@ -101,7 +101,7 @@ _testLeaderConf =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 0
     , maxQueueSize: 4
-    , numberOfActionToTriggerChainBuilder: 0
+    , numberOfActionToTriggerChainBuilder: 2
     , maxWaitingTimeBeforeBuildChain: 0
     }
 

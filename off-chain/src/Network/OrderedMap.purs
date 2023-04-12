@@ -1,12 +1,15 @@
 module Seath.Network.OrderedMap
-  ( OrderedMap(OrderedMap)
+  ( OrderedMap(..)
+  , drop
   , empty
   , length
   , lookupPostion
   , orderedElems
   , push
   , splitEither
-  ) where
+  , take
+  )
+  where
 
 import Contract.Prelude
 
@@ -63,3 +66,11 @@ empty = OrderedMap { map: Map.empty, array: [] }
 
 orderedElems :: forall k v. OrderedMap k v -> Array (k /\ v)
 orderedElems (OrderedMap oMap) = oMap.array
+
+take :: forall k v. Ord k => Int -> OrderedMap k v -> OrderedMap k v
+take n (OrderedMap oMap) = foldr (uncurry push) empty
+  (Array.take n oMap.array)
+
+drop :: forall k v. Ord k => Int -> OrderedMap k v -> OrderedMap k v
+drop n (OrderedMap oMap) = foldr (uncurry push) empty
+  (Array.drop n oMap.array)

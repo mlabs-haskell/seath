@@ -240,6 +240,14 @@ getPending :: forall a. LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 getPending (LeaderNode node) = do
   liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest
 
+takeFromPending
+  :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
+takeFromPending n ln@(LeaderNode node) = do
+  pending <- getPending ln
+  liftEffect $ Ref.modify_ (const (OMap.drop n pending))
+    (unwrap node.state).pendingActionsRequest
+  pure $ OMap.take n pending
+
 addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
 addAction action st = liftEffect do
   actionUUID <- genUUID
@@ -247,9 +255,9 @@ addAction action st = liftEffect do
     (unwrap st).pendingActionsRequest
   pure actionUUID
 
-numberOfPending :: forall a. LeaderState a -> Aff Int
-numberOfPending st = OMap.length <$>
-  (liftEffect $ Ref.read (unwrap st).pendingActionsRequest)
+numberOfPending :: forall a. LeaderNode a -> Aff Int
+numberOfPending (LeaderNode node) = OMap.length <$>
+  (liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest)
 
 derive instance Newtype (LeaderState a) _
 
@@ -279,6 +287,10 @@ maxPendingCapacity conf = (unwrap conf).maxQueueSize
 
 signTimeout :: forall a. LeaderConfiguration a -> Int
 signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
+
+chaintriggerTreshold :: forall a. LeaderNode a -> Int
+chaintriggerTreshold (LeaderNode node) =
+  (unwrap node.configuration).numberOfActionToTriggerChainBuilder
 
 derive instance Newtype (LeaderConfiguration a) _
 

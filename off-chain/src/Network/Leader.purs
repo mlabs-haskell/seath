@@ -18,30 +18,16 @@ import Contract.Prelude
 
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
+import Data.Time.Duration (Milliseconds(..))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, delay, forkAff)
 import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OMap
-import Seath.Network.Types
-  ( ActionStatus(NotFound, ToBeProcessed)
-  , IncludeActionError(RejectedServerBussy)
-  , LeaderConfiguration
-  , LeaderNode(LeaderNode)
-  , LeaderServerStage(WaitingForActions)
-  , LeaderServerStateInfo(LeaderServerInfo)
-  , LeaderState(LeaderState)
-  , SendSignedTransaction
-  , SignedTransaction
-  , addAction
-  , getPending
-  , maxPendingCapacity
-  , numberOfPending
-  , signTimeout
-  )
+import Seath.Network.Types (ActionStatus(NotFound, ToBeProcessed), IncludeActionError(RejectedServerBussy), LeaderConfiguration, LeaderNode(LeaderNode), LeaderServerStage(WaitingForActions), LeaderServerStateInfo(LeaderServerInfo), LeaderState(LeaderState), SendSignedTransaction, SignedTransaction, addAction, chaintriggerTreshold, getPending, maxPendingCapacity, numberOfPending, signTimeout, takeFromPending)
 import Type.Function (type ($))
 import Undefined (undefined)
 
@@ -52,7 +38,7 @@ includeAction
   -> Aff (Either IncludeActionError UUID)
 includeAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
-  pendingCount <- numberOfPending node.state
+  pendingCount <- numberOfPending ln
   if (pendingCount < maxPendingCapacity node.configuration) then
     -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     (Right <$> addAction action node.state)
@@ -119,20 +105,42 @@ getNextBatchOfActions = undefined
 
 -- (getAbatchOfPendingActions undefined undefined)
 
-startLeaderNode :: forall a. LeaderConfiguration a -> Aff (LeaderNode a)
+startLeaderNode :: forall a. Show a => LeaderConfiguration a -> Aff (LeaderNode a)
 startLeaderNode conf = do
   pending <- liftEffect $ Ref.new OMap.empty
-  pure $ LeaderNode
-    { state: LeaderState
-        { pendingActionsRequest: pending
-        , prioritaryPendingActions: undefined
-        , signatureResponses: undefined
-        , stage: undefined
-        , numberOfActionsRequestsMade: undefined
+  let node = LeaderNode
+          { state: LeaderState
+              { pendingActionsRequest: pending
+              , prioritaryPendingActions: undefined
+              , signatureResponses: undefined
+              , stage: undefined
+              , numberOfActionsRequestsMade: undefined
 
-        }
-    , configuration: conf
-    }
+              }
+          , configuration: conf
+          }
+          
+  -- ! this is early and experimental to see if batching will work correctly
+  -- ! uncomment if needed
+  -- startBatcherThread node
+
+  pure node
+
+-- ! this is early and experimental to see if batching will work correctly
+startBatcherThread :: forall a. Show a => LeaderNode a -> Aff Unit
+startBatcherThread ln = do
+  void $ forkAff loop
+  where
+  loop = do
+    let tHold = chaintriggerTreshold ln
+    pendingNum <- numberOfPending ln
+    if pendingNum >= tHold
+      then do 
+        toProcess <- takeFromPending tHold ln
+        log $ "------> To process: " <> show (OMap.orderedElems toProcess)
+      else pure unit
+    delay (Milliseconds 3000.0) 
+    loop
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
@@ -152,16 +160,15 @@ newLeaderState = undefined
 
 showDebugState :: forall a. LeaderNode a -> Aff String
 showDebugState leaderNode = do
-  let state = (unwrap leaderNode).state
-  pending <- numberOfPending state
+  pending <- numberOfPending leaderNode
   pure $ "\nLeader debug state:"
     <> "\n Num of pending actions: "
     <> show pending
 
 -- TODO: partially mocked
 leaderStateInfo :: forall a. LeaderNode a -> Aff LeaderServerStateInfo
-leaderStateInfo (LeaderNode node) = do
-  numberOfActionsToProcess <- numberOfPending node.state
+leaderStateInfo ln@(LeaderNode node) = do
+  numberOfActionsToProcess <- numberOfPending ln
   let maxNumberOfPendingActions = maxPendingCapacity node.configuration
   let maxTimeOutForSignature = signTimeout node.configuration
   let serverStage = WaitingForActions -- TODO: get the real one
