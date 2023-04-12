@@ -1,25 +1,18 @@
 module Seath.Test.PlutipRunner (run) where
 
 import Contract.Config (LogLevel(Info), emptyHooks)
-import Contract.Monad (Contract, launchAff_)
+import Contract.Monad (launchAff_)
 import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
-import Contract.Wallet (KeyWallet)
-import Data.Array.NonEmpty (NonEmptyArray)
 import Data.Maybe (Maybe(Nothing))
 import Data.Time.Duration (Seconds(Seconds))
-import Data.Tuple.Nested (type (/\), (/\))
+import Data.Tuple.Nested ((/\))
 import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (supervise)
 import Prelude (($))
-import Seath.Network.Types (LeaderNode, UserNode)
-import Seath.Test.Examples.Addition.Types (AdditionAction)
-import Seath.Test.QuickCheck (makeDistribution)
-import Seath.Test.Types (Participant)
+import Seath.Test.Utils (makeDistribution)
 import Test.Examples.Addition.SeathNetwork as SeathNet
-import Type.Function (type ($))
-import Undefined (undefined)
 
 run :: Effect Unit
 run = launchAff_
@@ -56,20 +49,4 @@ config =
       { slotLength: Seconds 1.0 }
   }
 
--- The types here can change
-makeLeaderNode :: Contract $ LeaderNode AdditionAction
-makeLeaderNode = undefined
 
--- The types here can change
-makeParticpantNode :: Contract $ UserNode AdditionAction
-makeParticpantNode = undefined
-
-makeParticipantsFromIndexedWallets
-  :: NonEmptyArray (Int /\ KeyWallet)
-  -> Contract $ NonEmptyArray $ Participant AdditionAction
-makeParticipantsFromIndexedWallets = undefined
--- traverse indexed2Participant
--- where
--- indexed2Participant (index /\ wallet) = do
---   node <- makeParticpantNodeFromKeyWallet (show index) wallet
---   pure $ wrap { wallet, node }
