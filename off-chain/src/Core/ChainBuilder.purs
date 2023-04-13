@@ -35,6 +35,7 @@ import Seath.Core.Types
   , CoreConfiguration(CoreConfiguration)
   , StateReturn(StateReturn)
   , UserAction
+  , changeAddress'
   )
 import Seath.Core.Utils (findOwnOutputs, getFinalizedTransactionHash)
 
@@ -163,7 +164,7 @@ action2Transaction
         if additionalUtxos == scriptUtxos then empty else additionalUtxos
       balanceConstraints =
         mustUseAdditionalUtxos realAdditionalUtxos <>
-          mustSendChangeToAddress (unwrap userAction).changeAddress
+          mustSendChangeToAddress (changeAddress' userAction)
       constraints = handlerResult.constraints
         <> fold
           ( mustSpendPubKeyOutput <<< fst <$> toUnfoldable

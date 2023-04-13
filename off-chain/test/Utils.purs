@@ -1,10 +1,9 @@
 module Seath.Test.Utils
   ( runnerConfInfo
   , makeKeyWallet
-  , gen2Contract
+  , makeDistribution
   ) where
 
-import Contract.Monad (Contract)
 import Contract.Wallet (KeyWallet, privateKeysToKeyWallet)
 import Contract.Wallet.KeyFile
   ( privatePaymentKeyFromFile
@@ -13,18 +12,20 @@ import Contract.Wallet.KeyFile
 import Control.Alternative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
+import Data.Array (replicate)
 import Data.Array.NonEmpty as NE
+import Data.BigInt (BigInt)
+import Data.BigInt as BigInt
 import Data.Either (hush)
 import Data.Function (($))
 import Data.Functor ((<$>))
 import Data.Monoid ((<>))
 import Data.Newtype (unwrap)
 import Data.Show (show)
+import Data.Tuple.Nested (type (/\), (/\))
 import Effect.Aff (Aff)
-import Effect.Class (liftEffect)
 import Node.Path as Path
 import Seath.Test.Types (RunnerConfiguration)
-import Test.QuickCheck.Gen (Gen, randomSampleOne)
 
 runnerConfInfo
   :: forall s actionType. RunnerConfiguration s actionType -> String
@@ -43,5 +44,15 @@ makeKeyWallet keysDir = do
     )
   pure $ privateKeysToKeyWallet payment mbStake
 
-gen2Contract :: forall a. Gen a -> Contract a
-gen2Contract generator = liftEffect $ randomSampleOne generator
+type Distribution = ((Array BigInt /\ Array BigInt) /\ Array (Array BigInt))
+
+makeDistribution :: Int -> Distribution
+makeDistribution participantsNumber =
+  let
+    adminDistribution = [ BigInt.fromInt 1_000_000_000 ]
+    leaderDistribution = [ BigInt.fromInt 1_000_000_000 ]
+    usersDistribution = replicate participantsNumber
+      [ BigInt.fromInt 1_000_000_000 ]
+  in
+    (adminDistribution /\ leaderDistribution) /\ usersDistribution
+

@@ -1,35 +1,65 @@
 module Seath.Network.Types where
 
-import Contract.Transaction (FinalizedTransaction)
+import Contract.Prelude
+
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , Aeson
+  , JsonDecodeError(TypeMismatch)
+  , decodeAeson
+  , encodeAeson
+  , fromString
+  , getField
+  , toString
+  )
+import Contract.Transaction (FinalizedTransaction(..), Transaction(..))
+import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
-import Data.Map (Map)
 import Data.Newtype (class Newtype)
-import Data.Tuple.Nested (type (/\))
-import Data.UUID (UUID)
+import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
+import Effect.Ref as Ref
+import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
+import Seath.Network.OrderedMap as OrderedMap
 import Type.Function (type ($))
 
--- TODO: replace this types with real ones.
--- The names are indicatives but can change.
-type AsyncMutableQueueRef a = a
-type ControlNumber = Int
-type QueueIndex = Int
-type ChainNumber = Int
-type ChainIndex = Int
-type RequestCounter = Int
-type MiliSeconds = Int
-type Time = Int
-type MutableInt = Int
+type MilliSeconds = Int
 
-newtype IncludeActionError = RejectedServerBussy LeaderServerStateInfo
+data IncludeActionError
+  = RejectedServerBussy LeaderServerStateInfo
+  | IAOtherError String
+
+instance encodeAesonIncludeActionError :: EncodeAeson IncludeActionError where
+  encodeAeson = case _ of
+    RejectedServerBussy inf -> encodeTagged' "RejectedServerBussy" inf
+    IAOtherError err -> encodeTagged' "IAOtherError" err
+
+instance decodeAesonIncludeActionError :: DecodeAeson IncludeActionError where
+  decodeAeson s = do
+    obj <- decodeAeson s
+    tag <- getField obj "tag"
+    contents <- getField obj "contents"
+    case tag of
+      "RejectedServerBussy" -> RejectedServerBussy <$> decodeAeson contents
+      "IAOtherError" -> IAOtherError <$> decodeAeson contents
+      other -> Left
+        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
+
+derive instance Generic IncludeActionError _
+
+instance showIncludeActionError :: Show IncludeActionError where
+  show = genericShow
 
 newtype AcceptSignedTransactionError = AcceptSignedTransactionError
-  StatusResponse
+  ActionStatus
+
+derive newtype instance Show AcceptSignedTransactionError
 
 data LeaderServerStage
   = WaitingForActions
@@ -37,96 +67,252 @@ data LeaderServerStage
   | WaitingForChainSignatures
   | SubmittingChain
 
+derive instance Generic LeaderServerStage _
+instance showLSS :: Show LeaderServerStage where
+  show = genericShow
+
+instance encodeAesonLeaderServerStage :: EncodeAeson LeaderServerStage where
+  encodeAeson = show >>> fromString
+
+instance decodeAesonLeaderServerStage :: DecodeAeson LeaderServerStage where
+  decodeAeson s =
+    do
+      str <- note (TypeMismatch "Expected string") (toString s)
+      case str of
+        "WaitingForActions" -> Right WaitingForActions
+        "BuildingChain" -> Right BuildingChain
+        "WaitingForChainSignatures" -> Right WaitingForChainSignatures
+        "SubmittingChain" -> Right SubmittingChain
+        other -> Left
+          (TypeMismatch $ "Expected " <> other <> " for LeaderServerStage")
+
 newtype SignedTransaction = SignedTransaction FinalizedTransaction
 
+derive instance Newtype SignedTransaction _
+derive newtype instance Show SignedTransaction
 derive instance Generic SignedTransaction _
 
 newtype LeaderServerStateInfo = LeaderServerInfo
-  { numberOfActionsToProcess :: QueueIndex
-  , maxNumberOfPendingActions :: QueueIndex
-  , maxTimeOutForSignature :: MiliSeconds
+  { numberOfActionsToProcess :: Int
+  , maxNumberOfPendingActions :: Int
+  , maxTimeOutForSignature :: MilliSeconds
   , serverStage :: LeaderServerStage
   }
 
+derive newtype instance EncodeAeson LeaderServerStateInfo
+derive newtype instance DecodeAeson LeaderServerStateInfo
+
+derive instance Generic LeaderServerStateInfo _
+instance showLeaderServerStateInfo :: Show LeaderServerStateInfo where
+  show = genericShow
+
 newtype GetActionStatus = GetActionStatus
-  { controlNumber :: UUID
+  { uuid :: UUID
   }
 
 derive instance Newtype GetActionStatus _
 
-data StatusResponse
+data ActionStatus
   = AskForSignature
-      {
-        -- | The control number that the user attached in it's request to
-        -- | process the action.
-        controlNumber :: UUID
-      , transaction :: FinalizedTransaction
+      { uuid :: UUID
+      , txCborHex :: String -- TODO: maybe separate type?
       }
   | ToBeProcessed Int
-  | ToBeSubmited Int
+  | ToBeSubmitted Int
   | Processing
-  | RejectedAtChainBuilder String
-  | RequireNewSignature
-  | SubmitError String
+  | PrioritaryToBeProcessed Int
   | NotFound
 
+derive instance Generic ActionStatus _
+
+instance showActionStatus :: Show ActionStatus where
+  show = genericShow
+
+instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
+  encodeAeson = case _ of
+    AskForSignature askForSig -> encodeTagged' "AskForSignature"
+      (encodeAskForSig askForSig)
+    ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
+    ToBeSubmitted i -> encodeTagged' "ToBeSubmitted" i
+    Processing -> encodeTagged' "Processing" ""
+    PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
+    NotFound -> encodeTagged' "NotFound" ""
+
+    where
+    encodeAskForSig
+      :: { uuid :: UUID
+         , txCborHex :: String
+         }
+      -> Aeson
+    encodeAskForSig askForSig =
+      encodeAeson
+        { "uuid": encodeAeson (UID askForSig.uuid)
+        , "txCborHex": encodeAeson askForSig.txCborHex
+        }
+
+instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
+  decodeAeson s = do
+    obj <- decodeAeson s
+    tag <- getField obj "tag"
+    contents <- getField obj "contents"
+    case tag of
+      "AskForSignature" -> decodeAskForSig contents
+      "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
+      "ToBeSubmitted" -> ToBeSubmitted <$> decodeAeson contents
+      "Processing" -> Right Processing
+      "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
+        contents
+      "NotFound" -> Right NotFound
+      other -> Left
+        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
+    where
+    decodeAskForSig c = do
+      obj <- decodeAeson c
+      (uid :: UID) <- getField obj "uuid"
+      (cborHash :: String) <- getField obj "txCborHex"
+      pure $ AskForSignature
+        { uuid: unwrap uid
+        , txCborHex: cborHash
+        }
+
+data GetStatusError = GSOtherError String
+
+derive instance Generic GetStatusError _
+
+instance showStatusResponseError :: Show GetStatusError where
+  show = genericShow
+
+instance encodeAesonStatusResponseError :: EncodeAeson GetStatusError where
+  encodeAeson = case _ of
+    GSOtherError err -> encodeTagged' "GSOtherError" err
+
+instance decodeAesonStatusResponseError :: DecodeAeson GetStatusError where
+  decodeAeson s = do
+    obj <- decodeAeson s
+    tag <- getField obj "tag"
+    contents <- getField obj "contents"
+    case tag of
+      "GSOtherError" -> GSOtherError <$> decodeAeson contents
+      other -> Left
+        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
+
 newtype SendSignedTransaction = SendSignedTransaction
-  { controlNumber :: UUID
-  , transaction :: SignedTransaction
+  { uuid :: UUID
+  , txCborHex :: String
   }
 
--- I suspect that this `a` is a type like :
--- `UUID /\ UserAction a`
-newtype LeaderState a = LeaderState
+derive instance Newtype SendSignedTransaction _
+derive newtype instance Show SendSignedTransaction
+
+-- if you update this, update `Seath.Network.Leader.actionStatus` please
+-- and also `Seath.Network.Leader.restLeaderState`
+type LeaderStateInner a =
   { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
   -- For actions that were part of a previous built chain 
   -- and were removed since a previous action failed.
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
-  , signatureResponses :: Ref $ OrderedMap UUID (UserAction a)
-  , stage :: LeaderServerStage
-  -- We really need to think if we really want this,
-  -- see `UUID` comment.
-  , numberOfActionsRequestsMade :: MutableInt
+  , processing :: Ref $ OrderedMap UUID (UserAction a)
+  , waitingForSignature :: Ref $ OrderedMap UUID Transaction
+  , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
+  , stage :: Ref LeaderServerStage
   }
+
+newtype LeaderState a = LeaderState (LeaderStateInner a)
+
+getFromRefAtLeaderState
+  :: forall a b. LeaderNode a -> (LeaderStateInner a -> Ref b) -> Aff b
+getFromRefAtLeaderState ln f =
+  withRefFromState ln f Ref.read
+
+setToRefAtLeaderState
+  :: forall a b
+   . LeaderNode a
+  -> b
+  -> (LeaderStateInner a -> Ref b)
+  -> Aff Unit
+setToRefAtLeaderState ln v f = do
+  withRefFromState ln f (Ref.modify_ (const v))
+
+withRefFromState
+  :: forall a b c
+   . LeaderNode a
+  -> (LeaderStateInner a -> Ref b)
+  -> (Ref b -> Effect c)
+  -> Aff c
+withRefFromState (LeaderNode node) acessor f =
+  liftEffect $ f $ acessor (unwrap node.state)
+
+takeFromPending
+  :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
+takeFromPending n ln@(LeaderNode node) = do
+  pending <- getFromRefAtLeaderState ln _.pendingActionsRequest
+  liftEffect $ Ref.modify_ (const (OrderedMap.drop n pending))
+    (unwrap node.state).pendingActionsRequest
+  pure $ OrderedMap.take n pending
+
+addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
+addAction action st = liftEffect do
+  actionUUID <- genUUID
+  pushRefMap_ actionUUID action
+    (unwrap st).pendingActionsRequest
+  pure actionUUID
+
+getFromLeaderConfiguration
+  :: forall a b. LeaderNode a -> (LeaderConfigurationInner a -> b) -> b
+getFromLeaderConfiguration (LeaderNode node) accessor = accessor
+  (unwrap node.configuration)
+
+getNumberOfPending :: forall a. LeaderNode a -> Aff Int
+getNumberOfPending ln = do
+  numberOfPrioritary <- OrderedMap.length <$> getFromRefAtLeaderState ln
+    _.prioritaryPendingActions
+  numberOfPending <- OrderedMap.length <$> getFromRefAtLeaderState ln
+    _.pendingActionsRequest
+  pure $ numberOfPrioritary + numberOfPending
 
 derive instance Newtype (LeaderState a) _
 
-newtype LeaderConfiguration a = LeaderConfiguration
-  { maxWaitingTimeForSignature :: MiliSeconds
+type LeaderConfigurationInner a =
+  { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
-  , serverHandlers ::
-      { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
-      , acceptSignedTransaction ::
-          SendSignedTransaction
-          -> Aff $ Either AcceptSignedTransactionError Unit
-      , rejectToSign :: UUID -> Aff Unit
-      , getActionStatus :: UUID -> Aff StatusResponse
-      }
   }
+
+newtype LeaderConfiguration :: forall k. k -> Type
+newtype LeaderConfiguration a = LeaderConfiguration (LeaderConfigurationInner a)
+
+maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
+maxPendingCapacity conf = (unwrap conf).maxQueueSize
+
+signTimeout :: forall a. LeaderConfiguration a -> Int
+signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
+
+getChaintriggerTreshold :: forall a. LeaderNode a -> Int
+getChaintriggerTreshold (LeaderNode node) =
+  (unwrap node.configuration).numberOfActionToTriggerChainBuilder
 
 derive instance Newtype (LeaderConfiguration a) _
 
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
+  , buildChain ::
+      Array (UserAction a)
+      -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }
 
 derive instance Newtype (LeaderNode a) _
 
 newtype UserState a = UserState
   {
-    -- | This three types must store the state of the sent transactions.
-    -- | `actionSent` is for actions that are confirmed to be received
-    -- | by the leader but aren't in processes right now.
-    -- TODO : put the right types in the following three
-    -- Maybe is : `MutableReference (OrderedMap (SomeUniqueID a) UserAction a)
-    pendingResponse :: OrderedMap UUID a
-  , actionsSent :: OrderedMap UUID a
-  -- | `transactionsSent` is intended for both the `action` and it's
-  -- | corresponding `SignedTransaction` already send to the server.
-  , transactionsSent :: Array a
+    -- | `actionsSent` pourpose is to store the actions already
+    -- | send the to the `leader`that are confirmed to be accepted
+    -- | but are still waiting to reach the requirement of signature.
+    actionsSent :: Ref (OrderedMap UUID a)
+  -- | For actions whose transaction is already signed and sent 
+  -- | to the server.
+  , transactionsSent :: Ref (OrderedMap UUID a)
   -- | Those signed transactions are confirmed to be in the chain 
   -- | ready for submission.
   -- | Once a transaction is confirmed to be done, we can safely 
@@ -135,24 +321,49 @@ newtype UserState a = UserState
   -- Well maybe we can put a extra call back in the interface that
   -- is automatically called wen the transaction is confirmed in the 
   -- blockchain and then we autoremove this transactions.
-  , submitedTransactions :: Array a
-  -- | This is used to fill a requests as the `ControlNumber`
-  , numberOfActionsRequestsMade :: MutableInt
+  , submitedTransactions :: Ref (OrderedMap UUID a)
+  }
+
+derive instance Newtype (UserState a) _
+
+type UserHandlers a =
+  { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
+  , sendSignedToLeader ::
+      SendSignedTransaction
+      -> Aff $ Either AcceptSignedTransactionError Unit
+  , refuseToSign :: UUID -> Aff Unit
+  , getActionStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
   }
 
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
-  , clientHandlers ::
-      { includeAction :: UserAction a -> Aff $ Either IncludeActionError UUID
-      , acceptSignedTransaction ::
-          SendSignedTransaction
-          -> Aff $ Either AcceptSignedTransactionError Unit
-      , rejectToSign :: UUID -> Aff Unit
-      , getActionStatus :: UUID -> Aff StatusResponse
-      }
+  , clientHandlers :: UserHandlers a
   }
+
+derive instance Newtype (UserConfiguration a) _
 
 newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
+  , makeAction :: a -> Aff (UserAction a)
   }
+
+derive instance Newtype (UserNode a) _
+
+addToSentActions :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
+addToSentActions (UserNode node) (uuid /\ action) = do
+  liftEffect $ pushRefMap_ uuid action (unwrap node.state).actionsSent
+
+readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
+readSentActions (UserNode node) = liftEffect $
+  OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
+
+getUserHandlers :: forall a. UserNode a -> UserHandlers a
+getUserHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
+
+pushRefMap_
+  :: forall k v. Ord k => k -> v -> Ref (OrderedMap k v) -> Effect Unit
+pushRefMap_ k v mutMap =
+  Ref.modify_
+    (OrderedMap.push k v)
+    mutMap

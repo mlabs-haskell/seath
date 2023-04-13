@@ -1,78 +1,29 @@
 module Seath.Test.PlutipRunner (run) where
 
-import Contract.Address (getWalletAddressesWithNetworkTag)
 import Contract.Config (LogLevel(Info), emptyHooks)
-import Contract.Monad (Contract, launchAff_, liftedM)
-import Contract.Test.Plutip (PlutipConfig, runPlutipContract)
-import Contract.Wallet (KeyWallet, withKeyWallet)
-import Control.Alternative (pure)
-import Control.Monad (bind)
-import Control.Monad.Error.Class (liftMaybe)
-import Data.Array (head)
-import Data.Array.NonEmpty (NonEmptyArray, length, range, zip)
-import Data.Array.NonEmpty as NE
-import Data.BigInt as BigInt
-import Data.Functor ((<$>))
-import Data.Log.Level as LogLevel
+import Contract.Monad (launchAff_)
+import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
 import Data.Maybe (Maybe(Nothing))
-import Data.Newtype (wrap)
-import Data.Ring ((*), (+))
-import Data.Show (show)
 import Data.Time.Duration (Seconds(Seconds))
-import Data.Traversable (traverse)
-import Data.Tuple.Nested (type (/\), (/\))
+import Data.Tuple.Nested ((/\))
 import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect (Effect)
-import Effect.Aff (error)
+import Effect.Aff (supervise)
 import Prelude (($))
-import Seath.Network.Types (LeaderNode, UserNode)
-import Seath.Network.Utils (getPublicKeyHash)
-import Seath.Test.Examples.Addition.ContractSeath as SeathAddition
-import Seath.Test.Examples.Addition.SeathSetup (stateChangePerAction)
-import Seath.Test.Examples.Addition.Types (AdditionAction)
-import Seath.Test.QuickCheck
-  ( genLeaderNodeWith
-  , genUserNodeWith
-  , makeDistribution
-  )
-import Seath.Test.Types
-  ( Leader(Leader)
-  , Participant
-  , RunnerConfiguration(RunnerConfiguration)
-  )
-import Seath.Test.Utils (gen2Contract)
-import Type.Function (type ($))
-import Undefined (undefined)
+import Seath.Test.Utils (makeDistribution)
+import Test.Examples.Addition.SeathNetwork (mainTest)
 
 run :: Effect Unit
 run = launchAff_
-  $ runPlutipContract config (makeDistribution 4)
+  $ withPlutipContractEnv config (makeDistribution 4)
   $
-    \((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
-      participantsWallets' <- liftMaybe (error "No participants found")
-        (NE.fromArray participantsWallets)
-      leaderNode <- makeLeaderNode
-      let
-        numberOfParticipants = length participantsWallets'
-        indexes = range 0 numberOfParticipants
-        indexedWallets = zip indexes participantsWallets'
+    \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
+      ( supervise -- ! misha: I've added it here so we get the same behavior as with `withContractEnv``
 
-      participants <- makeParticipantsFromIndexedWallets indexedWallets
-
-      let
-        runnerConf =
-          RunnerConfiguration
-            { admin: adminWallet
-            , leader: Leader { wallet: leaderWallet, node: leaderNode }
-            , participants
-            , minAdaRequired: BigInt.fromInt 200
-            , expectedStateChange: (+)
-                (BigInt.fromInt numberOfParticipants * stateChangePerAction)
-            , logLevel: LogLevel.Debug
-            }
-
-      SeathAddition.mainTest runnerConf
+          $ mainTest env adminWallet leaderWallet
+              participantsWallets
+      )
 
 config :: PlutipConfig
 config =
@@ -98,20 +49,3 @@ config =
       { slotLength: Seconds 1.0 }
   }
 
--- The types here can change
-makeLeaderNode :: Contract $ LeaderNode AdditionAction
-makeLeaderNode = undefined
-
--- The types here can change
-makeParticpantNode :: Contract $ UserNode AdditionAction
-makeParticpantNode = undefined
-
-makeParticipantsFromIndexedWallets
-  :: NonEmptyArray (Int /\ KeyWallet)
-  -> Contract $ NonEmptyArray $ Participant AdditionAction
-makeParticipantsFromIndexedWallets = undefined
--- traverse indexed2Participant
--- where
--- indexed2Participant (index /\ wallet) = do
---   node <- makeParticpantNodeFromKeyWallet (show index) wallet
---   pure $ wrap { wallet, node }

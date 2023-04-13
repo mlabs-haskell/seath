@@ -1,42 +1,43 @@
 module Seath.Network.Users
-  ( getSeathCoreConfiguration
-  , sendActionToLeader
-  , getActionStatus
-  , sendSignedTransactionToLeader
-  , sendRejectionToLeader
-  , makeUserAction
-  , makeUserActionAndSend
-  , startUserServer
-  , stopUserServer
+  ( getActionStatus
+  , getSeathCoreConfiguration
   , newUserState
+  , performAction
+  , sendActionToLeader
+  , sendRejectionToLeader
+  , sendSignedTransactionToLeader
+  , startUserNode
   ) where
 
-import Contract.Monad (Contract, liftedM)
-import Contract.Utxos (UtxoMap, getWalletUtxos)
+import Contract.Prelude
+
+import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
+import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect (Effect)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Fiber, delay, forkAff, try)
 import Effect.Class (liftEffect)
+import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
+import Seath.Network.OrderedMap as OrderedMap
+import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( IncludeActionError
+  ( ActionStatus(..)
+  , GetStatusError
+  , IncludeActionError
   , SignedTransaction
-  , StatusResponse
-  , UserNode
-  , UserState
+  , UserConfiguration
+  , UserNode(UserNode)
+  , UserState(UserState)
+  , addToSentActions
+  , getUserHandlers
+  , readSentActions
   )
 import Type.Function (type ($))
 import Undefined (undefined)
-
-startUserServer :: forall a. UserNode a -> Aff Unit
-startUserServer = undefined
-
-stopUserServer :: forall a. UserNode a -> Aff Unit
-stopUserServer = undefined
 
 getSeathCoreConfiguration
   :: forall actionType userStateType validatorType datumType redeemerType
@@ -50,11 +51,15 @@ sendActionToLeader
   :: forall a
    . UserNode a
   -> UserAction a
-  -> Effect $ Either IncludeActionError UUID
-sendActionToLeader = undefined
+  -> Aff $ Either IncludeActionError UUID
+sendActionToLeader userNode action =
+  (getUserHandlers userNode).submitToLeader action
 
-getActionStatus :: forall a. UserNode a -> UUID -> Effect StatusResponse
-getActionStatus = undefined
+-- Query server for action status
+getActionStatus
+  :: forall a. UserNode a -> UUID -> Aff (Either GetStatusError ActionStatus)
+getActionStatus userNode =
+  (getUserHandlers userNode).getActionStatus
 
 sendSignedTransactionToLeader
   :: forall a
@@ -62,8 +67,22 @@ sendSignedTransactionToLeader
   -> UUID
   -> SignedTransaction
   -- the first Either is to catch the network errors
-  -> Effect Unit
-sendSignedTransactionToLeader = undefined
+  -> Aff Unit
+sendSignedTransactionToLeader userNode uuid signedTx = do
+  let
+    (FinalizedTransaction tx) = unwrap signedTx
+
+  cbor <- try $ TxHex.toCborHex tx
+  case cbor of
+    Left e -> log $ "User: could not serialize signed Tx to CBOR: " <> show e
+    Right (cbor' :: String) -> do
+      res <- try $ (getUserHandlers userNode).sendSignedToLeader
+        (wrap { uuid: uuid, txCborHex: cbor' })
+      case res of
+        Left e -> log $ "User: failed to send signed Tx to leader: " <> show e
+        Right (Left e) -> log $ "User: failed to send signed Tx to leader: " <>
+          show e
+        Right (Right _) -> log "USer: signet Tx sent seuccessfully"
 
 -- | We refuse to sign the given transaction and inform the server
 -- | explicitly.
@@ -72,20 +91,70 @@ sendRejectionToLeader
    . UserNode a
   -> UUID
   -> Aff Unit
-sendRejectionToLeader = undefined
-
-makeUserAction :: forall a. UserNode a -> a -> UtxoMap -> UserAction a
-makeUserAction nodeConfig action userUTxOs = undefined
-
-makeUserActionAndSend
-  :: forall a. UserNode a -> a -> Contract $ Either IncludeActionError UUID
-makeUserActionAndSend nodeConfig actionRaw = do
-  walletUTxOs <- liftedM "can't get walletUtxos" getWalletUtxos
-  let
-    action = makeUserAction nodeConfig actionRaw walletUTxOs
-  liftEffect $ sendActionToLeader nodeConfig action
+sendRejectionToLeader userNode uuid = do
+  res <- try $ (getUserHandlers userNode).refuseToSign uuid
+  log $ "User: refusing to sing " <> show uuid <> ", result: " <> show res
 
 -- | Return a new mutable `userState`
 newUserState :: forall a. Aff $ UserState a
 newUserState = undefined
 
+performAction :: forall a. UserNode a -> a -> Aff Unit
+performAction userNode action = do
+  userAction <- (unwrap userNode).makeAction action
+  result <- userNode `sendActionToLeader` userAction
+  case result of
+    Left err -> log $ "TODO: React to error " <> show err
+    Right uid -> do
+      userNode `addToSentActions` (uid /\ action)
+
+startUserNode
+  :: forall a
+   . Show a
+  => (a -> Aff (UserAction a))
+  -> UserConfiguration a
+  -> Aff (Fiber Unit /\ UserNode a)
+startUserNode makeAction conf = do
+  actionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  submitedTransactions <- liftEffect $ Ref.new OrderedMap.empty
+  let
+    node = UserNode
+      { state: UserState
+          { actionsSent
+          , transactionsSent
+          , submitedTransactions
+          }
+      , configuration: conf
+      , makeAction: makeAction
+
+      }
+  fiber <- startActionStatusCheck node
+  pure $ fiber /\ node
+
+startActionStatusCheck :: forall a. Show a => UserNode a -> Aff (Fiber Unit)
+startActionStatusCheck userNode = do
+  log $ "Start checking actions"
+  forkAff check
+  where
+  check = do
+    sent <- readSentActions userNode
+    for_ sent $ \(uid /\ _) -> do
+      -- TODO: process response
+      res <- getActionStatus userNode uid
+      case res of
+        Left e -> log $ "User: failed to get status: " <> show e
+        Right status -> case status of
+          AskForSignature afs -> do
+            ethTx <- try $ TxHex.fromCborHex afs.txCborHex
+            case ethTx of
+              Left e -> log $
+                "User: got AskForSignature status, but failed to decode Tx:\n"
+                  <> show e
+              Right _tx -> log $
+                "User: got AskForSignature status AND SUCCESSFULLY DECODED TX"
+          other -> log $ "User: status for action " <> show uid <> ": " <> show
+            other
+      delay $ Milliseconds 500.0
+    delay $ Milliseconds 2000.0
+    check

@@ -4,7 +4,8 @@ You can edit this file as you like.
 -}
 { name = "seath"
 , dependencies =
-  [ "aff"
+  [ "aeson"
+  , "aff"
   , "arrays"
   , "bifunctors"
   , "bigints"
@@ -16,24 +17,18 @@ You can edit this file as you like.
   , "either"
   , "exceptions"
   , "foldable-traversable"
-  , "lists"
   , "maybe"
   , "monad-logger"
-  , "mote"
   , "newtype"
   , "node-fs-aff"
   , "node-path"
   , "node-process"
   , "ordered-collections"
-  , "parallel"
   , "payload"
-  , "posix-types"
   , "prelude"
   , "profunctor-lenses"
-  , "queue"
-  , "quickcheck"
   , "refs"
-  , "spec"
+  , "strings"
   , "transformers"
   , "tuples"
   , "typelevel-prelude"
@@ -42,5 +37,5 @@ You can edit this file as you like.
   , "uuid"
   ]
 , packages = ./packages.dhall
-, sources = [ "src/**/*.purs", "exe/**/*.purs", "test/**/*.purs" ]
+, sources = [ "src/**/*.purs", "test/**/*.purs" ]
 }
