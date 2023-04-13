@@ -4,14 +4,16 @@ module Seath.Test.Utils
   , makeDistribution
   ) where
 
-import Contract.Wallet (KeyWallet, privateKeysToKeyWallet)
-import Contract.Wallet.KeyFile
-  ( privatePaymentKeyFromFile
-  , privateStakeKeyFromFile
-  )
+import Contract.Chain (waitNSlots)
+import Contract.Log (logInfo')
+import Contract.Monad (Contract)
+import Contract.Numeric.Natural (fromInt)
+import Contract.Wallet (KeyWallet, getWalletUtxos, privateKeysToKeyWallet)
+import Contract.Wallet.KeyFile (privatePaymentKeyFromFile, privateStakeKeyFromFile)
 import Control.Alternative (pure)
-import Control.Monad (bind)
-import Control.Monad.Error.Class (try)
+import Control.Applicative ((*>))
+import Control.Monad (bind, unless)
+import Control.Monad.Error.Class (liftMaybe, try)
 import Data.Array (replicate)
 import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
@@ -19,13 +21,18 @@ import Data.BigInt as BigInt
 import Data.Either (hush)
 import Data.Function (($))
 import Data.Functor ((<$>))
+import Data.Map as Map
+import Data.Maybe (Maybe(Just, Nothing), isJust)
 import Data.Monoid ((<>))
+import Data.Natural (Natural)
 import Data.Newtype (unwrap)
 import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
-import Effect.Aff (Aff)
+import Data.Unit (Unit, unit)
+import Effect.Aff (Aff, error)
 import Node.Path as Path
-import Seath.Test.Types (RunnerConfiguration)
+import Prelude (discard)
+import Seath.Test.Types (BlockchainState, RunnerConfiguration)
 
 runnerConfInfo
   :: forall s actionType. RunnerConfiguration s actionType -> String
@@ -55,3 +62,4 @@ makeDistribution participantsNumber =
       [ BigInt.fromInt 1_000_000_000 ]
   in
     (adminDistribution /\ leaderDistribution) /\ usersDistribution
+

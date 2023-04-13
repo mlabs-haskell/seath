@@ -7,9 +7,7 @@ module Seath.Network.Leader
   , newLeaderState
   , showDebugState
   , startLeaderNode
-  , startLeaderServer
   , stopLeaderNode
-  , stopLeaderServer
   , submitChain
   , waitForChainSignatures
   ) where
@@ -18,7 +16,7 @@ import Contract.Prelude
 
 import Contract.Transaction (FinalizedTransaction, TransactionHash)
 import Data.Either (Either)
-import Data.Time.Duration (Milliseconds(..))
+import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
@@ -120,19 +118,19 @@ getNextBatchOfActions
   -> Aff $ OrderedMap UUID $ UserAction a
 getNextBatchOfActions = undefined
 
--- (getAbatchOfPendingActions undefined undefined)
-
 startLeaderNode
   :: forall a. Show a => LeaderConfiguration a -> Aff (LeaderNode a)
 startLeaderNode conf = do
-  pending <- liftEffect $ Ref.new OrderedMap.empty
+  pendingActionsRequest <- liftEffect $ Ref.new OrderedMap.empty
+  prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
+  signatureResponses <- liftEffect $ Ref.new OrderedMap.empty
   let
     node = LeaderNode
       { state: LeaderState
-          { pendingActionsRequest: pending
-          , prioritaryPendingActions: undefined
-          , signatureResponses: undefined
-          , stage: undefined
+          { pendingActionsRequest
+          , prioritaryPendingActions
+          , signatureResponses
+          , stage: WaitingForActions
           }
       , configuration: conf
       }
@@ -160,15 +158,6 @@ startBatcherThread ln = do
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
-
--- TODO: left to not to break compilation
-startLeaderServer :: forall a. LeaderNode a -> Aff Unit
-startLeaderServer = undefined
-
-stopLeaderServer :: forall a. LeaderNode a -> Aff Unit
-stopLeaderServer = undefined
-
--- TODO: left to not to break compilation - END
 
 -- | To build a new mutable `LeaderState`
 newLeaderState :: forall a. Aff $ LeaderState a

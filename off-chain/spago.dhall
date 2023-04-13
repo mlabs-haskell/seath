@@ -23,6 +23,7 @@ You can edit this file as you like.
   , "maybe"
   , "monad-logger"
   , "mote"
+  , "naturals"
   , "newtype"
   , "node-fs-aff"
   , "node-path"

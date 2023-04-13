@@ -3,7 +3,9 @@ module Seath.HTTP.Server where
 import Prelude
 
 import Aeson (class DecodeAeson)
-import Effect (Effect)
+import Data.Either (Either)
+import Effect.Aff (Aff)
+import Payload.Server (Server)
 import Payload.Server as Payload
 import Seath.HTTP.Handlers as Handlers
 import Seath.HTTP.Spec as Spec
@@ -17,7 +19,7 @@ runServer
   => Show a
   => SeathServerConfig
   -> LeaderNode a
-  -> Effect Unit
-runServer _ leaderNode = Payload.launch
+  -> Aff (Either String Server)
+runServer _ leaderNode = Payload.start_
   Spec.spec
   (Handlers.mkHandlers leaderNode)

@@ -18,7 +18,7 @@ import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
-import Effect.Aff (Aff, delay, forkAff, try)
+import Effect.Aff (Aff, Fiber, delay, forkAff, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
@@ -97,7 +97,7 @@ startUserNode
    . Show a
   => (a -> Aff (UserAction a))
   -> UserConfiguration a
-  -> Aff (UserNode a)
+  -> Aff (Fiber Unit /\ UserNode a)
 startUserNode makeAction conf = do
   actionsSent <- liftEffect $ Ref.new OrderedMap.empty
   transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
@@ -113,15 +113,13 @@ startUserNode makeAction conf = do
       , makeAction: makeAction
 
       }
-  startActionStatusCheck node
-  pure node
+  fiber <- startActionStatusCheck node
+  pure $ fiber /\ node
 
-startActionStatusCheck :: forall a. Show a => UserNode a -> Aff Unit
+startActionStatusCheck :: forall a. Show a => UserNode a -> Aff (Fiber Unit)
 startActionStatusCheck userNode = do
   log $ "Start checking actions"
-  -- TODO: probably, need to collect this fibers to kill them properly on node stop
-  _fiber <- forkAff check
-  pure unit
+  forkAff check
   where
   check = do
     sent <- readSentActions userNode
