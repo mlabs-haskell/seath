@@ -6,12 +6,10 @@ You can edit this file as you like.
 , dependencies =
   [ "aeson"
   , "aff"
-  , "affjax"
   , "arrays"
   , "bifunctors"
   , "bigints"
   , "cardano-transaction-lib"
-  , "checked-exceptions"
   , "console"
   , "control"
   , "datetime"
@@ -19,27 +17,17 @@ You can edit this file as you like.
   , "either"
   , "exceptions"
   , "foldable-traversable"
-  , "lists"
   , "maybe"
   , "monad-logger"
-  , "mote"
-  , "naturals"
   , "newtype"
   , "node-fs-aff"
   , "node-path"
   , "node-process"
-  , "optparse"
   , "ordered-collections"
-  , "parallel"
   , "payload"
-  , "pipes"
-  , "posix-types"
   , "prelude"
   , "profunctor-lenses"
-  , "queue"
-  , "quickcheck"
   , "refs"
-  , "spec"
   , "strings"
   , "transformers"
   , "tuples"
@@ -49,5 +37,5 @@ You can edit this file as you like.
   , "uuid"
   ]
 , packages = ./packages.dhall
-, sources = [ "src/**/*.purs", "exe/**/*.purs", "test/**/*.purs" ]
+, sources = [ "src/**/*.purs", "test/**/*.purs" ]
 }
