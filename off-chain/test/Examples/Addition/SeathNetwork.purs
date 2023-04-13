@@ -130,8 +130,8 @@ userHandlerSendAction
   => UserClient a
   -> UserAction a
   -> Aff (Either IncludeActionError UUID)
-userHandlerSendAction clent action = do
-  res <- clent.leader.includeAction
+userHandlerSendAction client action = do
+  res <- client.leader.includeAction
     { body: IncludeRequest action }
   pure $ case res of
     Right resp -> do
