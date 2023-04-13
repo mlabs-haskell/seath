@@ -153,7 +153,7 @@ startActionStatusCheck userNode = do
                   <> show e
               Right _tx -> log $
                 "User: got AskForSignature status AND SUCCESSFULLY DECODED TX"
-          other -> log $ "User: statis for action " <> show uid <> ": " <> show
+          other -> log $ "User: status for action " <> show uid <> ": " <> show
             other
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0

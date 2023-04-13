@@ -12,6 +12,7 @@ module Seath.Network.OrderedMap
   , push
   , splitEither
   , take
+  , union
   ) where
 
 import Contract.Prelude
@@ -96,3 +97,7 @@ fromFoldable
   => f (k /\ v)
   -> OrderedMap k v
 fromFoldable = foldr (\(k /\ v) -> push k v) empty
+
+union :: forall k v. Ord k => OrderedMap k v -> OrderedMap k v -> OrderedMap k v
+union first second = fromFoldable $ Array.concat
+  [ orderedElems first, orderedElems second ]

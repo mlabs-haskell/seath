@@ -205,6 +205,7 @@ derive instance Newtype SendSignedTransaction _
 derive newtype instance Show SendSignedTransaction
 
 -- if you update this, update `Seath.Network.Leader.actionStatus` please
+-- and also `Seath.Network.Leader.restLeaderState`
 type LeaderStateInner a =
   { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
   -- For actions that were part of a previous built chain 
@@ -213,7 +214,7 @@ type LeaderStateInner a =
   , processing :: Ref $ OrderedMap UUID (UserAction a)
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
-  , stage :: LeaderServerStage
+  , stage :: Ref LeaderServerStage
   }
 
 newtype LeaderState a = LeaderState (LeaderStateInner a)
@@ -256,19 +257,30 @@ addAction action st = liftEffect do
     (unwrap st).pendingActionsRequest
   pure actionUUID
 
-numberOfPending :: forall a. LeaderNode a -> Aff Int
-numberOfPending (LeaderNode node) = OrderedMap.length <$>
-  (liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest)
+getFromLeaderConfiguration
+  :: forall a b. LeaderNode a -> (LeaderConfigurationInner a -> b) -> b
+getFromLeaderConfiguration (LeaderNode node) accessor = accessor
+  (unwrap node.configuration)
+
+getNumberOfPending :: forall a. LeaderNode a -> Aff Int
+getNumberOfPending ln = do
+  numberOfPrioritary <- OrderedMap.length <$> getFromRefAtLeaderState ln
+    _.prioritaryPendingActions
+  numberOfPending <- OrderedMap.length <$> getFromRefAtLeaderState ln
+    _.pendingActionsRequest
+  pure $ numberOfPrioritary + numberOfPending
 
 derive instance Newtype (LeaderState a) _
 
-newtype LeaderConfiguration :: forall k. k -> Type
-newtype LeaderConfiguration a = LeaderConfiguration
+type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
   }
+
+newtype LeaderConfiguration :: forall k. k -> Type
+newtype LeaderConfiguration a = LeaderConfiguration (LeaderConfigurationInner a)
 
 maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
 maxPendingCapacity conf = (unwrap conf).maxQueueSize
@@ -276,8 +288,8 @@ maxPendingCapacity conf = (unwrap conf).maxQueueSize
 signTimeout :: forall a. LeaderConfiguration a -> Int
 signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
 
-chaintriggerTreshold :: forall a. LeaderNode a -> Int
-chaintriggerTreshold (LeaderNode node) =
+getChaintriggerTreshold :: forall a. LeaderNode a -> Int
+getChaintriggerTreshold (LeaderNode node) =
   (unwrap node.configuration).numberOfActionToTriggerChainBuilder
 
 derive instance Newtype (LeaderConfiguration a) _

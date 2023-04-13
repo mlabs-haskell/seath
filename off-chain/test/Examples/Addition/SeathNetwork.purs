@@ -23,7 +23,7 @@ import Data.Map as Map
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
-import Effect.Aff (delay, error)
+import Effect.Aff (delay, error, forkAff, killFiber)
 import Payload.ResponseTypes (Response(Response))
 import Payload.Server as Payload.Server
 import Prelude (show)
@@ -88,14 +88,17 @@ mainTest env admin leader users = do
         <$> ChainBuilder.buildChain coreConfig actions Nothing
 
   log "Starting user node"
-  (userFiber /\ (userNode :: UserNode AdditionAction)) <- liftAff $
-    Users.startUserNode
-      makeAction
-      _testUserConf
+  (userFiber /\ (userNode :: UserNode AdditionAction)) <- Users.startUserNode
+    makeAction
+    _testUserConf
 
-  log "Starting leader node"
-  (leaderNode :: LeaderNode AdditionAction) <- liftAff $
-    Leader.startLeaderNode _testLeaderConf buildChain
+  log "Initializing leader node"
+  (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
+    _testLeaderConf
+    buildChain
+
+  log "Starting leader node loop"
+  leaderLoopFiber <- forkAff $ Leader.leaderLoop leaderNode
 
   log "Starting server"
   server <- Server.runServer serverConf leaderNode >>= liftEither <<< lmap error
@@ -107,9 +110,6 @@ mainTest env admin leader users = do
   Users.performAction userNode
     (AddAmount $ BigInt.fromInt 1)
 
-  -- second action will trigger chain building and user will start to receive
-  -- different response for status check
-  delay $ Milliseconds 5000.0
   log "Fire user include action request 2"
   Users.performAction userNode
     (AddAmount $ BigInt.fromInt 2)
@@ -124,7 +124,8 @@ mainTest env admin leader users = do
   delay (Milliseconds 10000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
-  -- killFiber (error "can't cleanup user") userFiber
+  killFiber (error "can't cleanup user") userFiber
+  killFiber (error "can't cleanup leader loop") leaderLoopFiber
   Payload.Server.close server
   log "end"
 
@@ -135,7 +136,7 @@ _testLeaderConf =
     { maxWaitingTimeForSignature: 0
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 2
-    , maxWaitingTimeBeforeBuildChain: 0
+    , maxWaitingTimeBeforeBuildChain: 2
     }
 
 -- UserNode config and handlers
@@ -239,7 +240,7 @@ waitForFunding :: { waitingTime :: Int, maxAttempts :: Int } -> Contract Unit
 waitForFunding options = do
   slotsTime <-
     liftMaybe
-      (error $ "can't convert waiting time: " <> show options.waitingTime) $
+      (error $ "Can't convert waiting time: " <> show options.waitingTime) $
       Natural.fromInt options.waitingTime
   _ <- waitNSlots slotsTime
   loop slotsTime options.maxAttempts
