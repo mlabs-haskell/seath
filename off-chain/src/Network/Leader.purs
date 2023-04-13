@@ -218,12 +218,16 @@ getBatchOfResponses ln = do
   setToRefAtLeaderState ln OrderedMap.empty _.prioritaryPendingActions
   pure $ OrderedMap.union prioritary pending
 
-buildChain :: forall a . LeaderNode a ->OrderedMap UUID (UserAction a)-> Aff (Either String (OrderedMap UUID Transaction))
+buildChain
+  :: forall a
+   . LeaderNode a
+  -> OrderedMap UUID (UserAction a)
+  -> Aff (Either String (OrderedMap UUID Transaction))
 buildChain leaderNode toProcess = do
   txChain <- try $ (unwrap leaderNode).buildChain
-      (snd <$> OrderedMap.orderedElems toProcess)
+    (snd <$> OrderedMap.orderedElems toProcess)
   case txChain of
-    Left e -> pure $ Left (show e)  
+    Left e -> pure $ Left (show e)
     Right chain ->
       let
         txsUids :: Array (UUID /\ Transaction)
@@ -250,7 +254,7 @@ waitForRequests ln = do
 
 -- | Put an empty value in every ref of the `LeaderState` 
 -- | except for `pendingActionsRequest` and `prioritaryPendingActions`
-resetLeaderState :: forall a . LeaderNode a -> Aff Unit
+resetLeaderState :: forall a. LeaderNode a -> Aff Unit
 resetLeaderState leaderNode = do
   setToRefAtLeaderState leaderNode OrderedMap.empty _.processing
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSignature
@@ -271,31 +275,32 @@ leaderLoop leaderNode = do
   log $ "Leader: Batch to process: " <> show batchToProcess
   log "Leader: Begin to process actions"
   eitherBuiltChain <- buildChain leaderNode batchToProcess
-  case eitherBuiltChain of 
-    Left e ->do
-       log $ "Leader: fail to built chain of size " <> show (OrderedMap.length batchToProcess) <> " " <> e
-       -- TODO : We are discarting all the processing actions if the builder 
-       -- fails, we can't add them to the prioritaryPendingActions since 
-       -- the builder either sucess in all the chain or fails.
-       leaderLoop leaderNode
+  case eitherBuiltChain of
+    Left e -> do
+      log $ "Leader: fail to built chain of size "
+        <> show (OrderedMap.length batchToProcess)
+        <> " "
+        <> e
+      -- TODO : We are discarting all the processing actions if the builder 
+      -- fails, we can't add them to the prioritaryPendingActions since 
+      -- the builder either sucess in all the chain or fails.
+      leaderLoop leaderNode
     Right builtChain -> do
-      setToRefAtLeaderState leaderNode builtChain _.waitingForSignature 
+      setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
   batchToSign <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   log $ "Leader: builder result: " <> show batchToSign
   log "Leader: Waiting for signatures to arrive"
   -- TODO : implement waitForChainSignatures
   -- signatureResults <- waitForChainSignatures leaderNode batchToSign
-    -- this must split the map in two, the longest contiguos set of 
-    -- actions that where sucessfuly signed and the rest, 
-    -- then we put the rest in the prioritary queue (except those with 
-    -- rejection for signature) and continue to submission.
+  -- this must split the map in two, the longest contiguos set of 
+  -- actions that where sucessfuly signed and the rest, 
+  -- then we put the rest in the prioritary queue (except those with 
+  -- rejection for signature) and continue to submission.
   -- let
   --   {success:batchToSubmit, failures:_}= undefined signatureCheck
   log "Leader: Transactions submission"
   log "Leader: Node loop complete!"
   leaderLoop leaderNode
-  
-
 
 ----------------  setToRefAtLeaderState leaderNode Blog $ "Leader: failed to build chain: " <> show euildingChain _.stage
 
