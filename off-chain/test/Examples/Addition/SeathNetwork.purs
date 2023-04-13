@@ -17,43 +17,54 @@ import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, throwError, try)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
+import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Map as Map
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
-import Effect.Aff (delay, error, forkAff, killFiber, supervise)
+import Effect.Aff (delay, error)
 import Payload.ResponseTypes (Response(Response))
 import Payload.Server as Payload.Server
 import Prelude (show)
 import Seath.Common.Types (UID(UID))
-import Seath.Core.Types (UserAction)
+import Seath.Core.ChainBuilder as ChainBuilder
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
 import Seath.Core.Utils as Core.Utils
 import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.Types (IncludeRequest(IncludeRequest))
+import Seath.HTTP.Types (IncludeRequest(IncludeRequest), SendSignedRequest(..))
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
-  ( ActionStatus
+  ( AcceptSignedTransactionError
+  , ActionStatus
   , GetStatusError(GSOtherError)
   , IncludeActionError(IAOtherError)
   , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode
+  , SendSignedTransaction
   , UserConfiguration(UserConfiguration)
   , UserNode
   , readSentActions
   )
 import Seath.Network.Users as Users
+import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
+import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
-import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
+import Seath.Test.Examples.Addition.Types
+  ( AdditionAction(AddAmount)
+  , AdditionDatum
+  , AdditionRedeemer
+  , AdditionValidator
+  )
 import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
-mainTest env admin _leader users = do
+mainTest env admin leader users = do
   let initializationOptions = { waitingTime: 3, maxAttempts: 10 }
 
   checkInitSctipt env admin initializationOptions
@@ -64,10 +75,17 @@ mainTest env admin _leader users = do
 
   user <- liftMaybe (error "No user wallet") (users !! 0)
 
+  coreConfig <- runContractInEnv env $ withKeyWallet leader $
+    mkAdditionCoreConfig
+
   let
     makeAction action =
       runContractInEnv env $ withKeyWallet user
         $ Core.Utils.makeActionContract action
+
+    buildChain actions =
+      runContractInEnv env $ withKeyWallet leader $ fst
+        <$> ChainBuilder.buildChain coreConfig actions Nothing
 
   log "Starting user node"
   (userFiber /\ (userNode :: UserNode AdditionAction)) <- liftAff $
@@ -94,6 +112,7 @@ mainTest env admin _leader users = do
     (AddAmount $ BigInt.fromInt 2)
   Leader.showDebugState leaderNode >>= log
 
+  -- test sending rejections
   uids <- (map fst) <$> readSentActions userNode
   maybe (throwError $ error "ff")
     (Users.sendRejectionToLeader userNode)
@@ -122,7 +141,7 @@ _testUserConf = UserConfiguration
   { maxQueueSize: undefined
   , clientHandlers:
       { submitToLeader: userHandlerSendAction httpClient
-      , acceptSignedTransaction: undefined
+      , sendSignedToLeader: userHandlerSendSignedToLeader httpClient
       , refuseToSign: userHandlerRefuseToSign httpClient
       , getActionStatus: userHandlerGetStatus httpClient
       }
@@ -170,6 +189,19 @@ userHandlerGetStatus client uuid = do
       lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
     else either (show >>> GSOtherError >>> Left) Left
       (decodeJsonString r.body.data)
+
+userHandlerSendSignedToLeader
+  :: UserClient AdditionAction
+  -> SendSignedTransaction
+  -> Aff (Either AcceptSignedTransactionError Unit)
+userHandlerSendSignedToLeader client sendSig = do
+  res <- client.leader.acceptSignedTransaction
+    { body: SendSignedRequest sendSig }
+  case res of
+    -- FIXME: leader responds witn Unit always
+    -- but client expects AcceptSignedTransactionError as well
+    Right _resp -> pure $ Right unit
+    Left e -> throwError (error $ show e)
 
 userHandlerRefuseToSign
   :: UserClient AdditionAction
@@ -221,3 +253,24 @@ waitForFunding options = do
             waitNSlots slots *> loop slots (remainingAttempts - 1)
           else pure unit
         Nothing -> waitNSlots slots *> loop slots (remainingAttempts - 1)
+
+mkAdditionCoreConfig
+  ∷ Contract
+      ( CoreConfiguration
+          AdditionAction
+          BigInt
+          AdditionValidator
+          AdditionDatum
+          AdditionRedeemer
+      )
+mkAdditionCoreConfig = do
+  vaildatorHash <- Addition.fixedValidatorHash
+  leaderPkh <- getPublicKeyHash
+  pure $ CoreConfiguration
+    { leader: leaderPkh
+    , stateVaildatorHash: vaildatorHash
+    , actionHandler: Addition.handleAction
+    , queryBlockchainState: Addition.queryBlockchainState
+    , numberOfBuiltChains: 0
+    }
+    

@@ -20,11 +20,12 @@ import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, delay, forkAff)
+import Effect.Aff (Aff, delay, forkAff, try)
 import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
+import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus
       ( NotFound
@@ -85,6 +86,11 @@ acceptSignedTransaction
 acceptSignedTransaction _leaderNode signedTx = do
   log $ "Leader accepts Signed Transaction " <> show
     (unwrap signedTx).uuid
+  tx <- try $ TxHex.fromCborHex (unwrap signedTx).txCborHex
+  case tx of
+    Left e -> log $ "Leader: failed to parse signed Tx: " <> show e
+    Right _tx -> log "Leader received signed tx successfully"
+  pure unit
 
 acceptRefuseToSign
   :: forall a

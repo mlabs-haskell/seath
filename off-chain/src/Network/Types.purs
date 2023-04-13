@@ -200,7 +200,7 @@ instance decodeAesonStatusResponseError :: DecodeAeson GetStatusError where
 
 newtype SendSignedTransaction = SendSignedTransaction
   { uuid :: UUID
-  , transaction :: SignedTransaction
+  , txCborHex :: String
   }
 
 derive instance Newtype SendSignedTransaction _
@@ -297,7 +297,7 @@ derive instance Newtype (UserState a) _
 
 type UserHandlers a =
   { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
-  , acceptSignedTransaction ::
+  , sendSignedToLeader ::
       SendSignedTransaction
       -> Aff $ Either AcceptSignedTransactionError Unit
   , refuseToSign :: UUID -> Aff Unit

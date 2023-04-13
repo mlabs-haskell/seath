@@ -4,7 +4,14 @@ module Seath.Common.Types
 
 import Contract.Prelude
 
-import Aeson (class EncodeAeson, fromString)
+import Aeson
+  ( class DecodeAeson
+  , class EncodeAeson
+  , JsonDecodeError(..)
+  , decodeAeson
+  , fromString
+  , toString
+  )
 import Data.String (Pattern(Pattern), Replacement(Replacement), replace)
 import Data.UUID (UUID, parseUUID)
 import Payload.Client.EncodeParam (class EncodeParam)
@@ -22,6 +29,12 @@ instance showUID :: Show UID where
 
 instance eaUID :: EncodeAeson UID where
   encodeAeson = show >>> fromString
+
+instance daUID :: DecodeAeson UID where
+  decodeAeson a = do
+    str <- note (TypeMismatch "Expected string") (toString a)
+    uuid <- note (TypeMismatch "Can't parseUUID") (parseUUID str)
+    pure $ wrap uuid
 
 instance epUID :: EncodeParam UID where
   encodeParam = show

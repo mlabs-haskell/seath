@@ -11,18 +11,19 @@ module Seath.Network.Users
 
 import Contract.Prelude
 
+import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect (Effect)
 import Effect.Aff (Aff, Fiber, delay, forkAff, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OrderedMap
+import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus
   , GetStatusError
@@ -57,7 +58,8 @@ sendActionToLeader userNode action =
 -- Query server for action status
 getActionStatus
   :: forall a. UserNode a -> UUID -> Aff (Either GetStatusError ActionStatus)
-getActionStatus = undefined
+getActionStatus userNode =
+  (getUserHandlers userNode).getActionStatus
 
 sendSignedTransactionToLeader
   :: forall a
@@ -65,8 +67,22 @@ sendSignedTransactionToLeader
   -> UUID
   -> SignedTransaction
   -- the first Either is to catch the network errors
-  -> Effect Unit
-sendSignedTransactionToLeader = undefined
+  -> Aff Unit
+sendSignedTransactionToLeader userNode uuid signedTx = do
+  let
+    (FinalizedTransaction tx) = unwrap signedTx
+
+  cbor <- try $ TxHex.toCborHex tx
+  case cbor of
+    Left e -> log $ "User: could not serialize signed Tx to CBOR: " <> show e
+    Right (cbor' :: String) -> do
+      res <- try $ (getUserHandlers userNode).sendSignedToLeader
+        (wrap { uuid: uuid, txCborHex: cbor' })
+      case res of
+        Left e -> log $ "User: failed to send signed Tx to leader: " <> show e
+        Right (Left e) -> log $ "User: failed to send signed Tx to leader: " <>
+          show e
+        Right (Right _) -> log "USer: signet Tx sent seuccessfully"
 
 -- | We refuse to sign the given transaction and inform the server
 -- | explicitly.
@@ -125,9 +141,8 @@ startActionStatusCheck userNode = do
     sent <- readSentActions userNode
     for_ sent $ \(uid /\ _) -> do
       -- TODO: process response
-      res <- (getUserHandlers userNode).getActionStatus uid
+      res <- getActionStatus userNode uid
       log $ "User: status of action " <> show uid <> ": " <> show res
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0
     check
-

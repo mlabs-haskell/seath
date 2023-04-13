@@ -5,12 +5,15 @@ import Contract.Prelude
 import Aeson
   ( class DecodeAeson
   , class EncodeAeson
+  , JsonDecodeError
+  , decodeAeson
   , decodeJsonString
   , encodeAeson
+  , getField
   , toString
   )
 import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
-import Data.Bifunctor (bimap)
+import Data.Bifunctor (bimap, lmap)
 import Payload.Client.EncodeBody (class EncodeBody)
 import Payload.Client.EncodeParam (class EncodeParam)
 import Payload.ContentType (class HasContentType, json)
@@ -74,18 +77,28 @@ derive instance Newtype SendSignedRequest _
 derive newtype instance Show SendSignedRequest
 instance decSendSignedReq ::
   DecodeBody SendSignedRequest where
-  decodeBody s = undefined
+  decodeBody s = do
+    (uid /\ hex) <- lmap show getData
+    pure $ SendSignedRequest
+      ( SendSignedTransaction { uuid: (unwrap uid), txCborHex: hex }
+      )
+    where
+    getData :: Either JsonDecodeError (UID /\ String)
+    getData = do
+      obj <- decodeJsonString s
+      uid <- getField obj "uuid"
+      hex <- getField obj "txCborHex"
+      pure (uid /\ hex)
 
 instance encSendSignedReq ::
   EncodeBody SendSignedRequest where
   encodeBody sendSigReq =
     let
       (SendSignedTransaction s) = unwrap sendSigReq
-      (FinalizedTransaction tx) = unwrap s.transaction
     in
       show $ encodeAeson
         { "uuid": encodeAeson (UID s.uuid)
-        , "transaction": encodeAeson tx
+        , "txCborHex": encodeAeson (s.txCborHex)
         }
 
 instance sendSignedReqContentType :: HasContentType SendSignedRequest where
