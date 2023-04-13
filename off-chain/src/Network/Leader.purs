@@ -133,7 +133,6 @@ startLeaderNode conf = do
   pendingActionsRequest <- liftEffect $ Ref.new OrderedMap.empty
   prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
   processing <- liftEffect $ Ref.new OrderedMap.empty
-  rejectedByChainBuilder <- liftEffect $ Ref.new OrderedMap.empty
   waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
   errorAtSubmission <- liftEffect $ Ref.new OrderedMap.empty
@@ -143,7 +142,6 @@ startLeaderNode conf = do
           { pendingActionsRequest
           , prioritaryPendingActions
           , processing
-          , rejectedByChainBuilder
           , waitingForSignature
           , waitingForSubmission
           , errorAtSubmission

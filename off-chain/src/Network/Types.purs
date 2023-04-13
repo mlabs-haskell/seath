@@ -212,7 +212,6 @@ type LeaderStateInner a =
   -- and were removed since a previous action failed.
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
   , processing :: Ref $ OrderedMap UUID (UserAction a)
-  , rejectedByChainBuilder :: Ref $ OrderedMap UUID (UserAction a)
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
   , errorAtSubmission :: Ref $ OrderedMap UUID Transaction
