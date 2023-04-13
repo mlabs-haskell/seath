@@ -118,11 +118,9 @@ data ActionStatus
       , txCborHex :: String -- TODO: maybe separate type?
       }
   | ToBeProcessed Int
-  | ToBeSubmited Int
+  | ToBeSubmitted Int
   | Processing
-  | RejectedAtChainBuilder String
-  | RequireNewSignature
-  | SubmitError String
+  | PrioritaryToBeProcessed Int
   | NotFound
 
 derive instance Generic ActionStatus _
@@ -135,12 +133,9 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     AskForSignature askForSig -> encodeTagged' "AskForSignature"
       (encodeAskForSig askForSig)
     ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
-    ToBeSubmited i -> encodeTagged' "ToBeSubmited" i
+    ToBeSubmitted i -> encodeTagged' "ToBeSubmitted" i
     Processing -> encodeTagged' "Processing" ""
-    RejectedAtChainBuilder reason -> encodeTagged' "RejectedAtChainBuilder"
-      reason
-    RequireNewSignature -> encodeTagged' "RequireNewSignature" ""
-    SubmitError err -> encodeTagged' "SubmitError" err
+    PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
     NotFound -> encodeTagged' "NotFound" ""
 
     where
@@ -163,12 +158,10 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
     case tag of
       "AskForSignature" -> decodeAskForSig contents
       "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
-      "ToBeSubmited" -> ToBeSubmited <$> decodeAeson contents
+      "ToBeSubmitted" -> ToBeSubmitted <$> decodeAeson contents
       "Processing" -> Right Processing
-      "RejectedAtChainBuilder" -> RejectedAtChainBuilder <$> decodeAeson
+      "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
-      "RequireNewSignature" -> Right RequireNewSignature
-      "SubmitError" -> SubmitError <$> decodeAeson contents
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
@@ -211,6 +204,7 @@ newtype SendSignedTransaction = SendSignedTransaction
 derive instance Newtype SendSignedTransaction _
 derive newtype instance Show SendSignedTransaction
 
+-- if you update this, update `Seath.Network.Leader.actionStatus` please
 type LeaderStateInner a =
   { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
   -- For actions that were part of a previous built chain 
@@ -219,7 +213,6 @@ type LeaderStateInner a =
   , processing :: Ref $ OrderedMap UUID (UserAction a)
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
-  , errorAtSubmission :: Ref $ OrderedMap UUID Transaction
   , stage :: LeaderServerStage
   }
 

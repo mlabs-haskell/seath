@@ -7,8 +7,7 @@ import Contract.Prelude
 import Aeson
   ( class DecodeAeson
   , class EncodeAeson
-  , JsonDecodeError(..)
-  , decodeAeson
+  , JsonDecodeError(TypeMismatch)
   , fromString
   , toString
   )

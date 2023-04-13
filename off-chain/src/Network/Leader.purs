@@ -14,14 +14,22 @@ module Seath.Network.Leader
 
 import Contract.Prelude
 
-import Contract.Transaction (FinalizedTransaction, Transaction, TransactionHash)
+import Contract.Transaction
+  ( FinalizedTransaction
+  , Transaction(..)
+  , TransactionHash
+  )
 import Data.Array as Array
+import Data.Bifunctor (lmap)
 import Data.Either (Either)
+import Data.Semigroup.Foldable (foldl1Default)
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff, delay, error, forkAff, throwError, try)
+import Effect.Exception (throw)
+import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
@@ -35,6 +43,7 @@ import Seath.Network.Types
   , LeaderServerStage(WaitingForActions)
   , LeaderServerStateInfo(LeaderServerInfo)
   , LeaderState(LeaderState)
+  , LeaderStateInner
   , SendSignedTransaction
   , SignedTransaction
   , addAction
@@ -62,27 +71,53 @@ includeAction ln@(LeaderNode node) action = do
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
 
 actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
-actionStatus ln actionId = do
-  maybeInPending <-
-    OrderedMap.lookupPosition actionId
-      <$> getFromRefAtLeaderState ln _.pendingActionsRequest
+actionStatus leaderNode actionId = do
+  let
+    check
+      :: forall b
+       . (LeaderStateInner a -> Ref (OrderedMap UUID b))
+      -> (UUID -> Int -> b -> Aff ActionStatus)
+      -> Aff ActionStatus
+    check getter transform = do
+      _map <- getFromRefAtLeaderState leaderNode getter
+      checkIsIn actionId _map transform
 
-  maybeWaitingForSig <-
-    OrderedMap.lookup actionId <$>
-      getFromRefAtLeaderState ln _.waitingForSignature
+  pendingCheck <- check _.pendingActionsRequest
+    (\_ index _ -> pure $ ToBeProcessed index)
+  prioritarycheck <- check _.prioritaryPendingActions
+    (\_ index _ -> pure $ PrioritaryToBeProcessed index)
+  processCheck <- check _.processing (\_ _ _ -> pure $ Processing)
+  signatureCheck <- check _.waitingForSignature transformForSignature
+  submissionCheck <- check _.waitingForSubmission
+    (\_ index _ -> pure $ ToBeSubmitted index)
 
-  -- todo: refactor to something less ugly
-  case maybeWaitingForSig of
-    Just tx -> do
-      cbor <- try $ TxHex.toCborHex tx
-      case cbor of
-        Left e -> throwError (error $ show e)
-        Right txCborHex -> pure $ AskForSignature { uuid: actionId, txCborHex }
-    Nothing ->
-      -- todo: check in other OrderedMaps and get correct status
-      pure $ case maybeInPending of
-        Just i -> ToBeProcessed i
-        Nothing -> NotFound
+  pure $ foldl mergeChecks submissionCheck
+    [ signatureCheck, processCheck, prioritarycheck, pendingCheck ]
+
+  where
+  mergeChecks :: ActionStatus -> ActionStatus -> ActionStatus
+  mergeChecks NotFound second = second
+  mergeChecks other _ = other
+
+  -- TODO : We can make everyting return `() -> ActionStatus` to recover lazy
+  -- behaviour but we still don't know if is worth the effort
+  checkIsIn
+    :: forall b
+     . UUID
+    -> OrderedMap UUID b
+    -> (UUID -> Int -> b -> Aff ActionStatus)
+    -> Aff (ActionStatus)
+  checkIsIn uuid _map transform =
+    case OrderedMap.lookupWithPosition uuid _map of
+      Just (index /\ value) -> transform uuid index value
+      Nothing -> pure $ NotFound
+
+  transformForSignature :: UUID -> Int -> Transaction -> Aff ActionStatus
+  transformForSignature uuid _ tx = do
+    eitherTxCborHex <- try $ TxHex.toCborHex tx
+    case eitherTxCborHex of
+      Left e -> liftEffect $ throw $ "cbor encoding error: " <> show e
+      Right txCborHex -> pure $ AskForSignature { uuid, txCborHex }
 
 acceptSignedTransaction
   :: forall a
@@ -153,7 +188,6 @@ startLeaderNode conf buildChain = do
   processing <- liftEffect $ Ref.new OrderedMap.empty
   waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
-  errorAtSubmission <- liftEffect $ Ref.new OrderedMap.empty
   let
     node = LeaderNode
       { state: LeaderState
@@ -162,7 +196,6 @@ startLeaderNode conf buildChain = do
           , processing
           , waitingForSignature
           , waitingForSubmission
-          , errorAtSubmission
           , stage: WaitingForActions
           }
       , configuration: conf

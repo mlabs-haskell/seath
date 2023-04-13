@@ -6,6 +6,7 @@ module Seath.Network.OrderedMap
   , length
   , lookup
   , lookupPosition
+  , lookupWithPosition
   , orderedElems
   , orderedKeys
   , push
@@ -40,10 +41,14 @@ length :: forall keys values. OrderedMap keys values -> Int
 length (OrderedMap ordMap) = Array.length ordMap.array
 
 lookupPosition :: forall k v. Ord k => k -> OrderedMap k v -> Maybe Int
-lookupPosition k (OrderedMap oMap) = fst <$> Map.lookup k oMap.map
+lookupPosition k _map = fst <$> lookupWithPosition k _map
 
 lookup :: forall k v. Ord k => k -> OrderedMap k v -> Maybe v
-lookup k (OrderedMap oMap) = snd <$> Map.lookup k oMap.map
+lookup k _map = snd <$> lookupWithPosition k _map
+
+lookupWithPosition
+  :: forall k v. Ord k => k -> OrderedMap k v -> Maybe (Int /\ v)
+lookupWithPosition k (OrderedMap oMap) = Map.lookup k oMap.map
 
 -- TODO: tests when API will stabilaze
 push
