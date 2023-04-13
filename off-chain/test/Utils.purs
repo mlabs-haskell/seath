@@ -5,7 +5,10 @@ module Seath.Test.Utils
   ) where
 
 import Contract.Wallet (KeyWallet, privateKeysToKeyWallet)
-import Contract.Wallet.KeyFile (privatePaymentKeyFromFile, privateStakeKeyFromFile)
+import Contract.Wallet.KeyFile
+  ( privatePaymentKeyFromFile
+  , privateStakeKeyFromFile
+  )
 import Control.Alternative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)

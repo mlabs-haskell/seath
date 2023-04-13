@@ -206,27 +206,30 @@ newtype SendSignedTransaction = SendSignedTransaction
 derive instance Newtype SendSignedTransaction _
 derive newtype instance Show SendSignedTransaction
 
--- I suspect that this `a` is a type like :
--- `UUID /\ UserAction a`
-newtype LeaderState a = LeaderState
+type LeaderStateInner a =
   { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
   -- For actions that were part of a previous built chain 
   -- and were removed since a previous action failed.
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
-  , signatureResponses :: Ref $ OrderedMap UUID (UserAction a)
+  , processing :: Ref $ OrderedMap UUID (UserAction a)
+  , rejectedByChainBuilder :: Ref $ OrderedMap UUID (UserAction a)
+  , waitingForSignature :: Ref $ OrderedMap UUID Transaction
+  , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
+  , errorAtSubmission :: Ref $ OrderedMap UUID Transaction
   , stage :: LeaderServerStage
-  -- We really need to think if we really want this,
-  -- see `UUID` comment.
   }
 
-getPending :: forall a. LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
-getPending (LeaderNode node) = do
-  liftEffect $ Ref.read (unwrap node.state).pendingActionsRequest
+newtype LeaderState a = LeaderState (LeaderStateInner a)
+
+getFromRefAtLeaderState
+  :: forall a b. LeaderNode a -> (LeaderStateInner a -> Ref b) -> Aff b
+getFromRefAtLeaderState (LeaderNode node) f =
+  liftEffect $ Ref.read $ f (unwrap node.state)
 
 takeFromPending
   :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 takeFromPending n ln@(LeaderNode node) = do
-  pending <- getPending ln
+  pending <- getFromRefAtLeaderState ln _.pendingActionsRequest
   liftEffect $ Ref.modify_ (const (OrderedMap.drop n pending))
     (unwrap node.state).pendingActionsRequest
   pure $ OrderedMap.take n pending

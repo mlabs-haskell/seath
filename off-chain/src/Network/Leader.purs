@@ -26,7 +26,14 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( ActionStatus(NotFound, ToBeProcessed)
+  ( ActionStatus
+      ( NotFound
+      , ToBeProcessed
+      , ToBeSubmited
+      , NotFound
+      , Processing
+      , RejectedAtChainBuilder
+      )
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
@@ -37,7 +44,7 @@ import Seath.Network.Types
   , SignedTransaction
   , addAction
   , chaintriggerTreshold
-  , getPending
+  , getFromRefAtLeaderState
   , maxPendingCapacity
   , numberOfPending
   , signTimeout
@@ -55,18 +62,20 @@ includeAction ln@(LeaderNode node) action = do
   liftEffect $ log "Leader: accepting action"
   pendingCount <- numberOfPending ln
   if (pendingCount < maxPendingCapacity node.configuration) then
-    -- if (pendingCount > maxPendingCapacity node.configuration) then -- DEBUG
     (Right <$> addAction action node.state)
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
 
 actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
 actionStatus leaderNode actionId = do
-  pending <- getPending leaderNode
-  let maybeInPending = OrderedMap.lookupPostion actionId pending
+  pending <- getFromRefAtLeaderState leaderNode _.pendingActionsRequest
+
+  let maybeInPending = lookupPosition pending
   -- todo: check in other OrderedMaps and get correct status
   pure $ case maybeInPending of
     Just i -> ToBeProcessed i
     Nothing -> NotFound
+  where
+  lookupPosition = OrderedMap.lookupPosition actionId
 
 acceptSignedTransaction
   :: forall a
@@ -123,13 +132,21 @@ startLeaderNode
 startLeaderNode conf = do
   pendingActionsRequest <- liftEffect $ Ref.new OrderedMap.empty
   prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
-  signatureResponses <- liftEffect $ Ref.new OrderedMap.empty
+  processing <- liftEffect $ Ref.new OrderedMap.empty
+  rejectedByChainBuilder <- liftEffect $ Ref.new OrderedMap.empty
+  waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
+  waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
+  errorAtSubmission <- liftEffect $ Ref.new OrderedMap.empty
   let
     node = LeaderNode
       { state: LeaderState
           { pendingActionsRequest
           , prioritaryPendingActions
-          , signatureResponses
+          , processing
+          , rejectedByChainBuilder
+          , waitingForSignature
+          , waitingForSubmission
+          , errorAtSubmission
           , stage: WaitingForActions
           }
       , configuration: conf

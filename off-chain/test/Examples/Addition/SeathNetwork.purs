@@ -35,7 +35,16 @@ import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.Types (IncludeRequest(IncludeRequest))
 import Seath.Network.Leader as Leader
-import Seath.Network.Types (ActionStatus, GetStatusError(GSOtherError), IncludeActionError(IAOtherError), LeaderConfiguration(LeaderConfiguration), LeaderNode, UserConfiguration(UserConfiguration), UserNode, readSentActions)
+import Seath.Network.Types
+  ( ActionStatus
+  , GetStatusError(GSOtherError)
+  , IncludeActionError(IAOtherError)
+  , LeaderConfiguration(LeaderConfiguration)
+  , LeaderNode
+  , UserConfiguration(UserConfiguration)
+  , UserNode
+  , readSentActions
+  )
 import Seath.Network.Users as Users
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
@@ -45,7 +54,7 @@ import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin _leader users = do
-  let initializationOptions = {waitingTime:3,maxAttempts:10}
+  let initializationOptions = { waitingTime: 3, maxAttempts: 10 }
 
   checkInitSctipt env admin initializationOptions
 
@@ -174,29 +183,36 @@ userHandlerRefuseToSign client uuid = do
     Right _ -> pure unit
     Left r -> throwError (error $ show r)
 
-checkInitSctipt :: ContractEnv -> KeyWallet ->{waitingTime::Int,maxAttempts::Int} -> Aff Unit
-checkInitSctipt env admin waitingTime = runContractInEnv env $ withKeyWallet admin $ do
-  waitForFunding waitingTime
-  scriptState <- try $ Addition.Actions.queryBlockchainState
-  case scriptState of
-    Left _ -> do
-      logInfo' "Initializing Addition script state"
-      void $ Addition.Contract.initialSeathContract
-    Right _ -> do
-      logInfo' "Addition script state already initialized"
+checkInitSctipt
+  :: ContractEnv
+  -> KeyWallet
+  -> { waitingTime :: Int, maxAttempts :: Int }
+  -> Aff Unit
+checkInitSctipt env admin waitingTime = runContractInEnv env
+  $ withKeyWallet admin
+  $ do
+      waitForFunding waitingTime
+      scriptState <- try $ Addition.Actions.queryBlockchainState
+      case scriptState of
+        Left _ -> do
+          logInfo' "Initializing Addition script state"
+          void $ Addition.Contract.initialSeathContract
+        Right _ -> do
+          logInfo' "Addition script state already initialized"
 
-waitForFunding :: {waitingTime::Int,maxAttempts::Int} -> Contract Unit
+waitForFunding :: { waitingTime :: Int, maxAttempts :: Int } -> Contract Unit
 waitForFunding options = do
   slotsTime <-
-    liftMaybe (error $ "can't convert waiting time: " <> show options.waitingTime) $
+    liftMaybe
+      (error $ "can't convert waiting time: " <> show options.waitingTime) $
       Natural.fromInt options.waitingTime
   _ <- waitNSlots slotsTime
   loop slotsTime options.maxAttempts
   where
   loop :: Natural -> Int -> Contract Unit
   loop slots remainingAttempts =
-    if remainingAttempts == 0 then pure unit 
-      else do
+    if remainingAttempts == 0 then pure unit
+    else do
       logInfo' "Waiting for funds in wallet"
       mutxos <- getWalletUtxos
       case mutxos of
@@ -204,4 +220,4 @@ waitForFunding options = do
           if Map.isEmpty utxos then
             waitNSlots slots *> loop slots (remainingAttempts - 1)
           else pure unit
-        Nothing -> waitNSlots slots *> loop slots (remainingAttempts -1)
+        Nothing -> waitNSlots slots *> loop slots (remainingAttempts - 1)
