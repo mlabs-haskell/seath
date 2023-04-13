@@ -115,7 +115,7 @@ derive instance Newtype GetActionStatus _
 data ActionStatus
   = AskForSignature
       { uuid :: UUID
-      , transaction :: FinalizedTransaction
+      , txCborHex :: String -- TODO: maybe separate type?
       }
   | ToBeProcessed Int
   | ToBeSubmited Int
@@ -146,18 +146,14 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     where
     encodeAskForSig
       :: { uuid :: UUID
-         , transaction :: FinalizedTransaction
+         , txCborHex :: String
          }
       -> Aeson
     encodeAskForSig askForSig =
-      let
-        tx :: Transaction
-        tx = unwrap askForSig.transaction
-      in
-        encodeAeson
-          { "uuid": encodeAeson (UID askForSig.uuid)
-          , "transaction": encodeAeson tx
-          }
+      encodeAeson
+        { "uuid": encodeAeson (UID askForSig.uuid)
+        , "txCborHex": encodeAeson askForSig.txCborHex
+        }
 
 instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
   decodeAeson s = do
@@ -165,7 +161,7 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
     tag <- getField obj "tag"
     contents <- getField obj "contents"
     case tag of
-      "AskForSignature" -> AskForSignature <$> undefined -- FIXME
+      "AskForSignature" -> decodeAskForSig contents
       "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
       "ToBeSubmited" -> ToBeSubmited <$> decodeAeson contents
       "Processing" -> Right Processing
@@ -176,6 +172,15 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
+    where
+    decodeAskForSig c = do
+      obj <- decodeAeson c
+      (uid :: UID) <- getField obj "uuid"
+      (cborHash :: String) <- getField obj "txCborHex"
+      pure $ AskForSignature
+        { uuid: unwrap uid
+        , txCborHex: cborHash
+        }
 
 data GetStatusError = GSOtherError String
 
@@ -222,8 +227,26 @@ newtype LeaderState a = LeaderState (LeaderStateInner a)
 
 getFromRefAtLeaderState
   :: forall a b. LeaderNode a -> (LeaderStateInner a -> Ref b) -> Aff b
-getFromRefAtLeaderState (LeaderNode node) f =
-  liftEffect $ Ref.read $ f (unwrap node.state)
+getFromRefAtLeaderState ln f =
+  withRefFromState ln f Ref.read
+
+setToRefAtLeaderState
+  :: forall a b
+   . LeaderNode a
+  -> b
+  -> (LeaderStateInner a -> Ref b)
+  -> Aff Unit
+setToRefAtLeaderState ln v f = do
+  withRefFromState ln f (Ref.modify_ (const v))
+
+withRefFromState
+  :: forall a b c
+   . LeaderNode a
+  -> (LeaderStateInner a -> Ref b)
+  -> (Ref b -> Effect c)
+  -> Aff c
+withRefFromState (LeaderNode node) acessor f =
+  liftEffect $ f $ acessor (unwrap node.state)
 
 takeFromPending
   :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
@@ -269,6 +292,9 @@ derive instance Newtype (LeaderConfiguration a) _
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
+  , buildChain ::
+      Array (UserAction a)
+      -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }
 
 derive instance Newtype (LeaderNode a) _

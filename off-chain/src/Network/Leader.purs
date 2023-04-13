@@ -14,27 +14,21 @@ module Seath.Network.Leader
 
 import Contract.Prelude
 
-import Contract.Transaction (FinalizedTransaction, TransactionHash)
+import Contract.Transaction (FinalizedTransaction, Transaction, TransactionHash)
+import Data.Array as Array
 import Data.Either (Either)
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, delay, forkAff, try)
+import Effect.Aff (Aff, delay, error, forkAff, throwError, try)
 import Effect.Ref as Ref
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus
-      ( NotFound
-      , ToBeProcessed
-      , ToBeSubmited
-      , NotFound
-      , Processing
-      , RejectedAtChainBuilder
-      )
+  ( ActionStatus(..)
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
@@ -48,6 +42,7 @@ import Seath.Network.Types
   , getFromRefAtLeaderState
   , maxPendingCapacity
   , numberOfPending
+  , setToRefAtLeaderState
   , signTimeout
   , takeFromPending
   )
@@ -67,16 +62,27 @@ includeAction ln@(LeaderNode node) action = do
   else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
 
 actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
-actionStatus leaderNode actionId = do
-  pending <- getFromRefAtLeaderState leaderNode _.pendingActionsRequest
+actionStatus ln actionId = do
+  maybeInPending <-
+    OrderedMap.lookupPosition actionId
+      <$> getFromRefAtLeaderState ln _.pendingActionsRequest
 
-  let maybeInPending = lookupPosition pending
-  -- todo: check in other OrderedMaps and get correct status
-  pure $ case maybeInPending of
-    Just i -> ToBeProcessed i
-    Nothing -> NotFound
-  where
-  lookupPosition = OrderedMap.lookupPosition actionId
+  maybeWaitingForSig <-
+    OrderedMap.lookup actionId <$>
+      getFromRefAtLeaderState ln _.waitingForSignature
+
+  -- todo: refactor to something less ugly
+  case maybeWaitingForSig of
+    Just tx -> do
+      cbor <- try $ TxHex.toCborHex tx
+      case cbor of
+        Left e -> throwError (error $ show e)
+        Right txCborHex -> pure $ AskForSignature { uuid: actionId, txCborHex }
+    Nothing ->
+      -- todo: check in other OrderedMaps and get correct status
+      pure $ case maybeInPending of
+        Just i -> ToBeProcessed i
+        Nothing -> NotFound
 
 acceptSignedTransaction
   :: forall a
@@ -134,8 +140,14 @@ getNextBatchOfActions
 getNextBatchOfActions = undefined
 
 startLeaderNode
-  :: forall a. Show a => LeaderConfiguration a -> Aff (LeaderNode a)
-startLeaderNode conf = do
+  :: forall a
+   . Show a
+  => LeaderConfiguration a
+  -> ( Array (UserAction a)
+       -> Aff (Array (FinalizedTransaction /\ UserAction a))
+     )
+  -> Aff (LeaderNode a)
+startLeaderNode conf buildChain = do
   pendingActionsRequest <- liftEffect $ Ref.new OrderedMap.empty
   prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
   processing <- liftEffect $ Ref.new OrderedMap.empty
@@ -154,11 +166,11 @@ startLeaderNode conf = do
           , stage: WaitingForActions
           }
       , configuration: conf
+      , buildChain: buildChain
       }
 
   -- ! this is early and experimental to see if batching will work correctly
-  -- ! uncomment if needed
-  -- startBatcherThread node
+  startBatcherThread node
 
   pure node
 
@@ -172,9 +184,25 @@ startBatcherThread ln = do
     pendingNum <- numberOfPending ln
     if pendingNum >= tHold then do
       toProcess <- takeFromPending tHold ln
-      log $ "------> To process: " <> show (OrderedMap.orderedElems toProcess)
+      txChain <- try $ (unwrap ln).buildChain
+        (snd <$> OrderedMap.orderedElems toProcess)
+      case txChain of
+        Left e
+        -> log $ "Leader: failed to build chain: " <> show e
+        Right chain
+        -> do
+          let
+            signedTxsUids :: Array (UUID /\ Transaction)
+            signedTxsUids =
+              Array.zip (OrderedMap.orderedKeys toProcess)
+                (map (fst >>> unwrap) chain)
+          setToRefAtLeaderState ln
+            (OrderedMap.fromFoldable signedTxsUids)
+            _.waitingForSignature
+          log $ "Leader: built chain of size " <> show (Array.length chain)
+
     else pure unit
-    delay (Milliseconds 3000.0)
+    delay (Milliseconds 1000.0)
     loop
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit

@@ -95,7 +95,7 @@ mainTest env admin leader users = do
 
   log "Starting leader node"
   (leaderNode :: LeaderNode AdditionAction) <- liftAff $
-    Leader.startLeaderNode _testLeaderConf
+    Leader.startLeaderNode _testLeaderConf buildChain
 
   log "Starting server"
   server <- Server.runServer serverConf leaderNode >>= liftEither <<< lmap error
@@ -106,7 +106,10 @@ mainTest env admin leader users = do
   log "Fire user include action request 1"
   Users.performAction userNode
     (AddAmount $ BigInt.fromInt 1)
-  delay $ Milliseconds 1000.0
+
+  -- second action will trigger chain building and user will start to receive
+  -- different response for status check
+  delay $ Milliseconds 5000.0
   log "Fire user include action request 2"
   Users.performAction userNode
     (AddAmount $ BigInt.fromInt 2)
@@ -114,11 +117,11 @@ mainTest env admin leader users = do
 
   -- test sending rejections
   uids <- (map fst) <$> readSentActions userNode
-  maybe (throwError $ error "ff")
+  maybe (throwError $ error "wtf")
     (Users.sendRejectionToLeader userNode)
     (uids !! 0)
 
-  delay (Milliseconds 15000.0)
+  delay (Milliseconds 10000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
   -- killFiber (error "can't cleanup user") userFiber
@@ -273,4 +276,3 @@ mkAdditionCoreConfig = do
     , queryBlockchainState: Addition.queryBlockchainState
     , numberOfBuiltChains: 0
     }
-    

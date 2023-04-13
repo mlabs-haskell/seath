@@ -2,9 +2,12 @@ module Seath.Network.OrderedMap
   ( OrderedMap(..)
   , drop
   , empty
+  , fromFoldable
   , length
+  , lookup
   , lookupPosition
   , orderedElems
+  , orderedKeys
   , push
   , splitEither
   , take
@@ -31,12 +34,16 @@ newtype OrderedMap keys values = OrderedMap
   { map :: Map keys (Int /\ values), array :: Array (keys /\ values) }
 
 derive instance Newtype (OrderedMap keys values) _
+derive newtype instance (Show k, Show v) => Show (OrderedMap k v)
 
 length :: forall keys values. OrderedMap keys values -> Int
 length (OrderedMap ordMap) = Array.length ordMap.array
 
 lookupPosition :: forall k v. Ord k => k -> OrderedMap k v -> Maybe Int
 lookupPosition k (OrderedMap oMap) = fst <$> Map.lookup k oMap.map
+
+lookup :: forall k v. Ord k => k -> OrderedMap k v -> Maybe v
+lookup k (OrderedMap oMap) = snd <$> Map.lookup k oMap.map
 
 -- TODO: tests when API will stabilaze
 push
@@ -73,3 +80,14 @@ take n (OrderedMap oMap) = foldr (uncurry push) empty
 drop :: forall k v. Ord k => Int -> OrderedMap k v -> OrderedMap k v
 drop n (OrderedMap oMap) = foldr (uncurry push) empty
   (Array.drop n oMap.array)
+
+orderedKeys :: forall k v. OrderedMap k v -> Array k
+orderedKeys (OrderedMap oMap) = fst <$> oMap.array
+
+fromFoldable
+  :: forall f k v
+   . Foldable f
+  => Ord k
+  => f (k /\ v)
+  -> OrderedMap k v
+fromFoldable = foldr (\(k /\ v) -> push k v) empty

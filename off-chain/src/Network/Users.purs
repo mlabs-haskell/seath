@@ -25,7 +25,7 @@ import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus
+  ( ActionStatus(..)
   , GetStatusError
   , IncludeActionError
   , SignedTransaction
@@ -142,7 +142,19 @@ startActionStatusCheck userNode = do
     for_ sent $ \(uid /\ _) -> do
       -- TODO: process response
       res <- getActionStatus userNode uid
-      log $ "User: status of action " <> show uid <> ": " <> show res
+      case res of
+        Left e -> log $ "User: failed to get status: " <> show e
+        Right status -> case status of
+          AskForSignature afs -> do
+            ethTx <- try $ TxHex.fromCborHex afs.txCborHex
+            case ethTx of
+              Left e -> log $
+                "User: got AskForSignature status, but failed to decode Tx:\n"
+                  <> show e
+              Right _tx -> log $
+                "User: got AskForSignature status AND SUCCESSFULLY DECODED TX"
+          other -> log $ "User: statis for action " <> show uid <> ": " <> show
+            other
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0
     check
