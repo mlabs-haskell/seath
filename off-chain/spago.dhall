@@ -27,6 +27,7 @@ You can edit this file as you like.
   , "payload"
   , "prelude"
   , "profunctor-lenses"
+  , "queue"
   , "refs"
   , "strings"
   , "transformers"

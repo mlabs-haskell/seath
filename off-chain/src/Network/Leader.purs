@@ -2,7 +2,6 @@ module Seath.Network.Leader
   ( acceptRefuseToSign
   , acceptSignedTransaction
   , actionStatus
-  , getNextBatchOfActions
   , includeAction
   , newLeaderState
   , showDebugState
@@ -20,12 +19,13 @@ import Data.Array as Array
 import Data.Either (Either)
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
-import Data.UUID (UUID)
+import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff, delay, try)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
+import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
@@ -46,9 +46,9 @@ import Seath.Network.Types
   , LeaderStateInner
   , SendSignedTransaction
   , SignedTransaction
-  , addAction
   , getChaintriggerTreshold
   , getFromLeaderConfiguration
+  , getFromLeaderState
   , getFromRefAtLeaderState
   , getNumberOfPending
   , maxPendingCapacity
@@ -64,12 +64,23 @@ includeAction
    . LeaderNode a
   -> UserAction a
   -> Aff (Either IncludeActionError UUID)
-includeAction ln@(LeaderNode node) action = do
-  liftEffect $ log "Leader: accepting action"
-  pendingCount <- getNumberOfPending ln
-  if (pendingCount < maxPendingCapacity node.configuration) then
-    (Right <$> addAction action node.state)
-  else (Left <<< RejectedServerBussy) <$> leaderStateInfo ln
+includeAction leaderNode@(LeaderNode node) action = do
+  let receivedQueue = getFromLeaderState leaderNode _.receivedActionsRequests
+  queueResponse <- liftEffect $ Ref.new (Right Nothing)
+  _ <- liftEffect $ Queue.put receivedQueue (Right (action /\ queueResponse))
+  value <- loop queueResponse
+  case value of
+    Nothing -> (Left <<< RejectedServerBussy) <$> leaderStateInfo leaderNode
+    (Just uuid) -> pure $ Right uuid
+
+  where
+  loop :: Ref (Either Unit (Maybe UUID)) -> Aff (Maybe UUID)
+  loop queueResponse = do
+    delay (wrap 0.001)
+    value <- liftEffect $ Ref.read queueResponse
+    case value of
+      Right v -> pure v
+      Left _ -> loop queueResponse
 
 actionStatus :: forall a. LeaderNode a -> UUID -> Aff ActionStatus
 actionStatus leaderNode actionId = do
@@ -83,7 +94,10 @@ actionStatus leaderNode actionId = do
       _map <- getFromRefAtLeaderState leaderNode getter
       checkIsIn actionId _map transform
 
-  pendingCheck <- check _.pendingActionsRequest
+  let pendingQueue = getFromLeaderState leaderNode _.pendingActionsRequest
+  -- TODO : Doing this for every request is obviously inefficient, we know.
+  pendingMap <- liftEffect $ OrderedMap.fromFoldable <$> Queue.read pendingQueue
+  pendingCheck <- checkIsIn actionId pendingMap
     (\_ index _ -> pure $ ToBeProcessed index)
   prioritarycheck <- check _.prioritaryPendingActions
     (\_ index _ -> pure $ PrioritaryToBeProcessed index)
@@ -159,22 +173,6 @@ submitChain
   -> Aff $ OrderedMap UUID $ Either String $ TransactionHash
 submitChain = undefined
 
--- To use inside getNextBatchOfActions
-getAbatchOfPendingActions
-  :: forall a
-   . LeaderNode a
-  -> Int
-  -> Aff $ Array $ UUID /\ UserAction a
-getAbatchOfPendingActions = undefined
-
--- The array it takes is the output of tellUsersWeNeedNewSignature.
-getNextBatchOfActions
-  :: forall a
-   . LeaderNode a
-  -> OrderedMap UUID $ UserAction a
-  -> Aff $ OrderedMap UUID $ UserAction a
-getNextBatchOfActions = undefined
-
 newLeaderNode
   :: forall a
    . Show a
@@ -183,29 +181,16 @@ newLeaderNode
        -> Aff (Array (FinalizedTransaction /\ UserAction a))
      )
   -> Aff (LeaderNode a)
-newLeaderNode conf buildChain = do
-  pendingActionsRequest <- liftEffect $ Ref.new OrderedMap.empty
-  prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
-  processing <- liftEffect $ Ref.new OrderedMap.empty
-  waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
-  waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
-  stage <- liftEffect $ Ref.new WaitingForActions
+newLeaderNode conf buildChain' = do
+  newState <- newLeaderState (unwrap conf).numberOfActionToTriggerChainBuilder
   let
     node = LeaderNode
-      { state: LeaderState
-          { pendingActionsRequest
-          , prioritaryPendingActions
-          , processing
-          , waitingForSignature
-          , waitingForSubmission
-          , stage: stage
-          }
+      { state: newState
       , configuration: conf
-      , buildChain: buildChain
+      , buildChain: buildChain'
       }
   pure node
 
--- ! this is early and experimental to see if batching will work correctly
 getBatchOfResponses
   :: forall a. Show a => LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 getBatchOfResponses ln = do
@@ -302,14 +287,64 @@ leaderLoop leaderNode = do
   log "Leader: Node loop complete!"
   leaderLoop leaderNode
 
-----------------  setToRefAtLeaderState leaderNode Blog $ "Leader: failed to build chain: " <> show euildingChain _.stage
-
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
 
--- | To build a new mutable `LeaderState`
-newLeaderState :: forall a. Aff $ LeaderState a
-newLeaderState = undefined
+-- | To build a new `LeaderState`
+newLeaderState :: forall a. Int -> Aff $ LeaderState a
+newLeaderState maxRequestAllowed = do
+  receivedActionsRequests <- liftEffect $ Queue.new
+  pendingActionsRequest <- liftEffect $ Queue.new
+  receivedActionsRequestsHandler <- liftEffect $ newActionRequestQueueHandler
+    maxRequestAllowed
+    pendingActionsRequest
+  liftEffect $ Queue.on receivedActionsRequests receivedActionsRequestsHandler
+  prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
+  processing <- liftEffect $ Ref.new OrderedMap.empty
+  waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
+  waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
+  stage <- liftEffect $ Ref.new WaitingForActions
+  pure $ wrap
+    { receivedActionsRequests
+    , pendingActionsRequest
+    , prioritaryPendingActions
+    , processing
+    , waitingForSignature
+    , waitingForSubmission
+    , stage
+    }
+
+newActionRequestQueueHandler
+  :: forall a
+   . Int
+  -> Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+       (UUID /\ UserAction a)
+  -> Effect
+       ( (Either Int (UserAction a /\ Ref (Either Unit (Maybe UUID))))
+         -> Effect Unit
+       )
+newActionRequestQueueHandler maxCapacity otherQueue = do
+  counterRef <- Ref.new 0
+  Ref.write 0 counterRef
+  pure $ handler counterRef
+
+  where
+  handler
+    :: Ref Int
+    -> (Either Int (UserAction a /\ Ref (Either Unit (Maybe UUID))))
+    -> Effect Unit
+  handler counterRef (Left takenByLeader) = do
+    counterValue <- Ref.read counterRef
+    let newCounterValue = max (counterValue - takenByLeader) 0
+    Ref.write newCounterValue counterRef
+  handler counterRef (Right (action /\ responseRef)) = do
+    counterValue <- Ref.read counterRef
+    if counterValue > maxCapacity then
+      Ref.write (Left unit) responseRef
+    else do
+      uuid <- genUUID
+      liftEffect $ Queue.put otherQueue (uuid /\ action)
+      Ref.write (Right (Just uuid)) responseRef
 
 showDebugState :: forall a. LeaderNode a -> Aff String
 showDebugState leaderNode = do

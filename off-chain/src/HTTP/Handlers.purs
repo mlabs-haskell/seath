@@ -13,8 +13,46 @@ import Seath.Network.Types
   , IncludeActionError
   , LeaderNode
   )
-import Undefined (undefined)
 
+mkHandlers
+  :: forall actionType
+   . Show actionType
+  => LeaderNode actionType
+  -> { leader ::
+         { acceptSignedTransaction ::
+             { body :: SendSignedRequest
+             }
+             -> Aff
+                  { data :: String
+                  , status :: String
+                  }
+         , actionStatus ::
+             { params ::
+                 { uid :: UID
+                 }
+             }
+             -> Aff
+                  { data :: String
+                  , status :: String
+                  }
+         , includeAction ::
+             { body :: IncludeRequest actionType
+             }
+             -> Aff
+                  { data :: String
+                  , status :: String
+                  }
+         , refuseToSign ::
+             { params ::
+                 { uid :: UID
+                 }
+             }
+             -> Aff
+                  { data :: String
+                  , status :: String
+                  }
+         }
+     }
 mkHandlers leaderNode =
   { leader:
       { includeAction: includeAction leaderNode

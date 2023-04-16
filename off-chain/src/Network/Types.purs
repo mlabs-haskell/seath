@@ -15,6 +15,7 @@ import Aeson
   )
 import Contract.Transaction (FinalizedTransaction(..), Transaction(..))
 import Ctl.Internal.Helpers (encodeTagged')
+import Data.Array as Array
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
@@ -23,6 +24,7 @@ import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
+import Queue as Queue
 import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
@@ -207,7 +209,15 @@ derive newtype instance Show SendSignedTransaction
 -- if you update this, update `Seath.Network.Leader.actionStatus` please
 -- and also `Seath.Network.Leader.restLeaderState`
 type LeaderStateInner a =
-  { pendingActionsRequest :: Ref $ OrderedMap UUID (UserAction a)
+  { receivedActionsRequests ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        -- TODO : write types to represent this
+        -- left is for leader to tell how much pending actions are taken
+        -- right is for payload handler.
+        (Either Int (UserAction a /\ Ref (Either Unit (Maybe UUID))))
+  , pendingActionsRequest ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        (UUID /\ UserAction a)
   -- For actions that were part of a previous built chain 
   -- and were removed since a previous action failed.
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
@@ -223,6 +233,9 @@ getFromRefAtLeaderState
   :: forall a b. LeaderNode a -> (LeaderStateInner a -> Ref b) -> Aff b
 getFromRefAtLeaderState ln f =
   withRefFromState ln f Ref.read
+
+getFromLeaderState :: forall a b. LeaderNode a -> (LeaderStateInner a -> b) -> b
+getFromLeaderState ln accessor = accessor (unwrap (unwrap ln).state)
 
 setToRefAtLeaderState
   :: forall a b
@@ -245,17 +258,12 @@ withRefFromState (LeaderNode node) acessor f =
 takeFromPending
   :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 takeFromPending n ln@(LeaderNode node) = do
-  pending <- getFromRefAtLeaderState ln _.pendingActionsRequest
-  liftEffect $ Ref.modify_ (const (OrderedMap.drop n pending))
-    (unwrap node.state).pendingActionsRequest
-  pure $ OrderedMap.take n pending
-
-addAction :: forall a. UserAction a -> LeaderState a -> Aff UUID
-addAction action st = liftEffect do
-  actionUUID <- genUUID
-  pushRefMap_ actionUUID action
-    (unwrap st).pendingActionsRequest
-  pure actionUUID
+  let pendingQueue = getFromLeaderState ln _.pendingActionsRequest
+  pendingValues <- liftEffect $ Queue.takeMany pendingQueue n
+  let requestsQueue = getFromLeaderState ln _.receivedActionsRequests
+  let taken = Array.length pendingValues
+  liftEffect $ Queue.put requestsQueue (Left taken)
+  pure $ OrderedMap.fromFoldable pendingValues
 
 getFromLeaderConfiguration
   :: forall a b. LeaderNode a -> (LeaderConfigurationInner a -> b) -> b
@@ -266,7 +274,7 @@ getNumberOfPending :: forall a. LeaderNode a -> Aff Int
 getNumberOfPending ln = do
   numberOfPrioritary <- OrderedMap.length <$> getFromRefAtLeaderState ln
     _.prioritaryPendingActions
-  numberOfPending <- OrderedMap.length <$> getFromRefAtLeaderState ln
+  numberOfPending <- liftEffect $ Queue.length $ getFromLeaderState ln
     _.pendingActionsRequest
   pure $ numberOfPrioritary + numberOfPending
 
