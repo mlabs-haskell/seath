@@ -14,13 +14,17 @@ import Aeson
   , toString
   )
 import Contract.Monad (Contract)
-import Contract.Transaction (FinalizedTransaction(..), Transaction(..))
+import Contract.Transaction
+  ( BalancedSignedTransaction
+  , FinalizedTransaction
+  , Transaction
+  )
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Array as Array
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
-import Data.UUID (UUID, genUUID)
+import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
@@ -178,27 +182,6 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
         , txCborHex: cborHash
         }
 
-data GetStatusError = GSOtherError String
-
-derive instance Generic GetStatusError _
-
-instance showStatusResponseError :: Show GetStatusError where
-  show = genericShow
-
-instance encodeAesonStatusResponseError :: EncodeAeson GetStatusError where
-  encodeAeson = case _ of
-    GSOtherError err -> encodeTagged' "GSOtherError" err
-
-instance decodeAesonStatusResponseError :: DecodeAeson GetStatusError where
-  decodeAeson s = do
-    obj <- decodeAeson s
-    tag <- getField obj "tag"
-    contents <- getField obj "contents"
-    case tag of
-      "GSOtherError" -> GSOtherError <$> decodeAeson contents
-      other -> Left
-        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
-
 newtype SendSignedTransaction = SendSignedTransaction
   { uuid :: UUID
   , txCborHex :: String
@@ -350,7 +333,7 @@ type UserHandlers a =
       SendSignedTransaction
       -> Aff $ Either AcceptSignedTransactionError Unit
   , refuseToSign :: UUID -> Aff Unit
-  , getActionStatus :: UUID -> Aff (Either GetStatusError ActionStatus)
+  , getActionStatus :: UUID -> Aff ActionStatus
   }
 
 newtype UserConfiguration a = UserConfiguration
@@ -364,6 +347,7 @@ newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
   , makeAction :: a -> Aff (UserAction a)
+  , signTx :: FinalizedTransaction -> Aff BalancedSignedTransaction
   }
 
 derive instance Newtype (UserNode a) _

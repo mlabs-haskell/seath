@@ -15,7 +15,7 @@ import Seath.Common.Types (UID)
 import Seath.HTTP.Spec (LeaderRoutes)
 import Seath.HTTP.Spec as Spec
 import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest)
-import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
+import Seath.Network.Types (ActionStatus, IncludeActionError)
 import Type.Proxy (Proxy)
 
 type UserClient a =
@@ -33,14 +33,14 @@ type UserClient a =
           { params :: { uid :: UID } }
           -> Aff
                ( Either ClientError
-                   (Response (JSend GetStatusError ActionStatus))
+                   (Response (JSend String ActionStatus))
                )
       , actionStatus_ ::
           { extraHeaders :: Headers }
           -> { params :: { uid :: UID } }
           -> Aff
                ( Either ClientError
-                   (Response (JSend GetStatusError ActionStatus))
+                   (Response (JSend String ActionStatus))
                )
       , acceptSignedTransaction ::
           { body :: SendSignedRequest }
@@ -99,14 +99,14 @@ mkUserClient _ serverUrl =
                       { params :: { uid :: UID } }
                       -> Aff
                            ( Either ClientError
-                               (Response (JSend GetStatusError ActionStatus))
+                               (Response (JSend String ActionStatus))
                            )
                   , actionStatus_ ::
                       { extraHeaders :: Headers }
                       -> { params :: { uid :: UID } }
                       -> Aff
                            ( Either ClientError
-                               (Response (JSend GetStatusError ActionStatus))
+                               (Response (JSend String ActionStatus))
                            )
                   , acceptSignedTransaction ::
                       { body :: SendSignedRequest }

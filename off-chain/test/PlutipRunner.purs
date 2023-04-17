@@ -31,13 +31,13 @@ config =
   , port: UInt.fromInt 8082
   , logLevel: Info
   , ogmiosConfig:
-      { port: UInt.fromInt 1338
+      { port: UInt.fromInt 8081
       , host: "127.0.0.1"
       , secure: false
       , path: Nothing
       }
   , kupoConfig:
-      { port: UInt.fromInt 1443
+      { port: UInt.fromInt 8080
       , host: "127.0.0.1"
       , secure: false
       , path: Nothing

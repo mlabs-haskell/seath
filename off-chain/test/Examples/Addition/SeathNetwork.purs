@@ -12,6 +12,11 @@ import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
+import Contract.Transaction
+  ( BalancedSignedTransaction
+  , FinalizedTransaction
+  , signTransaction
+  )
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, throwError, try)
@@ -41,7 +46,6 @@ import Seath.Network.Types
   ( AcceptSignedTransactionError
   , ActionStatus
   , FunctionToPerformContract(FunctionToPerformContract)
-  , GetStatusError(GSOtherError)
   , IncludeActionError(IAOtherError)
   , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode
@@ -81,18 +85,25 @@ mainTest env admin leader users = do
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     mkAdditionCoreConfig
 
-  let
+  let -- hadler for the User to make action using CTL Contract
     makeAction action =
       runContractInEnv env $ withKeyWallet user
         $ Core.Utils.makeActionContract action
 
+    -- handler for the Leader to build chain using CTL contract
     buildChain actions =
       runContractInEnv env $ withKeyWallet leader $ fst
         <$> ChainBuilder.buildChain coreConfig actions Nothing
 
+    signTx :: FinalizedTransaction -> Aff BalancedSignedTransaction
+    signTx tx =
+      runContractInEnv env $ withKeyWallet user
+        $ signTransaction tx
+
   log "Starting user node"
   (userFiber /\ (userNode :: UserNode AdditionAction)) <- Users.startUserNode
     makeAction
+    signTx
     _testUserConf
 
   log "Initializing leader node"
@@ -186,19 +197,20 @@ userHandlerSendAction client action = do
 userHandlerGetStatus
   :: UserClient AdditionAction
   -> UUID
-  -> Aff (Either GetStatusError ActionStatus)
+  -> Aff ActionStatus
 userHandlerGetStatus client uuid = do
   res <-
     client.leader.actionStatus
       { params: { uid: UID uuid } }
-  pure $ case res of
+  case res of
     Right resp -> convertResonse resp
-    Left r -> Left $ GSOtherError $ "Leader failed to respond: " <> show r
+    Left r -> throwError (error $ "Leader failed to respond: " <> show r)
   where
   convertResonse (Response r) =
     if (r.body.status == "success") then
-      lmap (show >>> GSOtherError) (decodeJsonString r.body.data)
-    else either (show >>> GSOtherError >>> Left) Left
+      either (show >>> error >>> throwError) pure
+        (decodeJsonString r.body.data)
+    else either (show >>> error >>> throwError) (error >>> throwError)
       (decodeJsonString r.body.data)
 
 userHandlerSendSignedToLeader

@@ -9,7 +9,6 @@ import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, toJsend)
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
   ( ActionStatus
-  , GetStatusError
   , IncludeActionError
   , LeaderNode
   )
@@ -112,11 +111,11 @@ actionStatus
    . Show a
   => LeaderNode a
   -> { params :: { uid :: UID } }
-  -> Aff (JSend GetStatusError ActionStatus)
+  -> Aff (JSend String ActionStatus)
 actionStatus leaderNode request = do
   log $ "Leader HTTP-server: action status request: " <> show request
   (result :: ActionStatus) <- leaderNode `Leader.actionStatus`
     (unwrap request.params.uid)
-  let response = toJsend $ (Right result :: Either GetStatusError ActionStatus)
+  let response = toJsend $ (Right result :: Either String ActionStatus)
   log $ "Leader HTTP-server: action status response: " <> show response
   pure response

@@ -3,7 +3,7 @@ module Seath.HTTP.Spec where
 import Payload.Spec (GET, POST, Routes, Spec(Spec))
 import Seath.Common.Types (UID)
 import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest)
-import Seath.Network.Types (ActionStatus, GetStatusError, IncludeActionError)
+import Seath.Network.Types (ActionStatus, IncludeActionError)
 
 type LeaderRoutes a = Routes "/leader"
   { includeAction ::
@@ -14,7 +14,7 @@ type LeaderRoutes a = Routes "/leader"
   , actionStatus ::
       GET "/action-status/<uid>"
         { params :: { uid :: UID }
-        , response :: JSend GetStatusError ActionStatus
+        , response :: JSend String ActionStatus
         }
   , acceptSignedTransaction ::
       POST "/accept-signed-tx"

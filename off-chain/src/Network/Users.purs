@@ -11,7 +11,10 @@ module Seath.Network.Users
 
 import Contract.Prelude
 
-import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
+import Contract.Transaction
+  ( BalancedSignedTransaction(..)
+  , FinalizedTransaction(FinalizedTransaction)
+  )
 import Control.Monad (bind)
 import Data.Either (Either)
 import Data.Function (($))
@@ -26,7 +29,6 @@ import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus(..)
-  , GetStatusError
   , IncludeActionError
   , SignedTransaction
   , UserConfiguration
@@ -57,7 +59,7 @@ sendActionToLeader userNode action =
 
 -- Query server for action status
 getActionStatus
-  :: forall a. UserNode a -> UUID -> Aff (Either GetStatusError ActionStatus)
+  :: forall a. UserNode a -> UUID -> Aff ActionStatus
 getActionStatus userNode =
   (getUserHandlers userNode).getActionStatus
 
@@ -112,9 +114,10 @@ startUserNode
   :: forall a
    . Show a
   => (a -> Aff (UserAction a))
+  -> (FinalizedTransaction -> Aff BalancedSignedTransaction)
   -> UserConfiguration a
   -> Aff (Fiber Unit /\ UserNode a)
-startUserNode makeAction conf = do
+startUserNode makeAction signTx conf = do
   actionsSent <- liftEffect $ Ref.new OrderedMap.empty
   transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
   submitedTransactions <- liftEffect $ Ref.new OrderedMap.empty
@@ -127,7 +130,7 @@ startUserNode makeAction conf = do
           }
       , configuration: conf
       , makeAction: makeAction
-
+      , signTx
       }
   fiber <- startActionStatusCheck node
   pure $ fiber /\ node
@@ -141,20 +144,19 @@ startActionStatusCheck userNode = do
     sent <- readSentActions userNode
     for_ sent $ \(uid /\ _) -> do
       -- TODO: process response
-      res <- getActionStatus userNode uid
-      case res of
-        Left e -> log $ "User: failed to get status: " <> show e
-        Right status -> case status of
-          AskForSignature afs -> do
-            ethTx <- try $ TxHex.fromCborHex afs.txCborHex
-            case ethTx of
-              Left e -> log $
-                "User: got AskForSignature status, but failed to decode Tx:\n"
-                  <> show e
-              Right _tx -> log $
-                "User: got AskForSignature status AND SUCCESSFULLY DECODED TX"
-          other -> log $ "User: status for action " <> show uid <> ": " <> show
-            other
+      -- TODO: handle errors with try
+      status <- getActionStatus userNode uid
+      case status of
+        AskForSignature afs -> do
+          ethTx <- try $ TxHex.fromCborHex afs.txCborHex
+          case ethTx of
+            Left e -> log $
+              "User: got AskForSignature status, but failed to decode Tx:\n"
+                <> show e
+            Right _tx -> log $
+              "User: got AskForSignature status AND SUCCESSFULLY DECODED TX"
+        other -> log $ "User: status for action " <> show uid <> ": " <> show
+          other
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0
     check
