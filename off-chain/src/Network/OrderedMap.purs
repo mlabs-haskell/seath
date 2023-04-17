@@ -1,5 +1,5 @@
 module Seath.Network.OrderedMap
-  ( OrderedMap(..)
+  ( OrderedMap(OrderedMap)
   , drop
   , empty
   , fromFoldable

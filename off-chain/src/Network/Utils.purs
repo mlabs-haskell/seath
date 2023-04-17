@@ -24,8 +24,5 @@ foreign import _seathUUIDShow :: UUID -> String
 foreign import _seathParseUUID
   :: (forall x. x -> Maybe x) -> (forall x. Maybe x) -> String -> Maybe UUID
 
-seathUUIDShow :: UUID -> String
-seathUUIDShow = _seathUUIDShow
-
 seathParseUUID :: String -> Maybe UUID
 seathParseUUID = _seathParseUUID Just Nothing

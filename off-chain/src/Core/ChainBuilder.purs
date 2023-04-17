@@ -4,7 +4,6 @@ import Contract.BalanceTxConstraints
   ( mustSendChangeToAddress
   , mustUseAdditionalUtxos
   )
-import Contract.Log (logInfo')
 import Contract.Monad (Contract, liftedE)
 import Contract.PlutusData (class FromData, class ToData)
 import Contract.Prelude (fst)
@@ -27,9 +26,8 @@ import Data.Map (empty, toUnfoldable)
 import Data.Maybe (Maybe(Nothing, Just))
 import Data.Monoid ((<>))
 import Data.Newtype (unwrap, wrap)
-import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
-import Prelude (discard, ($), (<<<))
+import Prelude (($), (<<<))
 import Seath.Core.Types
   ( ChainBuilderState(ChainBuilderState)
   , CoreConfiguration(CoreConfiguration)
@@ -177,6 +175,5 @@ action2Transaction
     balancedTx <- liftedE $ balanceTxWithConstraints unbalancedTx
       balanceConstraints
     _ <- getFinalizedTransactionHash balancedTx
-    -- logInfo' $ "TxHash: " <> show txId
     pure $ balancedTx /\ handlerResult.userState
 

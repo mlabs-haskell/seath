@@ -1,5 +1,5 @@
 module Seath.Common.Types
-  ( UID(..)
+  ( UID(UID)
   ) where
 
 import Contract.Prelude

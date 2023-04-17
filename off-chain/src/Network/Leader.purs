@@ -32,7 +32,15 @@ import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus(..)
+  ( ActionStatus
+      ( NotFound
+      , AskForSignature
+      , ToBeProcessed
+      , PrioritaryToBeProcessed
+      , Processing
+      , DiscardedBySignRejection
+      , WaitingOtherChainSignatures
+      )
   , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
@@ -61,7 +69,7 @@ includeAction
    . LeaderNode a
   -> UserAction a
   -> Aff (Either IncludeActionError UUID)
-includeAction leaderNode@(LeaderNode node) action = do
+includeAction leaderNode action = do
   let receivedQueue = getFromLeaderState leaderNode _.receivedActionsRequests
   queueResponse <- liftEffect $ Ref.new (Right Nothing)
   _ <- liftEffect $ Queue.put receivedQueue (Right (action /\ queueResponse))
@@ -179,7 +187,7 @@ acceptSignedTransaction leaderNode signedTx = do
               requests <- liftEffect $ OrderedMap.fromFoldable <$> Queue.read
                 requestsQueue
               case OrderedMap.lookup uuid requests of
-                Just oldRequest -> pure $ Left $
+                Just _ -> pure $ Left $
                   "Already got a response for this uuid: " <> show uuid
                 Nothing -> do
                   liftEffect $ Queue.put requestsQueue (uuid /\ Right tx)

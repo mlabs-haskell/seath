@@ -29,9 +29,11 @@ import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus(..)
+  ( ActionStatus
+      ( AskForSignature
+      )
   , IncludeActionError
-  , SendSignedTransaction(..)
+  , SendSignedTransaction(SendSignedTransaction)
   , SignedTransaction
   , UserConfiguration
   , UserNode(UserNode)
@@ -171,6 +173,7 @@ startActionStatusCheck userNode = do
         Left e -> log $ "User: failed to check status for " <> show (fst entry)
           <> ": "
           <> show e
+      -- TODO: We need this first delay? also, maybe made this configurable
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0
     check

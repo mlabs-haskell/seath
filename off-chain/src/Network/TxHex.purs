@@ -1,6 +1,14 @@
 module Seath.Network.TxHex where
 
-import Contract.Prelude (Aff, Effect, Either(..), bind, liftEffect, pure, ($))
+import Contract.Prelude
+  ( Aff
+  , Effect
+  , Either(Left, Right)
+  , bind
+  , liftEffect
+  , pure
+  , ($)
+  )
 import Contract.Transaction (Transaction)
 import Control.Monad.Error.Class (liftMaybe, throwError)
 import Ctl.Internal.Deserialization.Transaction as D

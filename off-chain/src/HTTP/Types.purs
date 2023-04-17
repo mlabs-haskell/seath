@@ -6,13 +6,11 @@ import Aeson
   ( class DecodeAeson
   , class EncodeAeson
   , JsonDecodeError
-  , decodeAeson
   , decodeJsonString
   , encodeAeson
   , getField
   , toString
   )
-import Contract.Transaction (FinalizedTransaction(FinalizedTransaction))
 import Data.Bifunctor (bimap, lmap)
 import Payload.Client.EncodeBody (class EncodeBody)
 import Payload.Client.EncodeParam (class EncodeParam)
@@ -20,7 +18,7 @@ import Payload.ContentType (class HasContentType, json)
 import Payload.Server.DecodeBody (class DecodeBody)
 import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
-import Seath.Network.Types (SendSignedTransaction(..))
+import Seath.Network.Types (SendSignedTransaction(SendSignedTransaction))
 import Undefined (undefined)
 
 -- Include action

@@ -40,7 +40,10 @@ import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.Types (IncludeRequest(IncludeRequest), SendSignedRequest(..))
+import Seath.HTTP.Types
+  ( IncludeRequest(IncludeRequest)
+  , SendSignedRequest(SendSignedRequest)
+  )
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
   ( AcceptSignedTransactionError

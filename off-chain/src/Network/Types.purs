@@ -233,7 +233,7 @@ withRefFromState (LeaderNode node) acessor f =
 
 takeFromPending
   :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
-takeFromPending n ln@(LeaderNode node) = do
+takeFromPending n ln = do
   let pendingQueue = getFromLeaderState ln _.pendingActionsRequest
   pendingValues <- liftEffect $ Queue.takeMany pendingQueue n
   let requestsQueue = getFromLeaderState ln _.receivedActionsRequests
@@ -261,6 +261,7 @@ derive instance Newtype (LeaderState a) _
 newtype FunctionToPerformContract = FunctionToPerformContract
   (forall b. Contract b -> Aff b)
 
+type LeaderConfigurationInner :: forall k. k -> Type
 type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int

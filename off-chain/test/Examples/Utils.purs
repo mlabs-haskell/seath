@@ -7,28 +7,21 @@ module Seath.Test.Examples.Utils
   ) where
 
 import Contract.Address (getNetworkId, validatorHashEnterpriseAddress)
-import Contract.Log (logInfo')
-import Contract.Monad (Contract, liftContractM, liftedE)
+import Contract.Monad (Contract, liftContractM)
 import Contract.PlutusData
   ( class FromData
-  , class IsData
   , fromData
   , toData
   )
-import Contract.ScriptLookups as ScriptLookups
-import Contract.Scripts (class ValidatorTypes, ValidatorHash)
+import Contract.Scripts (ValidatorHash)
 import Contract.Transaction
   ( TransactionHash
   , TransactionInput
   , TransactionOutputWithRefScript
   , _input
-  , balanceTx
   , lookupTxHash
   , outputDatumDatum
-  , signTransaction
-  , submit
   )
-import Contract.TxConstraints (TxConstraints)
 import Contract.Utxos (UtxoMap, utxosAt)
 import Control.Applicative (pure)
 import Control.Monad (bind)
@@ -39,10 +32,8 @@ import Data.Either (Either, note)
 import Data.Functor ((<$>))
 import Data.Lens (view, (^.))
 import Data.Maybe (Maybe)
-import Data.Monoid ((<>))
-import Data.Show (show)
 import Data.Tuple.Nested (type (/\), (/\))
-import Prelude (discard, ($))
+import Prelude (($))
 
 getScriptUtxos
   :: ValidatorHash
