@@ -356,6 +356,10 @@ addToSentActions :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
 addToSentActions (UserNode node) (uuid /\ action) = do
   liftEffect $ pushRefMap_ uuid action (unwrap node.state).actionsSent
 
+addToTransactionsSent :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
+addToTransactionsSent (UserNode node) (uuid /\ action) = do
+  liftEffect $ pushRefMap_ uuid action (unwrap node.state).transactionsSent
+
 readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
 readSentActions (UserNode node) = liftEffect $
   OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent

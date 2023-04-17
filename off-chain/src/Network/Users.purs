@@ -12,8 +12,9 @@ module Seath.Network.Users
 import Contract.Prelude
 
 import Contract.Transaction
-  ( BalancedSignedTransaction(..)
+  ( BalancedSignedTransaction
   , FinalizedTransaction(FinalizedTransaction)
+  , Transaction
   )
 import Control.Monad (bind)
 import Data.Either (Either)
@@ -21,7 +22,7 @@ import Data.Function (($))
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, Fiber, delay, forkAff, try)
+import Effect.Aff (Aff, Fiber, delay, error, forkAff, throwError, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
@@ -30,11 +31,13 @@ import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus(..)
   , IncludeActionError
+  , SendSignedTransaction(..)
   , SignedTransaction
   , UserConfiguration
   , UserNode(UserNode)
   , UserState(UserState)
   , addToSentActions
+  , addToTransactionsSent
   , getUserHandlers
   , readSentActions
   )
@@ -62,6 +65,10 @@ getActionStatus
   :: forall a. UserNode a -> UUID -> Aff ActionStatus
 getActionStatus userNode =
   (getUserHandlers userNode).getActionStatus
+
+signTx
+  :: forall a. UserNode a -> Transaction -> Aff Transaction
+signTx userNode tx = unwrap <$> (unwrap userNode).signTx (wrap tx)
 
 sendSignedTransactionToLeader
   :: forall a
@@ -117,7 +124,7 @@ startUserNode
   -> (FinalizedTransaction -> Aff BalancedSignedTransaction)
   -> UserConfiguration a
   -> Aff (Fiber Unit /\ UserNode a)
-startUserNode makeAction signTx conf = do
+startUserNode makeActionH signTxH conf = do
   actionsSent <- liftEffect $ Ref.new OrderedMap.empty
   transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
   submitedTransactions <- liftEffect $ Ref.new OrderedMap.empty
@@ -129,8 +136,8 @@ startUserNode makeAction signTx conf = do
           , submitedTransactions
           }
       , configuration: conf
-      , makeAction: makeAction
-      , signTx
+      , makeAction: makeActionH
+      , signTx: signTxH
       }
   fiber <- startActionStatusCheck node
   pure $ fiber /\ node
@@ -142,21 +149,35 @@ startActionStatusCheck userNode = do
   where
   check = do
     sent <- readSentActions userNode
-    for_ sent $ \(uid /\ _) -> do
+    for_ sent $ \entry -> do
       -- TODO: process response
-      -- TODO: handle errors with try
-      status <- getActionStatus userNode uid
-      case status of
-        AskForSignature afs -> do
-          ethTx <- try $ TxHex.fromCborHex afs.txCborHex
-          case ethTx of
-            Left e -> log $
-              "User: got AskForSignature status, but failed to decode Tx:\n"
-                <> show e
-            Right _tx -> log $
-              "User: got AskForSignature status AND SUCCESSFULLY DECODED TX"
-        other -> log $ "User: status for action " <> show uid <> ": " <> show
-          other
+      res <- try $ checkStatusAndProcess entry
+      case res of
+        Right _ -> pure unit
+        Left e -> log $ "User: failed to check status for " <> show (fst entry)
+          <> ": "
+          <> show e
       delay $ Milliseconds 500.0
     delay $ Milliseconds 2000.0
     check
+  checkStatusAndProcess (uid /\ action) = do
+    status <- getActionStatus userNode uid
+    case status of
+      AskForSignature afs -> do
+        tx <- TxHex.fromCborHex afs.txCborHex
+        signedTx <- signTx userNode tx
+        signedCbor <- TxHex.toCborHex signedTx
+
+        let
+          singedRequest = SendSignedTransaction
+            { uuid: uid, txCborHex: signedCbor }
+        result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
+        case result of
+          Right _ -> do
+            addToTransactionsSent userNode (uid /\ action)
+            log $ "User: Successfully signed and sent Tx " <> show uid
+              <> " to the Leader"
+          Left e -> throwError (error $ show e)
+
+      other -> log $ "User: status for action " <> show uid <> ": " <> show
+        other
