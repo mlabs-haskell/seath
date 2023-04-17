@@ -119,7 +119,9 @@ mainTest env admin leader users = do
   Leader.showDebugState leaderNode >>= log
 
   -- test sending rejections
+  delay (wrap 2000.0)
   uids <- (map fst) <$> readSentActions userNode
+  log $ "User: rejecting: " <> show uids
   maybe (throwError $ error "wtf")
     (Users.sendRejectionToLeader userNode)
     (uids !! 0)

@@ -170,7 +170,9 @@ acceptSignedTransaction leaderNode signedTx = do
               case OrderedMap.lookup uuid requests of
                 Just oldRequest -> pure $ Left $
                   "Already got a response for this uuid: " <> show uuid
-                Nothing -> pure $ Right $ unit
+                Nothing -> do
+                  liftEffect $ Queue.put requestsQueue (uuid /\ Right tx)
+                  pure $ Right $ unit
           else
             pure $ Left $ "The received transaction hash: " <> show newHash
               <> " , isn't the same as the expected one: "
@@ -183,18 +185,31 @@ acceptRefuseToSign
   :: forall a
    . LeaderNode a
   -> UUID
-  -> Aff Unit
+  -> Aff (Either String Unit)
 acceptRefuseToSign leaderNode uuid = do
   log $ "Leader accepts signing refusal for " <> show uuid
+  let requestsQueue = getFromLeaderState leaderNode _.signatureRequests
+  waitingMap <- getFromRefAtLeaderState leaderNode _.waitingForSignature
+  case OrderedMap.lookup uuid waitingMap of
+    Just _ -> do
+      requests <- liftEffect $ OrderedMap.fromFoldable <$> Queue.read
+        requestsQueue
+      case OrderedMap.lookup uuid requests of
+        Just _ -> pure $ Left $
+          "Already got a response for this uuid: " <> show uuid
+        Nothing -> do
+          liftEffect $ Queue.put requestsQueue (uuid /\ Left unit)
+          pure $ Right $ unit
+    Nothing -> pure $ Left
+      "can't find transactions in the waiting for signature list"
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
 -- | configured timeout is reached.
 waitForChainSignatures
   :: forall a
    . LeaderNode a
-  -> OrderedMap UUID Transaction
-  -> Aff $ OrderedMap UUID $ Either String SignedTransaction
-waitForChainSignatures = undefined
+  -> Aff $ OrderedMap UUID $ Either Unit SignedTransaction
+waitForChainSignatures leaderNode = undefined
 
 -- | Submit a Chain of `SignedTransaction`s
 submitChain
@@ -306,8 +321,9 @@ leaderLoop leaderNode = do
   batchToSign <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   log $ "Leader: builder result: " <> show batchToSign
   log "Leader: Waiting for signatures to arrive"
+  delay (wrap 3000.0)
   -- TODO : implement waitForChainSignatures
-  -- signatureResults <- waitForChainSignatures leaderNode batchToSign
+  -- signatureResults <- waitForChainSignatures leaderNode 
   -- this must split the map in two, the longest contiguos set of 
   -- actions that where sucessfuly signed and the rest, 
   -- then we put the rest in the prioritary queue (except those with 

@@ -226,7 +226,7 @@ type LeaderStateInner a =
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
   , signatureRequests ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
-        (UUID /\ Transaction)
+        (UUID /\ Either Unit Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
   , stage :: Ref LeaderServerStage
   }
