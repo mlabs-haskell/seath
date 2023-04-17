@@ -37,14 +37,9 @@ import Seath.Network.Types
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
-  , LeaderServerStage
-      ( WaitingForActions
-      , BuildingChain
-      , WaitingForChainSignatures
-      , SubmittingChain
-      )
+  , LeaderServerStage(WaitingForActions)
   , LeaderServerStateInfo(LeaderServerInfo)
-  , LeaderState(LeaderState)
+  , LeaderState
   , LeaderStateInner
   , SendSignedTransaction
   , SignedTransaction
@@ -104,12 +99,28 @@ actionStatus leaderNode actionId = do
   prioritarycheck <- check _.prioritaryPendingActions
     (\_ index _ -> pure $ PrioritaryToBeProcessed index)
   processCheck <- check _.processing (\_ _ _ -> pure $ Processing)
-  signatureCheck <- check _.waitingForSignature transformForSignature
-  submissionCheck <- check _.waitingForSubmission
-    (\_ index _ -> pure $ ToBeSubmitted index)
+
+  waitingSignCheck <- check _.waitingForSignature transformForSignature
+  let sigResponseQueue = getFromLeaderState leaderNode _.signatureResponses
+
+  signResponses <- liftEffect $
+    OrderedMap.fromFoldable <$> Queue.read sigResponseQueue
+  signResponseCheck <- checkIsIn actionId signResponses
+    (\_ index _ -> pure $ ToBeProcessed index)
+
+  submissionCheck <- checkIsIn actionId signResponses
+    ( \_ _ v -> pure case v of
+        Left _unit -> DiscardedBySignRejection
+        Right _tx -> WaitingOtherChainSignatures
+    )
 
   pure $ foldl mergeChecks submissionCheck
-    [ signatureCheck, processCheck, prioritarycheck, pendingCheck ]
+    [ signResponseCheck
+    , waitingSignCheck
+    , processCheck
+    , prioritarycheck
+    , pendingCheck
+    ]
 
   where
   mergeChecks :: ActionStatus -> ActionStatus -> ActionStatus
@@ -164,7 +175,7 @@ acceptSignedTransaction leaderNode signedTx = do
             do
               let
                 requestsQueue = getFromLeaderState leaderNode
-                  _.signatureRequests
+                  _.signatureResponses
               requests <- liftEffect $ OrderedMap.fromFoldable <$> Queue.read
                 requestsQueue
               case OrderedMap.lookup uuid requests of
@@ -188,7 +199,7 @@ acceptRefuseToSign
   -> Aff (Either String Unit)
 acceptRefuseToSign leaderNode uuid = do
   log $ "Leader accepts signing refusal for " <> show uuid
-  let requestsQueue = getFromLeaderState leaderNode _.signatureRequests
+  let requestsQueue = getFromLeaderState leaderNode _.signatureResponses
   waitingMap <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   case OrderedMap.lookup uuid waitingMap of
     Just _ -> do
@@ -349,7 +360,7 @@ newLeaderState maxRequestAllowed = do
   prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
   processing <- liftEffect $ Ref.new OrderedMap.empty
   waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
-  signatureRequests <- liftEffect $ Queue.new
+  signatureResponses <- liftEffect $ Queue.new
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
   stage <- liftEffect $ Ref.new WaitingForActions
   pure $ wrap
@@ -358,7 +369,7 @@ newLeaderState maxRequestAllowed = do
     , prioritaryPendingActions
     , processing
     , waitingForSignature
-    , signatureRequests
+    , signatureResponses
     , waitingForSubmission
     , stage
     }

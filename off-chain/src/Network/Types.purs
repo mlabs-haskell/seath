@@ -109,6 +109,8 @@ data ActionStatus
   | ToBeProcessed Int
   | ToBeSubmitted Int
   | Processing
+  | WaitingOtherChainSignatures
+  | DiscardedBySignRejection
   | PrioritaryToBeProcessed Int
   | NotFound
 
@@ -124,6 +126,9 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
     ToBeSubmitted i -> encodeTagged' "ToBeSubmitted" i
     Processing -> encodeTagged' "Processing" ""
+    WaitingOtherChainSignatures -> encodeTagged' "WaitingOtherChainSignatures"
+      ""
+    DiscardedBySignRejection -> encodeTagged' "DiscardedBySignRejection" ""
     PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
     NotFound -> encodeTagged' "NotFound" ""
 
@@ -149,6 +154,8 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
       "ToBeSubmitted" -> ToBeSubmitted <$> decodeAeson contents
       "Processing" -> Right Processing
+      "WaitingOtherChainSignatures" -> Right WaitingOtherChainSignatures
+      "DiscardedBySignRejection" -> Right DiscardedBySignRejection
       "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
       "NotFound" -> Right NotFound
@@ -189,7 +196,7 @@ type LeaderStateInner a =
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
   , processing :: Ref $ OrderedMap UUID (UserAction a)
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
-  , signatureRequests ::
+  , signatureResponses ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
         (UUID /\ Either Unit Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
