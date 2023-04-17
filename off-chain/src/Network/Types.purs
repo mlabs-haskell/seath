@@ -1,4 +1,38 @@
-module Seath.Network.Types where
+module Seath.Network.Types
+  ( MilliSeconds
+  , IncludeActionError(RejectedServerBussy)
+  , AcceptSignedTransactionError(AcceptSignedTransactionError)
+  , LeaderServerStage
+      ( WaitingForActions
+      , BuildingChain
+      , WaitingForChainSignatures
+      , SubmittingChain
+      )
+  , SignedTransaction(SignedTransaction)
+  , LeaderServerInfo(LeaderServerInfo)
+  , GetActionStatus(GetActionStatus)
+  , ActionStatus
+      ( AskForSignature
+      , ToBeProcessed
+      , ToBeSubmitted
+      , Processing
+      , WaitingOtherChainSignatures
+      , DiscardedBySignRejection
+      , PrioritaryToBeProcessed
+      , NotFound
+      )
+  , SendSignedTransaction(SendSignedTransaction)
+  , LeaderStateInner
+  , LeaderState(LeaderState)
+  , FunctionToPerformContract(FunctionToPerformContract)
+  , LeaderConfigurationInner
+  , LeaderConfiguration(LeaderConfiguration)
+  , LeaderNode(LeaderNode)
+  , UserState(UserState)
+  , UserHandlers
+  , UserConfiguration(UserConfiguration)
+  , UserNode(UserNode)
+  ) where
 
 import Contract.Prelude
 
@@ -20,7 +54,6 @@ import Contract.Transaction
   , Transaction
   )
 import Ctl.Internal.Helpers (encodeTagged')
-import Data.Array as Array
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
@@ -28,17 +61,15 @@ import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff)
 import Effect.Ref (Ref)
-import Effect.Ref as Ref
 import Queue as Queue
 import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
-import Seath.Network.OrderedMap as OrderedMap
 import Type.Function (type ($))
 
 type MilliSeconds = Int
 
-newtype IncludeActionError = RejectedServerBussy LeaderServerStateInfo
+newtype IncludeActionError = RejectedServerBussy LeaderServerInfo
 
 derive instance Newtype IncludeActionError _
 derive newtype instance Show IncludeActionError
@@ -81,18 +112,18 @@ derive instance Newtype SignedTransaction _
 derive newtype instance Show SignedTransaction
 derive instance Generic SignedTransaction _
 
-newtype LeaderServerStateInfo = LeaderServerInfo
+newtype LeaderServerInfo = LeaderServerInfo
   { numberOfActionsToProcess :: Int
   , maxNumberOfPendingActions :: Int
   , maxTimeOutForSignature :: MilliSeconds
   , serverStage :: LeaderServerStage
   }
 
-derive newtype instance EncodeAeson LeaderServerStateInfo
-derive newtype instance DecodeAeson LeaderServerStateInfo
+derive newtype instance EncodeAeson LeaderServerInfo
+derive newtype instance DecodeAeson LeaderServerInfo
 
-derive instance Generic LeaderServerStateInfo _
-instance showLeaderServerStateInfo :: Show LeaderServerStateInfo where
+derive instance Generic LeaderServerInfo _
+instance showLeaderServerStateInfo :: Show LeaderServerInfo where
   show = genericShow
 
 newtype GetActionStatus = GetActionStatus
@@ -205,55 +236,6 @@ type LeaderStateInner a =
 
 newtype LeaderState a = LeaderState (LeaderStateInner a)
 
-getFromRefAtLeaderState
-  :: forall a b. LeaderNode a -> (LeaderStateInner a -> Ref b) -> Aff b
-getFromRefAtLeaderState ln f =
-  withRefFromState ln f Ref.read
-
-getFromLeaderState :: forall a b. LeaderNode a -> (LeaderStateInner a -> b) -> b
-getFromLeaderState ln accessor = accessor (unwrap (unwrap ln).state)
-
-setToRefAtLeaderState
-  :: forall a b
-   . LeaderNode a
-  -> b
-  -> (LeaderStateInner a -> Ref b)
-  -> Aff Unit
-setToRefAtLeaderState ln v f = do
-  withRefFromState ln f (Ref.modify_ (const v))
-
-withRefFromState
-  :: forall a b c
-   . LeaderNode a
-  -> (LeaderStateInner a -> Ref b)
-  -> (Ref b -> Effect c)
-  -> Aff c
-withRefFromState (LeaderNode node) acessor f =
-  liftEffect $ f $ acessor (unwrap node.state)
-
-takeFromPending
-  :: forall a. Int -> LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
-takeFromPending n ln = do
-  let pendingQueue = getFromLeaderState ln _.pendingActionsRequest
-  pendingValues <- liftEffect $ Queue.takeMany pendingQueue n
-  let requestsQueue = getFromLeaderState ln _.receivedActionsRequests
-  let taken = Array.length pendingValues
-  liftEffect $ Queue.put requestsQueue (Left taken)
-  pure $ OrderedMap.fromFoldable pendingValues
-
-getFromLeaderConfiguration
-  :: forall a b. LeaderNode a -> (LeaderConfigurationInner a -> b) -> b
-getFromLeaderConfiguration (LeaderNode node) accessor = accessor
-  (unwrap node.configuration)
-
-getNumberOfPending :: forall a. LeaderNode a -> Aff Int
-getNumberOfPending ln = do
-  numberOfPrioritary <- OrderedMap.length <$> getFromRefAtLeaderState ln
-    _.prioritaryPendingActions
-  numberOfPending <- liftEffect $ Queue.length $ getFromLeaderState ln
-    _.pendingActionsRequest
-  pure $ numberOfPrioritary + numberOfPending
-
 derive instance Newtype (LeaderState a) _
 
 -- Needed to avoid purescript to reject the newtype instance of 
@@ -272,16 +254,6 @@ type LeaderConfigurationInner a =
 
 newtype LeaderConfiguration :: forall k. k -> Type
 newtype LeaderConfiguration a = LeaderConfiguration (LeaderConfigurationInner a)
-
-maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
-maxPendingCapacity conf = (unwrap conf).maxQueueSize
-
-signTimeout :: forall a. LeaderConfiguration a -> Int
-signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
-
-getChaintriggerTreshold :: forall a. LeaderNode a -> Int
-getChaintriggerTreshold (LeaderNode node) =
-  (unwrap node.configuration).numberOfActionToTriggerChainBuilder
 
 derive instance Newtype (LeaderConfiguration a) _
 
@@ -342,24 +314,3 @@ newtype UserNode a = UserNode
 
 derive instance Newtype (UserNode a) _
 
-addToSentActions :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
-addToSentActions (UserNode node) (uuid /\ action) = do
-  liftEffect $ pushRefMap_ uuid action (unwrap node.state).actionsSent
-
-addToTransactionsSent :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
-addToTransactionsSent (UserNode node) (uuid /\ action) = do
-  liftEffect $ pushRefMap_ uuid action (unwrap node.state).transactionsSent
-
-readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
-readSentActions (UserNode node) = liftEffect $
-  OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
-
-getUserHandlers :: forall a. UserNode a -> UserHandlers a
-getUserHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
-
-pushRefMap_
-  :: forall k v. Ord k => k -> v -> Ref (OrderedMap k v) -> Effect Unit
-pushRefMap_ k v mutMap =
-  Ref.modify_
-    (OrderedMap.push k v)
-    mutMap

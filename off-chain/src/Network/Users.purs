@@ -38,7 +38,9 @@ import Seath.Network.Types
   , UserConfiguration
   , UserNode(UserNode)
   , UserState(UserState)
-  , addToSentActions
+  )
+import Seath.Network.Utils
+  ( addToSentActions
   , addToTransactionsSent
   , getUserHandlers
   , readSentActions

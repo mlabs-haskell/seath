@@ -55,10 +55,9 @@ import Seath.Network.Types
   , SendSignedTransaction
   , UserConfiguration(UserConfiguration)
   , UserNode
-  , readSentActions
   )
 import Seath.Network.Users as Users
-import Seath.Network.Utils (getPublicKeyHash)
+import Seath.Network.Utils (getPublicKeyHash, readSentActions)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract

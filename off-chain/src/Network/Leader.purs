@@ -45,13 +45,15 @@ import Seath.Network.Types
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
+  , LeaderServerInfo(LeaderServerInfo)
   , LeaderServerStage(WaitingForActions)
-  , LeaderServerStateInfo(LeaderServerInfo)
   , LeaderState
   , LeaderStateInner
   , SendSignedTransaction
   , SignedTransaction
-  , getChaintriggerTreshold
+  )
+import Seath.Network.Utils
+  ( getChaintriggerTreshold
   , getFromLeaderConfiguration
   , getFromLeaderState
   , getFromRefAtLeaderState
@@ -421,7 +423,7 @@ showDebugState leaderNode = do
     <> "\n Num of pending actions: "
     <> show pending
 
-leaderStateInfo :: forall a. LeaderNode a -> Aff LeaderServerStateInfo
+leaderStateInfo :: forall a. LeaderNode a -> Aff LeaderServerInfo
 leaderStateInfo ln@(LeaderNode node) = do
   numberOfActionsToProcess <- getNumberOfPending ln
   let maxNumberOfPendingActions = maxPendingCapacity node.configuration
