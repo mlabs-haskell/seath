@@ -2,16 +2,12 @@ module Seath.HTTP.Handlers where
 
 import Contract.Prelude
 
-import Data.Bifunctor (rmap)
-import Effect.Aff (Aff)
+import Data.Bifunctor (lmap, rmap)
+import Effect.Aff (Aff, try)
 import Seath.Common.Types (UID(UID))
 import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, toJsend)
 import Seath.Network.Leader as Leader
-import Seath.Network.Types
-  ( ActionStatus
-  , IncludeActionError
-  , LeaderNode
-  )
+import Seath.Network.Types (ActionStatus, IncludeActionError, LeaderNode)
 
 mkHandlers
   :: forall actionType
@@ -114,8 +110,8 @@ actionStatus
   -> Aff (JSend String ActionStatus)
 actionStatus leaderNode request = do
   log $ "Leader HTTP-server: action status request: " <> show request
-  (result :: ActionStatus) <- leaderNode `Leader.actionStatus`
+  result <- try $ leaderNode `Leader.actionStatus`
     (unwrap request.params.uid)
-  let response = toJsend $ (Right result :: Either String ActionStatus)
+  let response = toJsend (lmap show result)
   log $ "Leader HTTP-server: action status response: " <> show response
   pure response
