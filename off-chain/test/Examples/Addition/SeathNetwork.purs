@@ -46,7 +46,7 @@ import Seath.Network.Types
   ( AcceptSignedTransactionError
   , ActionStatus
   , FunctionToPerformContract(FunctionToPerformContract)
-  , IncludeActionError(IAOtherError)
+  , IncludeActionError
   , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode
   , SendSignedTransaction
@@ -183,15 +183,17 @@ userHandlerSendAction
 userHandlerSendAction client action = do
   res <- client.leader.includeAction
     { body: IncludeRequest action }
-  pure $ case res of
+  case res of
     Right resp -> do
       convertResonse resp
-    Left r -> Left $ IAOtherError $ "Leader failed to respond: " <> show r
+    Left r -> throwError
+      (error $ "Leader failed to respond to send action: " <> show r)
   where
   convertResonse (Response r) =
     if (r.body.status == "success") then
-      note (IAOtherError "Can't parse request ID") $ parseUUID r.body.data
-    else either (show >>> IAOtherError >>> Left) Left
+      maybe (throwError $ error "Can't parse request ID") (Right >>> pure)
+        (parseUUID r.body.data)
+    else either (show >>> error >>> throwError) (Left >>> pure)
       (decodeJsonString r.body.data)
 
 userHandlerGetStatus

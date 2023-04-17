@@ -111,11 +111,14 @@ newUserState = undefined
 performAction :: forall a. UserNode a -> a -> Aff Unit
 performAction userNode action = do
   userAction <- (unwrap userNode).makeAction action
-  result <- userNode `sendActionToLeader` userAction
+  result <- try $ userNode `sendActionToLeader` userAction
   case result of
-    Left err -> log $ "TODO: React to error " <> show err
-    Right uid -> do
+    Right (Right uid) -> do
       userNode `addToSentActions` (uid /\ action)
+    Right (Left refused) ->
+      log $ "User: leader refused to include action: " <> show refused
+    Left err -> log $ "User: unexpected: failed to submit action to Leader " <>
+      show err
 
 startUserNode
   :: forall a
@@ -154,6 +157,17 @@ startActionStatusCheck userNode = do
       res <- try $ checkStatusAndProcess entry
       case res of
         Right _ -> pure unit
+        {- TODO: Many possible errors can be caught here:
+         - error during status request to the leader over HTTP (e.g. leader is offline)
+         - can't parse UUID returned by the leader
+         - JSON decode errors
+         - error during encoding and deconding transaction CBOR
+         - error while running signing Contract
+         - error while sending signed Tx to the leader over HTTP
+         - AcceptSignedTransactionError
+
+         Not sure atm how granular error handler need to be
+        -}
         Left e -> log $ "User: failed to check status for " <> show (fst entry)
           <> ": "
           <> show e

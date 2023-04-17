@@ -38,30 +38,12 @@ import Type.Function (type ($))
 
 type MilliSeconds = Int
 
-data IncludeActionError
-  = RejectedServerBussy LeaderServerStateInfo
-  | IAOtherError String
+newtype IncludeActionError = RejectedServerBussy LeaderServerStateInfo
 
-instance encodeAesonIncludeActionError :: EncodeAeson IncludeActionError where
-  encodeAeson = case _ of
-    RejectedServerBussy inf -> encodeTagged' "RejectedServerBussy" inf
-    IAOtherError err -> encodeTagged' "IAOtherError" err
-
-instance decodeAesonIncludeActionError :: DecodeAeson IncludeActionError where
-  decodeAeson s = do
-    obj <- decodeAeson s
-    tag <- getField obj "tag"
-    contents <- getField obj "contents"
-    case tag of
-      "RejectedServerBussy" -> RejectedServerBussy <$> decodeAeson contents
-      "IAOtherError" -> IAOtherError <$> decodeAeson contents
-      other -> Left
-        (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
-
-derive instance Generic IncludeActionError _
-
-instance showIncludeActionError :: Show IncludeActionError where
-  show = genericShow
+derive instance Newtype IncludeActionError _
+derive newtype instance Show IncludeActionError
+derive newtype instance EncodeAeson IncludeActionError
+derive newtype instance DecodeAeson IncludeActionError
 
 newtype AcceptSignedTransactionError = AcceptSignedTransactionError
   ActionStatus
