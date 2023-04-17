@@ -40,6 +40,7 @@ import Seath.Network.Leader as Leader
 import Seath.Network.Types
   ( AcceptSignedTransactionError
   , ActionStatus
+  , FunctionToPerformContract(FunctionToPerformContract)
   , GetStatusError(GSOtherError)
   , IncludeActionError(IAOtherError)
   , LeaderConfiguration(LeaderConfiguration)
@@ -65,7 +66,9 @@ import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin leader users = do
-  let initializationOptions = { waitingTime: 3, maxAttempts: 10 }
+  let
+    initializationOptions = { waitingTime: 3, maxAttempts: 10 }
+    _testLeaderConf = makeTestLeaderConf env admin
 
   checkInitSctipt env admin initializationOptions
 
@@ -130,13 +133,15 @@ mainTest env admin leader users = do
   log "end"
 
 -- LeaderNode config
-_testLeaderConf :: LeaderConfiguration AdditionAction
-_testLeaderConf =
+makeTestLeaderConf
+  :: ContractEnv -> KeyWallet -> LeaderConfiguration AdditionAction
+makeTestLeaderConf env kw =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 0
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 2
     , maxWaitingTimeBeforeBuildChain: 2
+    , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }
 
 -- UserNode config and handlers
@@ -218,6 +223,11 @@ userHandlerRefuseToSign client uuid = do
   case res of
     Right _ -> pure unit
     Left r -> throwError (error $ show r)
+
+makeToPerformContract
+  :: forall b. ContractEnv -> KeyWallet -> Contract b -> Aff b
+makeToPerformContract env admin contract = runContractInEnv env
+  $ withKeyWallet admin contract
 
 checkInitSctipt
   :: ContractEnv

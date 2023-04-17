@@ -84,7 +84,10 @@ acceptSignedTransaction
 acceptSignedTransaction leaderNode req = do
   log $ "Leader HTTP-server: accept signed Tx request: " <> show req
   _result <- leaderNode `Leader.acceptSignedTransaction` (unwrap req.body)
-  let response = toJsend (Right "" :: Either String String)
+  let
+    response = case _result of
+      Left msg -> toJsend $ (Left msg :: Either String String)
+      Right _ -> toJsend (Right "" :: Either String String)
   log $ "Leader HTTP-server: accept signed Tx response: " <> show response
   pure response
 

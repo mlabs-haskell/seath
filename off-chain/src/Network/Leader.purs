@@ -27,11 +27,13 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Queue as Queue
 import Seath.Core.Types (UserAction)
+import Seath.Core.Utils (getFinalizedTransactionHash)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus(..)
+  , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
@@ -138,15 +140,44 @@ acceptSignedTransaction
   :: forall a
    . LeaderNode a
   -> SendSignedTransaction
-  -> Aff Unit
-acceptSignedTransaction _leaderNode signedTx = do
-  log $ "Leader accepts Signed Transaction " <> show
-    (unwrap signedTx).uuid
-  tx <- try $ TxHex.fromCborHex (unwrap signedTx).txCborHex
-  case tx of
-    Left e -> log $ "Leader: failed to parse signed Tx: " <> show e
-    Right _tx -> log "Leader received signed tx successfully"
-  pure unit
+  -> Aff (Either String Unit)
+acceptSignedTransaction leaderNode signedTx = do
+  let uuid = (unwrap signedTx).uuid
+  log $ "Leader accepts Signed Transaction " <> show uuid
+  incomingTx <- try $ TxHex.fromCborHex (unwrap signedTx).txCborHex
+  case incomingTx of
+    Left e -> do
+      let msg = "Leader: failed to parse signed Tx: " <> show e
+      log msg
+      pure $ Left msg
+    Right _IncomingTx -> do
+      log "Leader received signed tx successfully"
+      waitingMap <- getFromRefAtLeaderState leaderNode _.waitingForSignature
+      case OrderedMap.lookup uuid waitingMap of
+        Just tx -> do
+          let
+            (FunctionToPerformContract fromContract) =
+              getFromLeaderConfiguration leaderNode _.fromContract
+          originalHash <- fromContract $ getFinalizedTransactionHash (wrap tx)
+          newHash <- fromContract $ getFinalizedTransactionHash (wrap tx)
+          if originalHash == newHash then
+            do
+              let
+                requestsQueue = getFromLeaderState leaderNode
+                  _.signatureRequests
+              requests <- liftEffect $ OrderedMap.fromFoldable <$> Queue.read
+                requestsQueue
+              case OrderedMap.lookup uuid requests of
+                Just oldRequest -> pure $ Left $
+                  "Already got a response for this uuid: " <> show uuid
+                Nothing -> pure $ Right $ unit
+          else
+            pure $ Left $ "The received transaction hash: " <> show newHash
+              <> " , isn't the same as the expected one: "
+              <> show originalHash
+
+        Nothing -> pure $ Left
+          "can't find transactions in the waiting for signature list"
 
 acceptRefuseToSign
   :: forall a
@@ -302,6 +333,7 @@ newLeaderState maxRequestAllowed = do
   prioritaryPendingActions <- liftEffect $ Ref.new OrderedMap.empty
   processing <- liftEffect $ Ref.new OrderedMap.empty
   waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
+  signatureRequests <- liftEffect $ Queue.new
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
   stage <- liftEffect $ Ref.new WaitingForActions
   pure $ wrap
@@ -310,6 +342,7 @@ newLeaderState maxRequestAllowed = do
     , prioritaryPendingActions
     , processing
     , waitingForSignature
+    , signatureRequests
     , waitingForSubmission
     , stage
     }

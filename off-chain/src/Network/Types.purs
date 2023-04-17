@@ -13,6 +13,7 @@ import Aeson
   , getField
   , toString
   )
+import Contract.Monad (Contract)
 import Contract.Transaction (FinalizedTransaction(..), Transaction(..))
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Array as Array
@@ -223,6 +224,9 @@ type LeaderStateInner a =
   , prioritaryPendingActions :: Ref $ OrderedMap UUID (UserAction a)
   , processing :: Ref $ OrderedMap UUID (UserAction a)
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
+  , signatureRequests ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        (UUID /\ Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
   , stage :: Ref LeaderServerStage
   }
@@ -280,11 +284,17 @@ getNumberOfPending ln = do
 
 derive instance Newtype (LeaderState a) _
 
+-- Needed to avoid purescript to reject the newtype instance of 
+-- `LeaderConfiguration`.
+newtype FunctionToPerformContract = FunctionToPerformContract
+  (forall b. Contract b -> Aff b)
+
 type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
+  , fromContract :: FunctionToPerformContract
   }
 
 newtype LeaderConfiguration :: forall k. k -> Type
