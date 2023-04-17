@@ -1,6 +1,5 @@
 module Seath.Network.Utils
   ( getPublicKeyHash
-  , seathParseUUID
   ) where
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
@@ -10,8 +9,6 @@ import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head)
 import Data.Function (($))
 import Data.Functor ((<$>))
-import Data.Maybe (Maybe(Just, Nothing))
-import Data.UUID (UUID)
 import Effect.Aff (error)
 
 getPublicKeyHash :: Contract PubKeyHash
@@ -20,9 +17,3 @@ getPublicKeyHash = do
     getWalletAddresses
   liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
 
-foreign import _seathUUIDShow :: UUID -> String
-foreign import _seathParseUUID
-  :: (forall x. x -> Maybe x) -> (forall x. Maybe x) -> String -> Maybe UUID
-
-seathParseUUID :: String -> Maybe UUID
-seathParseUUID = _seathParseUUID Just Nothing
