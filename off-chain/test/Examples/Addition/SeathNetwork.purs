@@ -20,6 +20,7 @@ import Contract.Transaction
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, throwError, try)
+import Ctl.Internal.Contract.Wallet (ownPubKeyHashes)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt (BigInt)
@@ -57,7 +58,7 @@ import Seath.Network.Types
   , UserNode
   )
 import Seath.Network.Users as Users
-import Seath.Network.Utils (getPublicKeyHash, readSentActions)
+import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
@@ -74,7 +75,7 @@ mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin leader users = do
   let
     initializationOptions = { waitingTime: 3, maxAttempts: 10 }
-    _testLeaderConf = makeTestLeaderConf env admin
+    _testLeaderConf = makeTestLeaderConf env leader
 
   checkInitSctipt env admin initializationOptions
 
@@ -83,6 +84,12 @@ mainTest env admin leader users = do
     serverConf = undefined
 
   user <- liftMaybe (error "No user wallet") (users !! 0)
+
+  leaderPkhs <- runContractInEnv env $ withKeyWallet leader ownPubKeyHashes
+  log $ "leader pkhs: " <> show leaderPkhs
+
+  userPkhs <- runContractInEnv env $ withKeyWallet user ownPubKeyHashes
+  log $ "user pkhs: " <> show userPkhs
 
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     mkAdditionCoreConfig
@@ -129,9 +136,9 @@ mainTest env admin leader users = do
   log "Fire user include action request 2"
   Users.performAction userNode
     (AddAmount $ BigInt.fromInt 2)
-  Leader.showDebugState leaderNode >>= log
+  -- Leader.showDebugState leaderNode >>= log
 
-  delay (Milliseconds 10000.0)
+  delay (wrap 5000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
   killFiber (error "can't cleanup user") userFiber
@@ -144,10 +151,10 @@ makeTestLeaderConf
   :: ContractEnv -> KeyWallet -> LeaderConfiguration AdditionAction
 makeTestLeaderConf env kw =
   LeaderConfiguration
-    { maxWaitingTimeForSignature: 3000
+    { maxWaitingTimeForSignature: 5000
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 2
-    , maxWaitingTimeBeforeBuildChain: 2
+    , maxWaitingTimeBeforeBuildChain: 5
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }
 

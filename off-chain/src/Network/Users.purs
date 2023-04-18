@@ -29,9 +29,7 @@ import Seath.Core.Types (CoreConfiguration, UserAction)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus
-      ( AskForSignature
-      )
+  ( ActionStatus(AskForSignature)
   , IncludeActionError
   , SendSignedTransaction(SendSignedTransaction)
   , SignedTransaction
@@ -95,7 +93,7 @@ sendSignedTransactionToLeader userNode uuid signedTx = do
         Left e -> log $ "User: failed to send signed Tx to leader: " <> show e
         Right (Left e) -> log $ "User: failed to send signed Tx to leader: " <>
           show e
-        Right (Right _) -> log "USer: signet Tx sent seuccessfully"
+        Right (Right _) -> log "User: signet Tx sent seuccessfully"
 
 -- | We refuse to sign the given transaction and inform the server
 -- | explicitly.

@@ -19,6 +19,7 @@ import Contract.Transaction
   ( FinalizedTransaction
   , Transaction
   , TransactionHash
+  , signTransaction
   , submit
   )
 import Data.Array as Array
@@ -185,7 +186,7 @@ acceptSignedTransaction leaderNode signedTx = do
       let msg = "Leader: failed to parse signed Tx: " <> show e
       log msg
       pure $ Left msg
-    Right _IncomingTx -> do
+    Right receivedSignedTx -> do
       log "Leader received signed tx successfully"
       waitingMap <- getFromRefAtLeaderState leaderNode _.waitingForSignature
       case OrderedMap.lookup uuid waitingMap of
@@ -194,22 +195,24 @@ acceptSignedTransaction leaderNode signedTx = do
             (FunctionToPerformContract fromContract) =
               getFromLeaderConfiguration leaderNode _.fromContract
           originalHash <- fromContract $ getFinalizedTransactionHash (wrap tx)
-          newHash <- fromContract $ getFinalizedTransactionHash (wrap tx)
-          if originalHash == newHash then
+          hashOfSigned <- fromContract $ getFinalizedTransactionHash
+            (wrap receivedSignedTx)
+          if originalHash == hashOfSigned then
             do
               let
-                requestsQueue = getFromLeaderState leaderNode
+                sigResponsesQueue = getFromLeaderState leaderNode
                   _.signatureResponses
               requests <- liftEffect $ OrderedMap.fromFoldable <$> Queue.read
-                requestsQueue
+                sigResponsesQueue
               case OrderedMap.lookup uuid requests of
                 Just _ -> pure $ Left $
                   "Already got a response for this uuid: " <> show uuid
                 Nothing -> do
-                  liftEffect $ Queue.put requestsQueue (uuid /\ Right tx)
+                  liftEffect $ Queue.put sigResponsesQueue
+                    (uuid /\ Right receivedSignedTx)
                   pure $ Right $ unit
           else
-            pure $ Left $ "The received transaction hash: " <> show newHash
+            pure $ Left $ "The received transaction hash: " <> show hashOfSigned
               <> " , isn't the same as the expected one: "
               <> show originalHash
 
@@ -274,15 +277,15 @@ waitForChainSignatures leaderNode = do
 
   endAction :: Aff $ OrderedMap UUID $ Either Unit Transaction
   endAction = do
-    responses <- liftEffect $ OrderedMap.fromFoldable <$>
+    signResponses <- liftEffect $ OrderedMap.fromFoldable <$>
       (Queue.takeAll $ getFromLeaderState leaderNode _.signatureResponses)
-    pendingOfSignature <- getFromRefAtLeaderState leaderNode
+    waitingForSignatureMap <- getFromRefAtLeaderState leaderNode
       _.waitingForSignature
     let
       lookup uuid = maybe (Left unit) identity $ OrderedMap.lookup uuid
-        responses
+        signResponses
       results = (\(x /\ _) -> (x /\ lookup x)) <$> OrderedMap.toArray
-        pendingOfSignature
+        waitingForSignatureMap
     pure $ OrderedMap.fromFoldable results
 
 purgeResponses
@@ -329,7 +332,7 @@ submitChain
   :: forall a
    . LeaderNode a
   -> OrderedMap UUID Transaction
-  -> Aff $ OrderedMap UUID $ Either String $ TransactionHash
+  -> Aff $ OrderedMap UUID (Either String TransactionHash)
 submitChain leaderNode chain = do
   let
     (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
@@ -344,9 +347,13 @@ submitChain leaderNode chain = do
     -> (UUID /\ Transaction)
     -> Aff (UUID /\ Either String TransactionHash)
   submitAndWait fromContract (uuid /\ tx) = do
-    transactionId <- lmap show <$> (try $ fromContract $ submit (wrap tx))
-    log $ "Leader: Submited chaned Tx ID: " <> show transactionId
-    pure $ uuid /\ transactionId
+    ethTxId <- try do
+      sginedByLeaderTx <- fromContract
+        $ signTransaction (wrap tx :: FinalizedTransaction)
+      txId <- fromContract $ submit sginedByLeaderTx
+      log $ "Leader: Submited chaned Tx ID: " <> show txId
+      pure txId
+    pure $ uuid /\ (lmap show ethTxId)
 
 newLeaderNode
   :: forall a
@@ -454,7 +461,7 @@ leaderLoop leaderNode = do
     { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
       batchToProcess
       signatureResults
-  log $ "Leader: successfully signed: " <> showUUIDs signatureSucess
+  log $ "Leader: successfully signed by user: " <> showUUIDs signatureSucess
   log $ "Leader: for priority list: " <> showUUIDs signatureFailures
   log $ "Leader: setting failures and submission list"
   setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions

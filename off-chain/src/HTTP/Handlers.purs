@@ -78,7 +78,8 @@ acceptSignedTransaction
   -> { body :: SendSignedRequest }
   -> Aff (JSend String String)
 acceptSignedTransaction leaderNode req = do
-  log $ "Leader HTTP-server: accept signed Tx request: " <> show (unwrap (unwrap req.body)).uuid
+  log $ "Leader HTTP-server: accept signed Tx request: " <> show
+    (unwrap (unwrap req.body)).uuid
   _result <- leaderNode `Leader.acceptSignedTransaction` (unwrap req.body)
   let
     response = case _result of
