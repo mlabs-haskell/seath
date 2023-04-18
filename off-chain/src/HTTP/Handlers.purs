@@ -3,6 +3,7 @@ module Seath.HTTP.Handlers where
 import Contract.Prelude
 
 import Data.Bifunctor (lmap, rmap)
+import Data.UUID (UUID)
 import Effect.Aff (Aff, try)
 import Seath.Common.Types (UID(UID))
 import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, toJsend)
@@ -77,7 +78,7 @@ acceptSignedTransaction
   -> { body :: SendSignedRequest }
   -> Aff (JSend String String)
 acceptSignedTransaction leaderNode req = do
-  log $ "Leader HTTP-server: accept signed Tx request: " <> show req
+  log $ "Leader HTTP-server: accept signed Tx request: " <> show (unwrap (unwrap req.body)).uuid
   _result <- leaderNode `Leader.acceptSignedTransaction` (unwrap req.body)
   let
     response = case _result of

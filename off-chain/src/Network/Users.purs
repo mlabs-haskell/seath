@@ -175,9 +175,7 @@ startActionStatusCheck userNode = do
         Left e -> log $ "User: failed to check status for " <> show (fst entry)
           <> ": "
           <> show e
-      -- TODO: We need this first delay? also, maybe made this configurable
-      delay $ Milliseconds 500.0
-    delay $ Milliseconds 2000.0
+    delay $ Milliseconds 500.0
     check
   checkStatusAndProcess (uid /\ action) = do
     status <- getActionStatus userNode uid

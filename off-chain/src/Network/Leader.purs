@@ -430,7 +430,7 @@ leaderLoop leaderNode = do
   log "Leader: Taking batch to process"
   batchToProcess <- getBatchOfResponses leaderNode
   setToRefAtLeaderState leaderNode batchToProcess _.processing
-  log $ "Leader: Batch to process: " <> show batchToProcess
+  log $ "Leader: Batch to process: " <> showUUIDs batchToProcess
   setStage BuildingChain
   eitherBuiltChain <- buildChain leaderNode batchToProcess
   case eitherBuiltChain of
@@ -453,8 +453,8 @@ leaderLoop leaderNode = do
     { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
       batchToProcess
       signatureResults
-  log $ "Leader: successfully signed: " <> show signatureSucess
-  log $ "Leader: failed to sign: " <> show signatureFailures
+  log $ "Leader: successfully signed: " <> showUUIDs signatureSucess
+  log $ "Leader: for priority list: " <> showUUIDs signatureFailures
   log $ "Leader: setting failures and submission list"
   setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
   setToRefAtLeaderState leaderNode signatureSucess _.waitingForSubmission
@@ -464,8 +464,8 @@ leaderLoop leaderNode = do
     { sucess: submissionSucess, failures: submissionFailures } = purgeResponses
       batchToProcess
       submissionResults
-  log $ "Leader: submissionSucess: " <> show submissionSucess
-  log $ "Leader: submissionFailures: " <> show submissionFailures
+  log $ "Leader: sumission sucess: " <> showUUIDs submissionSucess
+  log $ "Leader: to priority list: " <> showUUIDs submissionFailures
   log $ "Leader: Setting prioritary list"
   let newPrioritary = OrderedMap.union signatureFailures submissionFailures
   setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
@@ -477,6 +477,9 @@ leaderLoop leaderNode = do
   setStage stage = do
     log $ "Leader: begining stage " <> show stage
     setToRefAtLeaderState leaderNode stage _.stage
+
+  showUUIDs :: forall b. OrderedMap UUID b -> String
+  showUUIDs _map = show $ OrderedMap.orderedKeys _map
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined

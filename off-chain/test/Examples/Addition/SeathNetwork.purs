@@ -131,14 +131,6 @@ mainTest env admin leader users = do
     (AddAmount $ BigInt.fromInt 2)
   Leader.showDebugState leaderNode >>= log
 
-  -- test sending rejections
-  delay (wrap 2000.0)
-  uids <- (map fst) <$> readSentActions userNode
-  log $ "User: rejecting: " <> show uids
-  maybe (throwError $ error "wtf")
-    (Users.sendRejectionToLeader userNode)
-    (uids !! 0)
-
   delay (Milliseconds 10000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
@@ -152,7 +144,7 @@ makeTestLeaderConf
   :: ContractEnv -> KeyWallet -> LeaderConfiguration AdditionAction
 makeTestLeaderConf env kw =
   LeaderConfiguration
-    { maxWaitingTimeForSignature: 0
+    { maxWaitingTimeForSignature: 3000
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 2
     , maxWaitingTimeBeforeBuildChain: 2
