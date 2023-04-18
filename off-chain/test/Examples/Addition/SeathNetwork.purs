@@ -86,6 +86,7 @@ mainTest env admin leader users = do
 
   user1 <- liftMaybe (error "No user wallet") (users !! 0)
   user2 <- liftMaybe (error "No user wallet") (users !! 1)
+  user3 <- liftMaybe (error "No user wallet") (users !! 2)
 
   -- leaderPkhs <- runContractInEnv env $ withKeyWallet leader ownPubKeyHashes
   -- log $ "leader pkhs: " <> show leaderPkhs
@@ -112,6 +113,10 @@ mainTest env admin leader users = do
   (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
     (makeTestUserConf leaderUrl env user2)
 
+  log "Starting user-3 node"
+  (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
+    (makeTestUserConf leaderUrl env user3)
+
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
     _testLeaderConf
@@ -131,6 +136,9 @@ mainTest env admin leader users = do
     (AddAmount $ BigInt.fromInt 1)
   log "Fire user-2 include action request"
   Users.performAction userNode2
+    (AddAmount $ BigInt.fromInt 5)
+  log "Fire user-3 include action request"
+  Users.performAction userNode3
     (AddAmount $ BigInt.fromInt 10)
   -- Leader.showDebugState leaderNode >>= log
 
@@ -139,6 +147,7 @@ mainTest env admin leader users = do
   -- the option
   killFiber (error "can't cleanup user") userFiber1
   killFiber (error "can't cleanup user") userFiber2
+  killFiber (error "can't cleanup user") userFiber3
   killFiber (error "can't cleanup leader loop") leaderLoopFiber
   Payload.Server.close server
   log "end"
@@ -150,7 +159,7 @@ makeTestLeaderConf env kw =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 5000
     , maxQueueSize: 4
-    , numberOfActionToTriggerChainBuilder: 2
+    , numberOfActionToTriggerChainBuilder: 3
     , maxWaitingTimeBeforeBuildChain: 5
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }

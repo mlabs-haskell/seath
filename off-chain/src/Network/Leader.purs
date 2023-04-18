@@ -461,7 +461,7 @@ leaderLoop leaderNode = do
     { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
       batchToProcess
       signatureResults
-  log $ "Leader: successfully signed by user: " <> showUUIDs signatureSucess
+  log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
   log $ "Leader: for priority list: " <> showUUIDs signatureFailures
   log $ "Leader: setting failures and submission list"
   setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
