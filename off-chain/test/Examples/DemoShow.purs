@@ -16,20 +16,23 @@ import Data.BigInt as BigInt
 import Data.Lens ((^.))
 import Data.Map as Map
 import Data.UInt (toInt)
+import Seath.Core.Types (UserAction)
 import Seath.Test.Examples.Addition.Types (AdditionDatum)
 import Seath.Test.Examples.Utils (getTypedDatum)
-import Seath.Test.TestSetup (RunnerConfig(RunnerConfig))
-import Seath.Types (BlockhainState(BlockhainState), UserAction)
+import Seath.Test.Types
+  ( BlockchainState(BlockchainState)
+  , RunnerConfiguration(RunnerConfiguration)
+  )
 
 class DemoShow a where
   dShow :: a -> String
 
-instance runnerConfig :: DemoShow (RunnerConfig s) where
-  dShow (RunnerConfig cfg) =
-    "leaders: 1, participants: " <> show (NE.length cfg.seathParticipants)
+instance runnerConfig :: DemoShow (RunnerConfiguration s actionType) where
+  dShow (RunnerConfiguration cfg) =
+    "leaders: 1, participants: " <> show (NE.length cfg.participants)
 
-instance blockChainState :: Show s => DemoShow (BlockhainState s) where
-  dShow (BlockhainState st) = mconcat
+instance blockChainState :: Show s => DemoShow (BlockchainState s) where
+  dShow (BlockchainState st) = mconcat
     [ "\n--- Seath state ---"
     , "\nLeader UTXOs:" <> showUtxos st.leaderUTXOs
     , showUsers
