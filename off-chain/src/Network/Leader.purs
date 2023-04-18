@@ -335,6 +335,7 @@ submitChain leaderNode chain = do
     (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
       leaderNode
       _.fromContract
+  -- TODO: short circuit the submission, to end early
   OrderedMap.fromFoldable <$> traverse (submitAndWait fromContract)
     (OrderedMap.toArray chain)
   where
