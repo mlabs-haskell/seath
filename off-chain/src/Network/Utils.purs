@@ -45,12 +45,11 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( FunctionToPerformContract(..)
+  ( FunctionToPerformContract
   , LeaderConfiguration
   , LeaderConfigurationInner
   , LeaderNode(LeaderNode)
   , LeaderStateInner
-  , UserConfiguration
   , UserHandlers
   , UserNode(UserNode)
   )

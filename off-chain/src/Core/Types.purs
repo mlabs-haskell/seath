@@ -22,6 +22,7 @@ import Contract.Address
   )
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
+import Contract.Prelude (Maybe)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)

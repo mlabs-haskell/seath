@@ -12,15 +12,9 @@ import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
-import Contract.Transaction
-  ( BalancedSignedTransaction
-  , FinalizedTransaction
-  , signTransaction
-  )
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, throwError, try)
-import Ctl.Internal.Contract.Wallet (ownPubKeyHashes)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt (BigInt)
@@ -36,7 +30,6 @@ import Prelude (show)
 import Seath.Common.Types (UID(UID))
 import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
-import Seath.Core.Utils as Core.Utils
 import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)

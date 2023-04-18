@@ -31,7 +31,7 @@ import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus(AskForSignature)
-  , FunctionToPerformContract(..)
+  , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError
   , SendSignedTransaction(SendSignedTransaction)
   , SignedTransaction

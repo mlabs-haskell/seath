@@ -3,7 +3,6 @@ module Seath.HTTP.Handlers where
 import Contract.Prelude
 
 import Data.Bifunctor (lmap, rmap)
-import Data.UUID (UUID)
 import Effect.Aff (Aff, try)
 import Seath.Common.Types (UID(UID))
 import Seath.HTTP.Types (IncludeRequest, JSend, SendSignedRequest, toJsend)
