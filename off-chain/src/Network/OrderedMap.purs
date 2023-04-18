@@ -10,21 +10,18 @@ module Seath.Network.OrderedMap
   , orderedElems
   , orderedKeys
   , push
-  , splitEither
   , take
   , union
+  , toArray
   ) where
 
 import Contract.Prelude
 
 import Data.Array as Array
-import Data.Either (Either)
 import Data.Map (Map)
 import Data.Map as Map
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
-import Type.Function (type ($))
-import Undefined (undefined)
 
 -- This represent a Map that can remember the order of insertion.
 -- it seems that we can use purescript-ordered-collections with a 
@@ -51,6 +48,9 @@ lookupWithPosition
   :: forall k v. Ord k => k -> OrderedMap k v -> Maybe (Int /\ v)
 lookupWithPosition k (OrderedMap oMap) = Map.lookup k oMap.map
 
+toArray :: forall k v. Ord k => OrderedMap k v -> Array (k /\ v)
+toArray = _.array <<< unwrap
+
 -- TODO: tests when API will stabilaze
 push
   :: forall keys values
@@ -66,12 +66,6 @@ push key value (OrderedMap ordMap) =
     array = Array.snoc ordMap.array (key /\ value)
   in
     OrderedMap { map, array }
-
-splitEither
-  :: forall a b c
-   . OrderedMap a $ Either b c
-  -> { success :: OrderedMap a c, failures :: OrderedMap a b }
-splitEither = undefined
 
 empty :: forall a b. OrderedMap a b
 empty = OrderedMap { map: Map.empty, array: [] }

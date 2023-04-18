@@ -24,6 +24,7 @@ You can edit this file as you like.
   , "node-path"
   , "node-process"
   , "ordered-collections"
+  , "partial"
   , "payload"
   , "prelude"
   , "profunctor-lenses"

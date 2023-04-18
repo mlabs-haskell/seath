@@ -25,6 +25,7 @@ import Effect.Aff (Aff, delay, try)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
+import Partial.Unsafe (unsafePartial)
 import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Core.Utils (getFinalizedTransactionHash)
@@ -157,6 +158,8 @@ actionStatus leaderNode actionId = do
       Left e -> liftEffect $ throw $ "cbor encoding error: " <> show e
       Right txCborHex -> pure $ AskForSignature { uuid, txCborHex }
 
+-- `waitingForSignature` relies on this function and `acceptRefuseToSign`
+-- to be the only ones that append things to `signatureResponses`
 acceptSignedTransaction
   :: forall a
    . LeaderNode a
@@ -202,6 +205,8 @@ acceptSignedTransaction leaderNode signedTx = do
         Nothing -> pure $ Left
           "can't find transactions in the waiting for signature list"
 
+-- `waitingForSignature` relies on this function and `acceptSignedTransaction`
+-- to be the only ones that append things to `signatureResponses`
 acceptRefuseToSign
   :: forall a
    . LeaderNode a
@@ -225,12 +230,85 @@ acceptRefuseToSign leaderNode uuid = do
       "can't find transactions in the waiting for signature list"
 
 -- | It's going to wait for the responses of the given `OrderedMap`  until the 
--- | configured timeout is reached.
+-- | configured timeout is reached.split
 waitForChainSignatures
   :: forall a
    . LeaderNode a
-  -> Aff $ OrderedMap UUID $ Either Unit SignedTransaction
-waitForChainSignatures leaderNode = undefined
+  -> Aff $ OrderedMap UUID $ Either Unit Transaction
+waitForChainSignatures leaderNode = do
+  mapOfTransactions <- getFromRefAtLeaderState leaderNode _.waitingForSignature
+  let
+    maxAttempts = getFromLeaderConfiguration leaderNode
+      _.maxWaitingTimeForSignature
+    numberOfTransactions = OrderedMap.length mapOfTransactions
+
+  loop maxAttempts numberOfTransactions
+
+  where
+  loop :: Int -> Int -> Aff $ OrderedMap UUID $ Either Unit Transaction
+  loop remainAttempts numberOfTransactions =
+    if remainAttempts <= 0 then
+      endAction
+    else
+      do
+        let responsesQueue = getFromLeaderState leaderNode _.signatureResponses
+        numberOfResponses <- liftEffect $ Queue.length responsesQueue
+        if numberOfResponses >= numberOfTransactions then
+          endAction
+        else
+          do
+            delay $ wrap 500.0
+            -- TODO: 1000 is harcoded here representing 1 second and 1 attempt
+            loop (remainAttempts - 1000) numberOfTransactions
+
+  endAction :: Aff $ OrderedMap UUID $ Either Unit Transaction
+  endAction = do
+    responses <- liftEffect $ OrderedMap.fromFoldable <$>
+      (Queue.takeAll $ getFromLeaderState leaderNode _.signatureResponses)
+    pendingOfSignature <- getFromRefAtLeaderState leaderNode
+      _.waitingForSignature
+    let
+      lookup uuid = maybe (Left unit) identity $ OrderedMap.lookup uuid
+        responses
+      results = (\(x /\ _) -> (x /\ lookup x)) <$> OrderedMap.toArray
+        pendingOfSignature
+    pure $ OrderedMap.fromFoldable results
+
+purgeSignatureResponses
+  :: forall a
+   . OrderedMap UUID (UserAction a)
+  -> OrderedMap UUID $ Either Unit Transaction
+  -> { sucess :: OrderedMap UUID Transaction
+     , failures :: OrderedMap UUID (UserAction a)
+     }
+purgeSignatureResponses originalRequest responses =
+  let
+    responsesArray = OrderedMap.toArray responses
+  in
+    case Array.findIndex (isLeft <<< snd) responsesArray of
+      Nothing ->
+        { sucess: OrderedMap.fromFoldable (unsafeFromRight <$> responsesArray)
+        , failures: OrderedMap.empty
+        }
+      Just ind ->
+        let
+          { before: sucess, after: failuresArray } = Array.splitAt ind
+            responsesArray
+          lookup x = unsafeFromJust $ OrderedMap.lookup x originalRequest
+          -- remove all items that were rejected or whose response we won't get in time.
+          newFailures = Array.filter (isRight <<< snd) failuresArray
+          failures = OrderedMap.fromFoldable
+            ((\(uuid /\ _) -> (uuid /\ lookup uuid)) <$> newFailures)
+        in
+          { sucess: OrderedMap.fromFoldable (unsafeFromRight <$> sucess)
+          , failures
+          }
+  where
+  unsafeFromRight :: UUID /\ Either Unit Transaction -> UUID /\ Transaction
+  unsafeFromRight (uuid /\ v) = unsafePartial (\(Right x) -> (uuid /\ x)) v
+
+  unsafeFromJust :: Maybe (UserAction a) -> UserAction a
+  unsafeFromJust = unsafePartial fromJust
 
 -- | Submit a Chain of `SignedTransaction`s
 submitChain
@@ -343,14 +421,14 @@ leaderLoop leaderNode = do
   log $ "Leader: builder result: " <> show batchToSign
   log "Leader: Waiting for signatures to arrive"
   delay (wrap 3000.0)
-  -- TODO : implement waitForChainSignatures
-  -- signatureResults <- waitForChainSignatures leaderNode 
-  -- this must split the map in two, the longest contiguos set of 
-  -- actions that where sucessfuly signed and the rest, 
-  -- then we put the rest in the prioritary queue (except those with 
-  -- rejection for signature) and continue to submission.
-  -- let
-  --   {success:batchToSubmit, failures:_}= undefined signatureCheck
+  signatureResults <- waitForChainSignatures leaderNode
+  let
+    { sucess, failures } = purgeSignatureResponses batchToProcess
+      signatureResults
+  log $ "Leader: successfully signed: " <> show sucess
+  log $ "Leader: failed to sign: " <> show failures
+  log $ "Leader: setting failures"
+  setToRefAtLeaderState leaderNode failures _.prioritaryPendingActions
   log "Leader: Transactions submission"
   log "Leader: Node loop complete!"
   leaderLoop leaderNode
