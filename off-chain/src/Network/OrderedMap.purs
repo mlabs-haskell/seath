@@ -23,10 +23,7 @@ import Data.Map as Map
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
 
--- This represent a Map that can remember the order of insertion.
--- it seems that we can use purescript-ordered-collections with a 
--- type like this.
--- I would like to use purescript-ordered-collections, but the 
+-- We would like to use purescript-ordered-collections, but the 
 -- Ord instance it has is over the keys, and then we would need 
 -- to cast it to a plain map quite often.
 newtype OrderedMap keys values = OrderedMap

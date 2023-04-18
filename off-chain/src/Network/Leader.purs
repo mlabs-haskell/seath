@@ -14,8 +14,15 @@ module Seath.Network.Leader
 
 import Contract.Prelude
 
-import Contract.Transaction (FinalizedTransaction, Transaction, TransactionHash)
+import Contract.Monad (Contract)
+import Contract.Transaction
+  ( FinalizedTransaction
+  , Transaction
+  , TransactionHash
+  , submit
+  )
 import Data.Array as Array
+import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
@@ -47,11 +54,15 @@ import Seath.Network.Types
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
   , LeaderServerInfo(LeaderServerInfo)
-  , LeaderServerStage(WaitingForActions)
+  , LeaderServerStage
+      ( WaitingForActions
+      , BuildingChain
+      , WaitingForChainSignatures
+      , SubmittingChain
+      )
   , LeaderState
   , LeaderStateInner
   , SendSignedTransaction
-  , SignedTransaction
   )
 import Seath.Network.Utils
   ( getChaintriggerTreshold
@@ -274,19 +285,20 @@ waitForChainSignatures leaderNode = do
         pendingOfSignature
     pure $ OrderedMap.fromFoldable results
 
-purgeSignatureResponses
-  :: forall a
+purgeResponses
+  :: forall a b e
    . OrderedMap UUID (UserAction a)
-  -> OrderedMap UUID $ Either Unit Transaction
-  -> { sucess :: OrderedMap UUID Transaction
+  -> OrderedMap UUID $ Either e b
+  -> { sucess :: OrderedMap UUID b
      , failures :: OrderedMap UUID (UserAction a)
      }
-purgeSignatureResponses originalRequest responses =
+purgeResponses originalRequest responses =
   let
     responsesArray = OrderedMap.toArray responses
   in
     case Array.findIndex (isLeft <<< snd) responsesArray of
       Nothing ->
+        -- TODO: Add test to ensure is safe to use this
         { sucess: OrderedMap.fromFoldable (unsafeFromRight <$> responsesArray)
         , failures: OrderedMap.empty
         }
@@ -294,17 +306,19 @@ purgeSignatureResponses originalRequest responses =
         let
           { before: sucess, after: failuresArray } = Array.splitAt ind
             responsesArray
+          -- TODO: Add test to ensure is safe to use this
           lookup x = unsafeFromJust $ OrderedMap.lookup x originalRequest
           -- remove all items that were rejected or whose response we won't get in time.
           newFailures = Array.filter (isRight <<< snd) failuresArray
           failures = OrderedMap.fromFoldable
             ((\(uuid /\ _) -> (uuid /\ lookup uuid)) <$> newFailures)
         in
+          -- TODO: Add test to ensure is safe to use this
           { sucess: OrderedMap.fromFoldable (unsafeFromRight <$> sucess)
           , failures
           }
   where
-  unsafeFromRight :: UUID /\ Either Unit Transaction -> UUID /\ Transaction
+  unsafeFromRight :: UUID /\ Either e b -> UUID /\ b
   unsafeFromRight (uuid /\ v) = unsafePartial (\(Right x) -> (uuid /\ x)) v
 
   unsafeFromJust :: Maybe (UserAction a) -> UserAction a
@@ -314,9 +328,24 @@ purgeSignatureResponses originalRequest responses =
 submitChain
   :: forall a
    . LeaderNode a
-  -> OrderedMap UUID SignedTransaction
+  -> OrderedMap UUID Transaction
   -> Aff $ OrderedMap UUID $ Either String $ TransactionHash
-submitChain = undefined
+submitChain leaderNode chain = do
+  let
+    (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
+      leaderNode
+      _.fromContract
+  OrderedMap.fromFoldable <$> traverse (submitAndWait fromContract)
+    (OrderedMap.toArray chain)
+  where
+  submitAndWait
+    :: (forall b. Contract b -> Aff b)
+    -> (UUID /\ Transaction)
+    -> Aff (UUID /\ Either String TransactionHash)
+  submitAndWait fromContract (uuid /\ tx) = do
+    transactionId <- lmap show <$> (try $ fromContract $ submit (wrap tx))
+    log $ "Leader: Submited chaned Tx ID: " <> show transactionId
+    pure $ uuid /\ transactionId
 
 newLeaderNode
   :: forall a
@@ -396,14 +425,13 @@ leaderLoop
 leaderLoop leaderNode = do
   log "Leader: New leader loop begins"
   resetLeaderState leaderNode
-  delay (wrap 1000.00)
-  log "Leader: Waiting for request of actions"
+  setStage WaitingForActions
   waitForRequests leaderNode
   log "Leader: Taking batch to process"
   batchToProcess <- getBatchOfResponses leaderNode
   setToRefAtLeaderState leaderNode batchToProcess _.processing
   log $ "Leader: Batch to process: " <> show batchToProcess
-  log "Leader: Begin to process actions"
+  setStage BuildingChain
   eitherBuiltChain <- buildChain leaderNode batchToProcess
   case eitherBuiltChain of
     Left e -> do
@@ -419,19 +447,36 @@ leaderLoop leaderNode = do
       setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
   batchToSign <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   log $ "Leader: builder result: " <> show batchToSign
-  log "Leader: Waiting for signatures to arrive"
-  delay (wrap 3000.0)
+  setStage WaitingForChainSignatures
   signatureResults <- waitForChainSignatures leaderNode
   let
-    { sucess, failures } = purgeSignatureResponses batchToProcess
+    { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
+      batchToProcess
       signatureResults
-  log $ "Leader: successfully signed: " <> show sucess
-  log $ "Leader: failed to sign: " <> show failures
-  log $ "Leader: setting failures"
-  setToRefAtLeaderState leaderNode failures _.prioritaryPendingActions
-  log "Leader: Transactions submission"
+  log $ "Leader: successfully signed: " <> show signatureSucess
+  log $ "Leader: failed to sign: " <> show signatureFailures
+  log $ "Leader: setting failures and submission list"
+  setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
+  setToRefAtLeaderState leaderNode signatureSucess _.waitingForSubmission
+  setStage SubmittingChain
+  submissionResults <- submitChain leaderNode signatureSucess
+  let
+    { sucess: submissionSucess, failures: submissionFailures } = purgeResponses
+      batchToProcess
+      submissionResults
+  log $ "Leader: submissionSucess: " <> show submissionSucess
+  log $ "Leader: submissionFailures: " <> show submissionFailures
+  log $ "Leader: Setting prioritary list"
+  let newPrioritary = OrderedMap.union signatureFailures submissionFailures
+  setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
   log "Leader: Node loop complete!"
   leaderLoop leaderNode
+
+  where
+  setStage :: LeaderServerStage -> Aff Unit
+  setStage stage = do
+    log $ "Leader: begining stage " <> show stage
+    setToRefAtLeaderState leaderNode stage _.stage
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined
