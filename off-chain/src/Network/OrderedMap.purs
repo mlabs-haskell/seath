@@ -87,7 +87,7 @@ fromFoldable
   => Ord k
   => f (k /\ v)
   -> OrderedMap k v
-fromFoldable = foldr (\(k /\ v) -> push k v) empty
+fromFoldable = foldl (\m (k /\ v) -> push k v m) empty
 
 union :: forall k v. Ord k => OrderedMap k v -> OrderedMap k v -> OrderedMap k v
 union first second = fromFoldable $ Array.concat
