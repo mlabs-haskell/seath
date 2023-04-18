@@ -1,6 +1,5 @@
 module Seath.Network.Users
   ( getActionStatus
-  , getSeathCoreConfiguration
   , newUserState
   , performAction
   , sendActionToLeader
@@ -24,8 +23,9 @@ import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff, Fiber, delay, error, forkAff, throwError, try)
 import Effect.Class (liftEffect)
+import Queue as Queue
 import Effect.Ref as Ref
-import Seath.Core.Types (CoreConfiguration, UserAction)
+import Seath.Core.Types (UserAction)
 import Seath.Core.Utils as Core.Utils
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
@@ -36,8 +36,8 @@ import Seath.Network.Types
   , SendSignedTransaction(SendSignedTransaction)
   , SignedTransaction
   , UserConfiguration
-  , UserNode(UserNode)
-  , UserState(UserState)
+  , UserNode
+  , UserState
   )
 import Seath.Network.Utils
   ( addToSentActions
@@ -47,14 +47,6 @@ import Seath.Network.Utils
   , userRunContract
   )
 import Type.Function (type ($))
-import Undefined (undefined)
-
-getSeathCoreConfiguration
-  :: forall actionType userStateType validatorType datumType redeemerType
-   . UserNode actionType
-  -> CoreConfiguration actionType userStateType validatorType datumType
-       redeemerType
-getSeathCoreConfiguration = undefined
 
 -- | This function won't raise a exception if we can't reach the network.
 sendActionToLeader
@@ -112,10 +104,6 @@ sendRejectionToLeader userNode uuid = do
   res <- try $ (getUserHandlers userNode).refuseToSign uuid
   log $ "User: refusing to sing " <> show uuid <> ", result: " <> show res
 
--- | Return a new mutable `userState`
-newUserState :: forall a. Aff $ UserState a
-newUserState = undefined
-
 performAction :: forall a. UserNode a -> a -> Aff Unit
 performAction userNode action = do
   let (FunctionToPerformContract run) = userRunContract userNode
@@ -135,20 +123,41 @@ startUserNode
   => UserConfiguration a
   -> Aff (Fiber Unit /\ UserNode a)
 startUserNode conf = do
-  actionsSent <- liftEffect $ Ref.new OrderedMap.empty
-  transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
-  submitedTransactions <- liftEffect $ Ref.new OrderedMap.empty
-  let
-    node = UserNode
-      { state: UserState
-          { actionsSent
-          , transactionsSent
-          , submitedTransactions
-          }
-      , configuration: conf
-      }
+  node <- newUserNode conf
   fiber <- startActionStatusCheck node
   pure $ fiber /\ node
+
+newUserState :: forall a. Aff (UserState a)
+newUserState = do
+  actionsSentQueue <- liftEffect $ Queue.new
+  Queue.on actionsSentQueue actionsSentHandler 
+  actionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  transactionsSentQueue <- liftEffect $ Queue.new
+  Queue.on transactionsSentHandler transactionsSentHandler
+  transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  pure $ wrap
+    { 
+    actionsSentQueue
+    ,actionsSent
+    ,transactionsSentQueue
+    , transactionsSent
+    }
+
+actionsSentHandler :: forall a . {uuid::UUID, action::UserAction a, status::ActionStatus} -> Effect Unit
+actionsSentHandler record =
+  case record.status of 
+    _ -> undefined
+
+transactionsSentHandler :: forall a . {uuid::UUID, action::UserAction a, status::ActionStatus} ->Effect Unit
+transactionsSentHandler = undefined
+
+newUserNode :: forall a. UserConfiguration a -> Aff (UserNode a)
+newUserNode conf = do
+  state <- newUserState
+  pure $ wrap
+    { state: state
+    , configuration: conf
+    }
 
 startActionStatusCheck :: forall a. Show a => UserNode a -> Aff (Fiber Unit)
 startActionStatusCheck userNode = do

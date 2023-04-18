@@ -1,6 +1,5 @@
 module Seath.Network.Utils
   ( addToSentActions
-  , addToTransactionsSent
   , getChaintriggerTreshold
   , getFromLeaderConfiguration
   , getFromLeaderState
@@ -20,6 +19,7 @@ module Seath.Network.Utils
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
+import Contract.Transaction (TransactionHash)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
@@ -44,15 +44,7 @@ import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
-import Seath.Network.Types
-  ( FunctionToPerformContract
-  , LeaderConfiguration
-  , LeaderConfigurationInner
-  , LeaderNode(LeaderNode)
-  , LeaderStateInner
-  , UserHandlers
-  , UserNode(UserNode)
-  )
+import Seath.Network.Types (ActionStatus, FunctionToPerformContract, LeaderConfiguration, LeaderConfigurationInner, LeaderNode(LeaderNode), LeaderStateInner, UserHandlers, UserNode(UserNode))
 
 getPublicKeyHash :: Contract PubKeyHash
 getPublicKeyHash = do
@@ -128,11 +120,7 @@ addToSentActions :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
 addToSentActions (UserNode node) (uuid /\ action) = do
   liftEffect $ pushRefMap_ uuid action (unwrap node.state).actionsSent
 
-addToTransactionsSent :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
-addToTransactionsSent (UserNode node) (uuid /\ action) = do
-  liftEffect $ pushRefMap_ uuid action (unwrap node.state).transactionsSent
-
-readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
+readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ (UserAction a /\ ActionStatus)))
 readSentActions (UserNode node) = liftEffect $
   OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
 

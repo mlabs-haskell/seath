@@ -48,7 +48,7 @@ import Aeson
   , toString
   )
 import Contract.Monad (Contract)
-import Contract.Transaction (FinalizedTransaction, Transaction)
+import Contract.Transaction (FinalizedTransaction, Transaction, TransactionHash)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
@@ -265,22 +265,15 @@ derive instance Newtype (LeaderNode a) _
 
 newtype UserState a = UserState
   {
+  actionsSentQueue :: Queue.Queue (read :: Queue.READ, write :: Queue.WRITE) {uuid:: UUID, action::UserAction a, status:: ActionStatus}
     -- | `actionsSent` pourpose is to store the actions already
     -- | send the to the `leader`that are confirmed to be accepted
     -- | but are still waiting to reach the requirement of signature.
-    actionsSent :: Ref (OrderedMap UUID a)
+  ,actionsSent :: Ref (OrderedMap UUID (UserAction a /\ ActionStatus))
   -- | For actions whose transaction is already signed and sent 
   -- | to the server.
-  , transactionsSent :: Ref (OrderedMap UUID a)
-  -- | Those signed transactions are confirmed to be in the chain 
-  -- | ready for submission.
-  -- | Once a transaction is confirmed to be done, we can safely 
-  -- | remove it from this.
-  -- | Is advisable to clean it from time to time, Seath WON'T clean it.
-  -- Well maybe we can put a extra call back in the interface that
-  -- is automatically called wen the transaction is confirmed in the 
-  -- blockchain and then we autoremove this transactions.
-  , submitedTransactions :: Ref (OrderedMap UUID a)
+  ,transactionsSentQueue ::Queue.Queue (read :: Queue.READ, write :: Queue.WRITE) {uuid::UUID, action::UserAction a, status::ActionStatus}
+  , transactionsSent :: Ref (OrderedMap UUID (UserAction a /\ TransactionHash))
   }
 
 derive instance Newtype (UserState a) _

@@ -13,6 +13,7 @@ module Seath.Network.OrderedMap
   , take
   , union
   , toArray
+  , update
   ) where
 
 import Contract.Prelude
@@ -22,6 +23,7 @@ import Data.Map (Map)
 import Data.Map as Map
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
+import Partial.Unsafe (unsafePartial)
 
 -- We would like to use purescript-ordered-collections, but the 
 -- Ord instance it has is over the keys, and then we would need 
@@ -47,6 +49,17 @@ lookupWithPosition k (OrderedMap oMap) = Map.lookup k oMap.map
 
 toArray :: forall k v. Ord k => OrderedMap k v -> Array (k /\ v)
 toArray = _.array <<< unwrap
+
+update :: forall k v. Ord k => k -> v -> OrderedMap k v -> OrderedMap k v
+update key value _map =
+  let
+    arr = toArray _map
+  in
+    case Array.findIndex (\(k /\ _) -> k == key) arr of
+      Just ind -> fromFoldable $ unsafePartial $ fromJust $ Array.updateAt ind
+        (key /\ value)
+        arr
+      Nothing -> push key value _map
 
 -- TODO: tests when API will stabilaze
 push
