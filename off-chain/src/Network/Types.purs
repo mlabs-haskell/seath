@@ -48,11 +48,7 @@ import Aeson
   , toString
   )
 import Contract.Monad (Contract)
-import Contract.Transaction
-  ( BalancedSignedTransaction
-  , FinalizedTransaction
-  , Transaction
-  )
+import Contract.Transaction (FinalizedTransaction, Transaction)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
@@ -301,6 +297,7 @@ type UserHandlers a =
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
   , clientHandlers :: UserHandlers a
+  , fromContract :: FunctionToPerformContract
   }
 
 derive instance Newtype (UserConfiguration a) _
@@ -308,9 +305,6 @@ derive instance Newtype (UserConfiguration a) _
 newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
-  , makeAction :: a -> Aff (UserAction a)
-  , signTx :: FinalizedTransaction -> Aff BalancedSignedTransaction
   }
 
 derive instance Newtype (UserNode a) _
-

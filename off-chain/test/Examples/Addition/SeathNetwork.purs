@@ -76,6 +76,7 @@ mainTest env admin leader users = do
   let
     initializationOptions = { waitingTime: 3, maxAttempts: 10 }
     _testLeaderConf = makeTestLeaderConf env leader
+    leaderUrl = "http://localhost:3000"
 
   checkInitSctipt env admin initializationOptions
 
@@ -83,37 +84,33 @@ mainTest env admin leader users = do
     serverConf :: SeathServerConfig
     serverConf = undefined
 
-  user <- liftMaybe (error "No user wallet") (users !! 0)
+  user1 <- liftMaybe (error "No user wallet") (users !! 0)
+  user2 <- liftMaybe (error "No user wallet") (users !! 1)
 
-  leaderPkhs <- runContractInEnv env $ withKeyWallet leader ownPubKeyHashes
-  log $ "leader pkhs: " <> show leaderPkhs
+  -- leaderPkhs <- runContractInEnv env $ withKeyWallet leader ownPubKeyHashes
+  -- log $ "leader pkhs: " <> show leaderPkhs
 
-  userPkhs <- runContractInEnv env $ withKeyWallet user ownPubKeyHashes
-  log $ "user pkhs: " <> show userPkhs
+  -- userPkhs <- runContractInEnv env $ withKeyWallet user ownPubKeyHashes
+  -- log $ "user pkhs: " <> show userPkhs
+
+  -- userUtxo <- runContractInEnv env $ withKeyWallet user getWalletUtxos
+  -- log $ "user UTXO: " <> show userUtxo
 
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     mkAdditionCoreConfig
 
   let -- hadler for the User to make action using CTL Contract
-    makeAction action =
-      runContractInEnv env $ withKeyWallet user
-        $ Core.Utils.makeActionContract action
-
-    -- handler for the Leader to build chain using CTL contract
     buildChain actions =
       runContractInEnv env $ withKeyWallet leader $ fst
         <$> ChainBuilder.buildChain coreConfig actions Nothing
 
-    signTx :: FinalizedTransaction -> Aff BalancedSignedTransaction
-    signTx tx =
-      runContractInEnv env $ withKeyWallet user
-        $ signTransaction tx
+  log "Starting user-1 node"
+  (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
+    (makeTestUserConf leaderUrl env user1)
 
-  log "Starting user node"
-  (userFiber /\ (userNode :: UserNode AdditionAction)) <- Users.startUserNode
-    makeAction
-    signTx
-    _testUserConf
+  log "Starting user-2 node"
+  (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
+    (makeTestUserConf leaderUrl env user2)
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
@@ -129,19 +126,19 @@ mainTest env admin leader users = do
 
   log "Delay before user include action request"
   delay $ Milliseconds 1000.0
-  log "Fire user include action request 1"
-  Users.performAction userNode
+  log "Fire user-1 include action request"
+  Users.performAction userNode1
     (AddAmount $ BigInt.fromInt 1)
-
-  log "Fire user include action request 2"
-  Users.performAction userNode
-    (AddAmount $ BigInt.fromInt 2)
+  log "Fire user-2 include action request"
+  Users.performAction userNode2
+    (AddAmount $ BigInt.fromInt 10)
   -- Leader.showDebugState leaderNode >>= log
 
   delay (wrap 5000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
-  killFiber (error "can't cleanup user") userFiber
+  killFiber (error "can't cleanup user") userFiber1
+  killFiber (error "can't cleanup user") userFiber2
   killFiber (error "can't cleanup leader loop") leaderLoopFiber
   Payload.Server.close server
   log "end"
@@ -158,22 +155,23 @@ makeTestLeaderConf env kw =
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }
 
--- UserNode config and handlers
-_testUserConf :: UserConfiguration AdditionAction
-_testUserConf = UserConfiguration
-  { maxQueueSize: undefined
-  , clientHandlers:
-      { submitToLeader: userHandlerSendAction httpClient
-      , sendSignedToLeader: userHandlerSendSignedToLeader httpClient
-      , refuseToSign: userHandlerRefuseToSign httpClient
-      , getActionStatus: userHandlerGetStatus httpClient
-      }
+makeTestUserConf
+  :: String -> ContractEnv -> KeyWallet -> UserConfiguration AdditionAction
+makeTestUserConf leaderUrl env kw =
+  UserConfiguration
+    { maxQueueSize: undefined
+    , clientHandlers:
+        { submitToLeader: userHandlerSendAction httpClient
+        , sendSignedToLeader: userHandlerSendSignedToLeader httpClient
+        , refuseToSign: userHandlerRefuseToSign httpClient
+        , getActionStatus: userHandlerGetStatus httpClient
+        }
+    , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
 
-  }
+    }
   where
   httpClient :: UserClient AdditionAction
-  httpClient = Client.mkUserClient (Proxy :: Proxy AdditionAction)
-    "http://localhost:3000"
+  httpClient = Client.mkUserClient (Proxy :: Proxy AdditionAction) leaderUrl
 
 userHandlerSendAction
   :: forall a
@@ -243,8 +241,8 @@ userHandlerRefuseToSign client uuid = do
 
 makeToPerformContract
   :: forall b. ContractEnv -> KeyWallet -> Contract b -> Aff b
-makeToPerformContract env admin contract = runContractInEnv env
-  $ withKeyWallet admin contract
+makeToPerformContract env kw contract = runContractInEnv env
+  $ withKeyWallet kw contract
 
 checkInitSctipt
   :: ContractEnv
@@ -260,8 +258,10 @@ checkInitSctipt env admin waitingTime = runContractInEnv env
         Left _ -> do
           logInfo' "Initializing Addition script state"
           void $ Addition.Contract.initialSeathContract
-        Right _ -> do
-          logInfo' "Addition script state already initialized"
+        Right _scriptState -> do
+          logInfo' $ "Addition script state already initialized"
+      currentState <- Addition.Actions.queryBlockchainState
+      logInfo' $ "Current script state:\n" <> show currentState
 
 waitForFunding :: { waitingTime :: Int, maxAttempts :: Int } -> Contract Unit
 waitForFunding options = do

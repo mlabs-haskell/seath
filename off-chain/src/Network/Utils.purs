@@ -1,20 +1,21 @@
 module Seath.Network.Utils
-  ( getPublicKeyHash
-  , getFromRefAtLeaderState
-  , getFromLeaderState
-  , setToRefAtLeaderState
-  , withRefFromState
-  , takeFromPending
-  , getFromLeaderConfiguration
-  , getNumberOfPending
-  , maxPendingCapacity
-  , signTimeout
-  , getChaintriggerTreshold
-  , addToSentActions
+  ( addToSentActions
   , addToTransactionsSent
-  , readSentActions
+  , getChaintriggerTreshold
+  , getFromLeaderConfiguration
+  , getFromLeaderState
+  , getFromRefAtLeaderState
+  , getNumberOfPending
+  , getPublicKeyHash
   , getUserHandlers
+  , maxPendingCapacity
   , pushRefMap_
+  , readSentActions
+  , setToRefAtLeaderState
+  , signTimeout
+  , takeFromPending
+  , userRunContract
+  , withRefFromState
   ) where
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
@@ -44,10 +45,12 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( LeaderConfiguration
+  ( FunctionToPerformContract(..)
+  , LeaderConfiguration
   , LeaderConfigurationInner
   , LeaderNode(LeaderNode)
   , LeaderStateInner
+  , UserConfiguration
   , UserHandlers
   , UserNode(UserNode)
   )
@@ -98,6 +101,11 @@ getFromLeaderConfiguration
   :: forall a b. LeaderNode a -> (LeaderConfigurationInner a -> b) -> b
 getFromLeaderConfiguration (LeaderNode node) accessor = accessor
   (unwrap node.configuration)
+
+userRunContract
+  :: forall a. UserNode a -> FunctionToPerformContract
+userRunContract (UserNode node) =
+  (unwrap node.configuration).fromContract
 
 getNumberOfPending :: forall a. LeaderNode a -> Aff Int
 getNumberOfPending ln = do

@@ -12,9 +12,9 @@ module Seath.Network.Users
 import Contract.Prelude
 
 import Contract.Transaction
-  ( BalancedSignedTransaction
-  , FinalizedTransaction(FinalizedTransaction)
+  ( FinalizedTransaction(FinalizedTransaction)
   , Transaction
+  , signTransaction
   )
 import Control.Monad (bind)
 import Data.Either (Either)
@@ -26,10 +26,12 @@ import Effect.Aff (Aff, Fiber, delay, error, forkAff, throwError, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Seath.Core.Types (CoreConfiguration, UserAction)
+import Seath.Core.Utils as Core.Utils
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus(AskForSignature)
+  , FunctionToPerformContract(..)
   , IncludeActionError
   , SendSignedTransaction(SendSignedTransaction)
   , SignedTransaction
@@ -42,6 +44,7 @@ import Seath.Network.Utils
   , addToTransactionsSent
   , getUserHandlers
   , readSentActions
+  , userRunContract
   )
 import Type.Function (type ($))
 import Undefined (undefined)
@@ -70,7 +73,10 @@ getActionStatus userNode =
 
 signTx
   :: forall a. UserNode a -> Transaction -> Aff Transaction
-signTx userNode tx = unwrap <$> (unwrap userNode).signTx (wrap tx)
+signTx userNode tx = do
+  let (FunctionToPerformContract run) = userRunContract userNode
+  signedTx <- run $ signTransaction (FinalizedTransaction tx)
+  pure $ unwrap signedTx
 
 sendSignedTransactionToLeader
   :: forall a
@@ -112,7 +118,8 @@ newUserState = undefined
 
 performAction :: forall a. UserNode a -> a -> Aff Unit
 performAction userNode action = do
-  userAction <- (unwrap userNode).makeAction action
+  let (FunctionToPerformContract run) = userRunContract userNode
+  userAction <- run $ Core.Utils.makeActionContract action
   result <- try $ userNode `sendActionToLeader` userAction
   case result of
     Right (Right uid) -> do
@@ -125,11 +132,9 @@ performAction userNode action = do
 startUserNode
   :: forall a
    . Show a
-  => (a -> Aff (UserAction a))
-  -> (FinalizedTransaction -> Aff BalancedSignedTransaction)
-  -> UserConfiguration a
+  => UserConfiguration a
   -> Aff (Fiber Unit /\ UserNode a)
-startUserNode makeActionH signTxH conf = do
+startUserNode conf = do
   actionsSent <- liftEffect $ Ref.new OrderedMap.empty
   transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
   submitedTransactions <- liftEffect $ Ref.new OrderedMap.empty
@@ -141,8 +146,6 @@ startUserNode makeActionH signTxH conf = do
           , submitedTransactions
           }
       , configuration: conf
-      , makeAction: makeActionH
-      , signTx: signTxH
       }
   fiber <- startActionStatusCheck node
   pure $ fiber /\ node
