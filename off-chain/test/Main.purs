@@ -3,19 +3,13 @@
 module Seath.Test.Main (main) where
 
 import Contract.Prelude
-  ( Effect
-  , Maybe(Just, Nothing)
-  , Unit
-  , bind
-  , show
-  , ($)
-  , (<>)
-  )
+
 import Data.Array ((!!))
 import Effect.Exception (throw)
 import Node.Process (argv)
 import Seath.Test.PlutipRunner as PlutipRunner
 import Seath.Test.PreprodRunner as PreprodRunner
+import Seath.Test.Spec as Spec
 
 main :: Effect Unit
 main = do
@@ -23,5 +17,6 @@ main = do
   case args !! 2 of
     Just "preprod" -> PreprodRunner.run
     Just "plutip" -> PlutipRunner.run
-    Nothing -> PlutipRunner.run -- run plutip test as default in CI
+    Just "unit" -> Spec.test
+    Nothing -> Spec.test *> PlutipRunner.run -- default for CI
     other -> throw $ "Unknown args: " <> show other
