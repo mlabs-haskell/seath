@@ -23,14 +23,14 @@ import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect.Aff (Aff, Fiber, delay, error, forkAff, throwError, try)
 import Effect.Class (liftEffect)
-import Queue as Queue
 import Effect.Ref as Ref
+import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Core.Utils as Core.Utils
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus(AskForSignature)
+  ( ActionStatus(AskForSignature, Submitted, NotFound)
   , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError
   , SendSignedTransaction(SendSignedTransaction)
@@ -39,13 +39,7 @@ import Seath.Network.Types
   , UserNode
   , UserState
   )
-import Seath.Network.Utils
-  ( addToSentActions
-  , addToTransactionsSent
-  , getUserHandlers
-  , readSentActions
-  , userRunContract
-  )
+import Seath.Network.Utils (getUserHandlers, readSentActions, userRunContract)
 import Type.Function (type ($))
 
 -- | This function won't raise a exception if we can't reach the network.
@@ -130,25 +124,77 @@ startUserNode conf = do
 newUserState :: forall a. Aff (UserState a)
 newUserState = do
   actionsSentQueue <- liftEffect $ Queue.new
-  Queue.on actionsSentQueue actionsSentHandler 
+  Queue.on actionsSentQueue actionsSentHandler
   actionsSent <- liftEffect $ Ref.new OrderedMap.empty
   transactionsSentQueue <- liftEffect $ Queue.new
   Queue.on transactionsSentHandler transactionsSentHandler
   transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
   pure $ wrap
-    { 
-    actionsSentQueue
-    ,actionsSent
-    ,transactionsSentQueue
+    { actionsSentQueue
+    , actionsSent
+    , transactionsSentQueue
     , transactionsSent
     }
 
-actionsSentHandler :: forall a . {uuid::UUID, action::UserAction a, status::ActionStatus} -> Effect Unit
-actionsSentHandler record =
-  case record.status of 
-    _ -> undefined
+singTransactionAndSend
+  :: forall a
+   . Show a
+  => UserNode a
+  -> { uuid :: UUID, txCborHex :: String, action :: UserAction a }
+  -> Aff (Maybe String)
+singTransactionAndSend userNode afs = do
+  tx <- TxHex.fromCborHex afs.txCborHex
+  signedTx <- signTx userNode tx
+  signedCbor <- TxHex.toCborHex signedTx
 
-transactionsSentHandler :: forall a . {uuid::UUID, action::UserAction a, status::ActionStatus} ->Effect Unit
+  let
+    singedRequest = SendSignedTransaction
+      { uuid: afs.uuid, txCborHex: signedCbor }
+  result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
+  case result of
+    -- TODO : How to tell back a failure?
+    Right _ -> do
+      -- TODO: add the `TransactionHash` to the `WaitingOtherChainSignatures` in 
+      -- the type `ActionStatus`.
+      let
+        transactionsSentQueue =
+          (unwrap (unwrap userNode).state).transactionsSentQueue
+      Queue.put transactionsSentQueue
+        { uuid: afs.uuid, status: undefined, action: afs.action }
+      log $ "User: Successfully signed and sent Tx " <> show afs.uid
+        <> " to the Leader"
+      pure Nothing
+    Left e -> Just $ show e
+
+-- | This is intended to be the only function that manipulates `actionsSent` in the 
+-- | `UserCOnfiguration`
+actionsSentHandler
+  :: forall a
+   . Show a
+  => { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
+  -> Effect Unit
+actionsSentHandler record =
+  case record.status of
+    -- This must block the thread, otherwise if we allow `actionHandler` to spawn
+    -- threads, we would face race conditions again.
+    AskForSignature afs -> liftAff $ singTransactionAndSend
+      { uuid: afs.uuid, txCborHex: afs.txCborHex, action: record.action }
+    Submitted -> do
+      -- removeFromTransactionsSent : this is a push to transactionsSentQueue with status `Submitted` 
+      undefined
+      -- removeFromActionsSent : We can remove it without fearing race condition, handler must be the only one modifying actionsSent
+      undefined
+    -- Variety of cases here but we going to assume that it failed
+    NotFound -> undefined
+    other -> log $ "User: status for action " <> show record.uid <> ": " <> show
+      other
+
+-- | This is intended to be the only function that manipulates `transactionsSent` in the 
+-- | `UserCOnfiguration`
+transactionsSentHandler
+  :: forall a
+   . { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
+  -> Effect Unit
 transactionsSentHandler = undefined
 
 newUserNode :: forall a. UserConfiguration a -> Aff (UserNode a)
@@ -187,6 +233,9 @@ startActionStatusCheck userNode = do
           <> show e
     delay $ Milliseconds 500.0
     check
+  -- TODO: remove this function, now handler of the queue is in charge of this
+  -- we only need to trigger it by puting things in it's queue (well, sometimes
+  -- we also put things to the other queue).
   checkStatusAndProcess (uid /\ action) = do
     status <- getActionStatus userNode uid
     case status of

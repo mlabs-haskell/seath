@@ -17,8 +17,8 @@ module Seath.Network.Types
       , ToBeSubmitted
       , Processing
       , WaitingOtherChainSignatures
-      , DiscardedBySignRejection
       , PrioritaryToBeProcessed
+      , Submitted
       , NotFound
       )
   , SendSignedTransaction(SendSignedTransaction)
@@ -130,15 +130,16 @@ derive instance Newtype GetActionStatus _
 
 data ActionStatus
   = AskForSignature
-      { uuid :: UUID
+      { uuid :: UUID -- Remove it? we don't need anymore with current types.
       , txCborHex :: String -- TODO: maybe separate type?
       }
   | ToBeProcessed Int
   | ToBeSubmitted Int
   | Processing
+  -- TODO : add TransactionHashs here (the use would be manipulating user sentQueue)
   | WaitingOtherChainSignatures
-  | DiscardedBySignRejection
   | PrioritaryToBeProcessed Int
+  | Submitted
   | NotFound
 
 derive instance Generic ActionStatus _
@@ -155,8 +156,8 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     Processing -> encodeTagged' "Processing" ""
     WaitingOtherChainSignatures -> encodeTagged' "WaitingOtherChainSignatures"
       ""
-    DiscardedBySignRejection -> encodeTagged' "DiscardedBySignRejection" ""
     PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
+    Submitted -> encodeTagged' "Submitted" ""
     NotFound -> encodeTagged' "NotFound" ""
 
     where
@@ -182,9 +183,9 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "ToBeSubmitted" -> ToBeSubmitted <$> decodeAeson contents
       "Processing" -> Right Processing
       "WaitingOtherChainSignatures" -> Right WaitingOtherChainSignatures
-      "DiscardedBySignRejection" -> Right DiscardedBySignRejection
       "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
+      "Submitted" -> Right Submitted
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
@@ -227,6 +228,7 @@ type LeaderStateInner a =
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
         (UUID /\ Either Unit Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
+  , submitted :: Ref $ OrderedMap UUID TransactionHash
   , stage :: Ref LeaderServerStage
   }
 
@@ -264,15 +266,18 @@ newtype LeaderNode a = LeaderNode
 derive instance Newtype (LeaderNode a) _
 
 newtype UserState a = UserState
-  {
-  actionsSentQueue :: Queue.Queue (read :: Queue.READ, write :: Queue.WRITE) {uuid:: UUID, action::UserAction a, status:: ActionStatus}
-    -- | `actionsSent` pourpose is to store the actions already
-    -- | send the to the `leader`that are confirmed to be accepted
-    -- | but are still waiting to reach the requirement of signature.
-  ,actionsSent :: Ref (OrderedMap UUID (UserAction a /\ ActionStatus))
+  { actionsSentQueue ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
+  -- | `actionsSent` pourpose is to store the actions already
+  -- | send the to the `leader`that are confirmed to be accepted
+  -- | but are still waiting to reach the requirement of signature.
+  , actionsSent :: Ref (OrderedMap UUID (UserAction a /\ ActionStatus))
   -- | For actions whose transaction is already signed and sent 
   -- | to the server.
-  ,transactionsSentQueue ::Queue.Queue (read :: Queue.READ, write :: Queue.WRITE) {uuid::UUID, action::UserAction a, status::ActionStatus}
+  , transactionsSentQueue ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
   , transactionsSent :: Ref (OrderedMap UUID (UserAction a /\ TransactionHash))
   }
 

@@ -1,6 +1,5 @@
 module Seath.Network.Utils
-  ( addToSentActions
-  , getChaintriggerTreshold
+  ( getChaintriggerTreshold
   , getFromLeaderConfiguration
   , getFromLeaderState
   , getFromRefAtLeaderState
@@ -19,7 +18,6 @@ module Seath.Network.Utils
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
-import Contract.Transaction (TransactionHash)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
@@ -31,7 +29,7 @@ import Data.Functor ((<$>))
 import Data.Newtype (unwrap)
 import Data.Ord (class Ord)
 import Data.Semiring ((+))
-import Data.Tuple.Nested (type (/\), (/\))
+import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
@@ -44,7 +42,16 @@ import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
-import Seath.Network.Types (ActionStatus, FunctionToPerformContract, LeaderConfiguration, LeaderConfigurationInner, LeaderNode(LeaderNode), LeaderStateInner, UserHandlers, UserNode(UserNode))
+import Seath.Network.Types
+  ( ActionStatus
+  , FunctionToPerformContract
+  , LeaderConfiguration
+  , LeaderConfigurationInner
+  , LeaderNode(LeaderNode)
+  , LeaderStateInner
+  , UserHandlers
+  , UserNode(UserNode)
+  )
 
 getPublicKeyHash :: Contract PubKeyHash
 getPublicKeyHash = do
@@ -116,11 +123,10 @@ getChaintriggerTreshold :: forall a. LeaderNode a -> Int
 getChaintriggerTreshold (LeaderNode node) =
   (unwrap node.configuration).numberOfActionToTriggerChainBuilder
 
-addToSentActions :: forall a. UserNode a -> (UUID /\ a) -> Aff Unit
-addToSentActions (UserNode node) (uuid /\ action) = do
-  liftEffect $ pushRefMap_ uuid action (unwrap node.state).actionsSent
-
-readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ (UserAction a /\ ActionStatus)))
+readSentActions
+  :: forall a
+   . UserNode a
+  -> Aff (Array (UUID /\ (UserAction a /\ ActionStatus)))
 readSentActions (UserNode node) = liftEffect $
   OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
 

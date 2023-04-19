@@ -43,11 +43,12 @@ import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus
       ( NotFound
+      , Submitted
       , AskForSignature
       , ToBeProcessed
+      , ToBeSubmitted
       , PrioritaryToBeProcessed
       , Processing
-      , DiscardedBySignRejection
       , WaitingOtherChainSignatures
       )
   , FunctionToPerformContract(FunctionToPerformContract)
@@ -124,21 +125,20 @@ actionStatus leaderNode actionId = do
   processCheck <- check _.processing (\_ _ _ -> pure $ Processing)
 
   waitingSignCheck <- check _.waitingForSignature transformForSignature
-  let sigResponseQueue = getFromLeaderState leaderNode _.signatureResponses
+  let signResponseQueue = getFromLeaderState leaderNode _.signatureResponses
 
   signResponses <- liftEffect $
-    OrderedMap.fromFoldable <$> Queue.read sigResponseQueue
+    OrderedMap.fromFoldable <$> Queue.read signResponseQueue
   signResponseCheck <- checkIsIn actionId signResponses
-    (\_ index _ -> pure $ ToBeProcessed index)
+    (\_ _ _ -> pure $ WaitingOtherChainSignatures)
 
-  submissionCheck <- checkIsIn actionId signResponses
-    ( \_ _ v -> pure case v of
-        Left _unit -> DiscardedBySignRejection
-        Right _tx -> WaitingOtherChainSignatures
-    )
+  waitingSubmissionCheck <- check _.waitingForSubmission
+    (\_ ind _ -> pure $ ToBeSubmitted ind)
+  submittedCheck <- check _.submitted (\_ _ _ -> pure $ Submitted)
 
-  pure $ foldl mergeChecks submissionCheck
-    [ signResponseCheck
+  pure $ foldl mergeChecks submittedCheck
+    [ waitingSubmissionCheck
+    , signResponseCheck
     , waitingSignCheck
     , processCheck
     , prioritarycheck
@@ -427,12 +427,12 @@ resetLeaderState leaderNode = do
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSignature
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSubmission
   setToRefAtLeaderState leaderNode WaitingForActions _.stage
+  setToRefAtLeaderState leaderNode OrderedMap.empty _.submitted
 
 leaderLoop
   :: forall actionType. Show actionType => LeaderNode actionType -> Aff Unit
 leaderLoop leaderNode = do
   log "Leader: New leader loop begins"
-  resetLeaderState leaderNode
   setStage WaitingForActions
   waitForRequests leaderNode
   log "Leader: Taking batch to process"
@@ -472,11 +472,14 @@ leaderLoop leaderNode = do
     { sucess: submissionSucess, failures: submissionFailures } = purgeResponses
       batchToProcess
       submissionResults
-  log $ "Leader: sumission sucess: " <> showUUIDs submissionSucess
+  log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
   log $ "Leader: to priority list: " <> showUUIDs submissionFailures
   log $ "Leader: Setting prioritary list"
   let newPrioritary = OrderedMap.union signatureFailures submissionFailures
   setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
+  resetLeaderState leaderNode
+  -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
+  setToRefAtLeaderState leaderNode submissionSucess _.submitted
   log "Leader: Node loop complete!"
   leaderLoop leaderNode
 
@@ -506,6 +509,7 @@ newLeaderState maxRequestAllowed = do
   waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
   signatureResponses <- liftEffect $ Queue.new
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
+  submitted <- liftEffect $ Ref.new OrderedMap.empty
   stage <- liftEffect $ Ref.new WaitingForActions
   pure $ wrap
     { receivedActionsRequests
@@ -515,6 +519,7 @@ newLeaderState maxRequestAllowed = do
     , waitingForSignature
     , signatureResponses
     , waitingForSubmission
+    , submitted
     , stage
     }
 
