@@ -30,6 +30,7 @@ You can edit this file as you like.
   , "profunctor-lenses"
   , "queue"
   , "refs"
+  , "spec"
   , "strings"
   , "transformers"
   , "tuples"
