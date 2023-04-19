@@ -1,6 +1,7 @@
 module Seath.Test.Unit.OrderedMap (spec) where
 
-import Contract.Prelude (Aff, Maybe(..), Unit, discard, wrap, ($), (/\), (>>>))
+import Contract.Prelude hiding (length, lookup)
+
 import Data.Array as Array
 import Data.Map as Map
 import Seath.Network.OrderedMap
