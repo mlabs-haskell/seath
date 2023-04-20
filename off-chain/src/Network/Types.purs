@@ -270,7 +270,11 @@ derive instance Newtype (LeaderNode a) _
 type UserStateInner a =
   { actionsSentQueue ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
-        { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
+        { uuid :: UUID
+        , action :: UserAction a
+        , status :: ActionStatus
+        , previousStatus :: ActionStatus
+        }
   -- | `actionsSent` pourpose is to store the actions already
   -- | send the to the `leader`that are confirmed to be accepted
   -- | but are still waiting to reach the requirement of signature.
