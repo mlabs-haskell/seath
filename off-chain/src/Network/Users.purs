@@ -44,6 +44,7 @@ import Seath.Network.Utils
   , addToTransactionsSent
   , getUserHandlers
   , readSentActions
+  , testRemoveFromSent
   , userRunContract
   )
 import Type.Function (type ($))
@@ -70,6 +71,11 @@ getActionStatus
   :: forall a. UserNode a -> UUID -> Aff ActionStatus
 getActionStatus userNode =
   (getUserHandlers userNode).getActionStatus
+
+checkTransaction
+  :: forall a. UserNode a -> Transaction -> Aff (Either String Transaction)
+checkTransaction userNode =
+  (unwrap (unwrap userNode).configuration).checkTransaction
 
 signTx
   :: forall a. UserNode a -> Transaction -> Aff Transaction
@@ -178,24 +184,34 @@ startActionStatusCheck userNode = do
           <> show e
     delay $ Milliseconds 500.0
     check
-  checkStatusAndProcess (uid /\ action) = do
-    status <- getActionStatus userNode uid
+  checkStatusAndProcess (uuid /\ action) = do
+    status <- getActionStatus userNode uuid
     case status of
-      AskForSignature afs -> do
-        tx <- TxHex.fromCborHex afs.txCborHex
-        signedTx <- signTx userNode tx
+      AskForSignature afs -> handleAskForSignature afs uuid action
+
+      other -> log $ "User: status for action " <> show uuid <> ": " <> show
+        other
+
+
+  handleAskForSignature afs uuid action = do
+    tx <- TxHex.fromCborHex afs.txCborHex
+    checkTx <- checkTransaction userNode tx
+    case checkTx of
+      Left checkFailreason -> do
+        userNode `sendRejectionToLeader` uuid
+        userNode `testRemoveFromSent` uuid
+        log $ "User: rejecting to sign transaction. Reason: " <> checkFailreason
+      Right checkedTx -> do
+        signedTx <- signTx userNode checkedTx
         signedCbor <- TxHex.toCborHex signedTx
 
         let
           singedRequest = SendSignedTransaction
-            { uuid: uid, txCborHex: signedCbor }
+            { uuid: uuid, txCborHex: signedCbor }
         result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
         case result of
           Right _ -> do
-            addToTransactionsSent userNode (uid /\ action)
-            log $ "User: Successfully signed and sent Tx " <> show uid
+            addToTransactionsSent userNode (uuid /\ action)
+            log $ "User: Successfully signed and sent Tx " <> show uuid
               <> " to the Leader"
           Left e -> throwError (error $ show e)
-
-      other -> log $ "User: status for action " <> show uid <> ": " <> show
-        other

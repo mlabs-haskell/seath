@@ -14,9 +14,11 @@ module Seath.Network.Utils
   , setToRefAtLeaderState
   , signTimeout
   , takeFromPending
+  , testRemoveFromSent
   , userRunContract
   , withRefFromState
-  ) where
+  )
+  where
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
@@ -44,15 +46,7 @@ import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
-import Seath.Network.Types
-  ( FunctionToPerformContract
-  , LeaderConfiguration
-  , LeaderConfigurationInner
-  , LeaderNode(LeaderNode)
-  , LeaderStateInner
-  , UserHandlers
-  , UserNode(UserNode)
-  )
+import Seath.Network.Types (FunctionToPerformContract, LeaderConfiguration, LeaderConfigurationInner, LeaderNode(LeaderNode), LeaderStateInner, UserHandlers, UserNode(UserNode))
 
 getPublicKeyHash :: Contract PubKeyHash
 getPublicKeyHash = do
@@ -135,6 +129,10 @@ addToTransactionsSent (UserNode node) (uuid /\ action) = do
 readSentActions :: forall a. UserNode a -> Aff (Array (UUID /\ a))
 readSentActions (UserNode node) = liftEffect $
   OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
+
+testRemoveFromSent :: forall a. UserNode a -> UUID -> Aff Unit
+testRemoveFromSent (UserNode node) uuid = do
+  liftEffect $ Ref.modify_ (OrderedMap.delete uuid) (unwrap node.state).actionsSent
 
 getUserHandlers :: forall a. UserNode a -> UserHandlers a
 getUserHandlers (UserNode node) = (unwrap node.configuration).clientHandlers

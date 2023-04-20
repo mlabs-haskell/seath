@@ -114,5 +114,5 @@ actionStatus leaderNode request = do
   result <- try $ leaderNode `Leader.actionStatus`
     (unwrap request.params.uid)
   let response = toJsend (lmap show result)
-  log $ "Leader HTTP-server: action status response: " <> show response
+  -- log $ "Leader HTTP-server: action status response: " <> show response
   pure response

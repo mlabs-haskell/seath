@@ -454,7 +454,7 @@ leaderLoop leaderNode = do
     Right builtChain -> do
       setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
   batchToSign <- getFromRefAtLeaderState leaderNode _.waitingForSignature
-  log $ "Leader: builder result: " <> show batchToSign
+  -- log $ "Leader: builder result: " <> show batchToSign
   setStage WaitingForChainSignatures
   signatureResults <- waitForChainSignatures leaderNode
   let

@@ -298,6 +298,7 @@ newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
   , clientHandlers :: UserHandlers a
   , fromContract :: FunctionToPerformContract
+  , checkTransaction :: Transaction -> Aff (Either String Transaction)
   }
 
 derive instance Newtype (UserConfiguration a) _

@@ -1,4 +1,4 @@
-module Test.Examples.Addition.SeathNetwork
+module Test.Examples.Addition.SeathNetworkReject
   ( mainTest
   , userHandlerRefuseToSign
   ) where
@@ -12,6 +12,7 @@ import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
+import Contract.Transaction (Transaction(..))
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, throwError, try)
@@ -34,33 +35,15 @@ import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.Types
-  ( IncludeRequest(IncludeRequest)
-  , SendSignedRequest(SendSignedRequest)
-  )
+import Seath.HTTP.Types (IncludeRequest(IncludeRequest), SendSignedRequest(SendSignedRequest))
 import Seath.Network.Leader as Leader
-import Seath.Network.Types
-  ( AcceptSignedTransactionError
-  , ActionStatus
-  , FunctionToPerformContract(FunctionToPerformContract)
-  , IncludeActionError
-  , LeaderConfiguration(LeaderConfiguration)
-  , LeaderNode
-  , SendSignedTransaction
-  , UserConfiguration(UserConfiguration)
-  , UserNode
-  )
+import Seath.Network.Types (AcceptSignedTransactionError, ActionStatus, FunctionToPerformContract(FunctionToPerformContract), IncludeActionError, LeaderConfiguration(LeaderConfiguration), LeaderNode, SendSignedTransaction, UserConfiguration(UserConfiguration), UserNode)
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
-import Seath.Test.Examples.Addition.Types
-  ( AdditionAction(AddAmount)
-  , AdditionDatum
-  , AdditionRedeemer
-  , AdditionValidator
-  )
+import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount), AdditionDatum, AdditionRedeemer, AdditionValidator)
 import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
 
@@ -100,15 +83,15 @@ mainTest env admin leader users = do
 
   log "Starting user-1 node"
   (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user1)
+    (makeTestUserConf leaderUrl (\tx -> pure (Right tx)) env user1)
 
   log "Starting user-2 node"
   (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user2)
+    (makeTestUserConf leaderUrl  (\tx -> pure (Left "Bad tx!")) env user2)
 
   log "Starting user-3 node"
   (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user3)
+    (makeTestUserConf leaderUrl  (\tx -> pure (Right tx)) env user3)
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
@@ -135,7 +118,7 @@ mainTest env admin leader users = do
     (AddAmount $ BigInt.fromInt 10)
   -- Leader.showDebugState leaderNode >>= log
 
-  delay (wrap 5000.0)
+  delay (wrap 10000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
   killFiber (error "can't cleanup user") userFiber1
@@ -153,13 +136,17 @@ makeTestLeaderConf env kw =
     { maxWaitingTimeForSignature: 5000
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 3
-    , maxWaitingTimeBeforeBuildChain: 5
+    , maxWaitingTimeBeforeBuildChain: 3
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }
 
 makeTestUserConf
-  :: String -> ContractEnv -> KeyWallet -> UserConfiguration AdditionAction
-makeTestUserConf leaderUrl env kw =
+  :: String
+  -> (Transaction -> Aff (Either String Transaction)) 
+  -> ContractEnv
+  -> KeyWallet 
+  -> UserConfiguration AdditionAction
+makeTestUserConf leaderUrl checkTx env kw =
   UserConfiguration
     { maxQueueSize: undefined
     , clientHandlers:
@@ -169,7 +156,8 @@ makeTestUserConf leaderUrl env kw =
         , getActionStatus: userHandlerGetStatus httpClient
         }
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
-    , checkTransaction: \tx -> pure (Right tx)
+    , checkTransaction: checkTx
+
     }
   where
   httpClient :: UserClient AdditionAction

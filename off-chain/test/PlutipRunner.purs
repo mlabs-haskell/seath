@@ -12,7 +12,9 @@ import Effect (Effect)
 import Effect.Aff (supervise)
 import Prelude (($))
 import Seath.Test.Utils (makeDistribution)
-import Test.Examples.Addition.SeathNetwork (mainTest)
+-- import Test.Examples.Addition.SeathNetwork (mainTest)
+-- import Test.Examples.Addition.SeathNetworkReject (mainTest)
+import Test.Examples.Addition.SeathNetworkSameUserTwice (mainTest)
 
 run :: Effect Unit
 run = launchAff_
