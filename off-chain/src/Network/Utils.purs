@@ -116,12 +116,14 @@ userWithRefFromState
    . UserNode a
   -> (UserStateInner a -> Ref b)
   -> (Ref b -> Effect c)
-  -> Aff c
-userWithRefFromState (UserNode node) acessor f =
-  liftEffect $ f $ acessor (unwrap node.state)
+  -> Effect c
+userWithRefFromState (UserNode node) acessor f = f $ acessor (unwrap node.state)
 
 lookupActionsSent
-  :: forall a. UserNode a -> UUID -> Aff (Maybe (UserAction a /\ ActionStatus))
+  :: forall a
+   . UserNode a
+  -> UUID
+  -> Effect (Maybe (UserAction a /\ ActionStatus))
 lookupActionsSent userNode uuid = do
   _map <- userWithRefFromState userNode _.actionsSent Ref.read
   pure $ OrderedMap.lookup uuid _map
@@ -132,7 +134,7 @@ modifyActionsSent
   -> ( OrderedMap UUID (UserAction a /\ ActionStatus)
        -> OrderedMap UUID (UserAction a /\ ActionStatus)
      )
-  -> Aff Unit
+  -> Effect Unit
 modifyActionsSent userNode transform =
   userWithRefFromState userNode _.actionsSent (Ref.modify_ transform)
 
@@ -143,13 +145,13 @@ putToResults
      , action :: UserAction a
      , status :: Either String TransactionHash
      }
-  -> Aff Unit
+  -> Effect Unit
 putToResults userNode result =
   let
     resultsQueue = (unwrap (unwrap userNode).state).resultsQueue
   in
     do
-      liftEffect $ Queue.put resultsQueue result
+      Queue.put resultsQueue result
 
 userRunContract
   :: forall a. UserNode a -> FunctionToPerformContract

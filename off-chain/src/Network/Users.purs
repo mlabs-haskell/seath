@@ -13,6 +13,7 @@ import Contract.Prelude
 import Contract.Transaction
   ( FinalizedTransaction(FinalizedTransaction)
   , Transaction
+  , TransactionHash(..)
   , signTransaction
   )
 import Control.Monad (bind)
@@ -21,7 +22,16 @@ import Data.Function (($))
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, Fiber, delay, error, forkAff, throwError, try)
+import Effect.Aff
+  ( Aff
+  , Fiber
+  , delay
+  , error
+  , forkAff
+  , launchAff_
+  , throwError
+  , try
+  )
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Queue as Queue
@@ -131,24 +141,26 @@ startUserNode conf = do
 newUserState :: forall a. Aff (UserState a)
 newUserState = do
   actionsSentQueue <- liftEffect $ Queue.new
-  Queue.on actionsSentQueue actionsSentHandler
   actionsSent <- liftEffect $ Ref.new OrderedMap.empty
-  transactionsSentQueue <- liftEffect $ Queue.new
-  Queue.on transactionsSentHandler transactionsSentHandler
-  transactionsSent <- liftEffect $ Ref.new OrderedMap.empty
+  resultsQueue <- liftEffect $ Queue.new
   pure $ wrap
     { actionsSentQueue
     , actionsSent
-    , transactionsSentQueue
-    , transactionsSent
+    , resultsQueue
     }
+
+addToSentActions = undefined
 
 singTransactionAndSend
   :: forall a
    . Show a
   => UserNode a
-  -> { uuid :: UUID, txCborHex :: String, action :: UserAction a, previousStatus ::ActionStatus}
-  -> Aff (Maybe String)
+  -> { uuid :: UUID
+     , txCborHex :: String
+     , action :: UserAction a
+     , previousStatus :: ActionStatus
+     }
+  -> Effect (Maybe String)
 singTransactionAndSend userNode afs = do
   tx <- TxHex.fromCborHex afs.txCborHex
   signedTx <- signTx userNode tx
@@ -160,10 +172,10 @@ singTransactionAndSend userNode afs = do
   result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
   case result of
     Right _ -> do
-      log $ "User: Successfully signed and sent Tx " <> show afs.uid
+      log $ "User: Successfully signed and sent Tx " <> show afs.uuid
         <> " to the Leader"
       pure Nothing
-    Left e -> Just $ show e
+    Left e -> pure <<< Just $ show e
 
 -- | This is intended to be the only function that manipulates `actionsSent` in the 
 -- | `UserCOnfiguration`
@@ -171,30 +183,54 @@ makeActionsSentHandler
   :: forall a
    . Show a
   => UserNode a
-  -> {uuid :: UUID, action :: UserAction a, status :: ActionStatus, previousStatus::ActionStatus}
+  -> { uuid :: UUID
+     , action :: UserAction a
+     , status :: ActionStatus
+     , previousStatus :: ActionStatus
+     }
   -> Effect Unit
 makeActionsSentHandler userNode record =
   case record.status of
     -- This must block the thread, otherwise if we allow `actionHandler` to spawn
     -- threads, we would face race conditions again.
     AskForSignature afs -> do
-      result <- singTransactionAndSend
-        { uuid: afs.uuid, txCborHex: afs.txCborHex, action: record.action }
+      result <- singTransactionAndSend userNode
+        { uuid: afs.uuid
+        , txCborHex: afs.txCborHex
+        , action: record.action
+        , previousStatus: record.previousStatus
+        }
       case result of
         -- We don't have a state to represent `sent but we haven't ask the server to update the state`.
         Nothing -> modifyActionsSent userNode
-          (OrderedMap.push record.uuid record.action record.status)
-        Just msg -> putToResults${ uuid:record.uuid, action:record.action, status: Left msg }
+          (OrderedMap.push record.uuid (record.action /\ record.status))
+        Just msg -> putToResults userNode $ makeResult record (Left msg)
     Submitted txH -> do
-      putToResults record { status = txH }
+      putToResults userNode $ makeResult record (Right txH)
       modifyActionsSent userNode (OrderedMap.delete record.uuid)
     -- Variety of cases here but we going to assume that it failed
-    NotFound -> 
+    NotFound ->
       case record.previousStatus of
-          _ -> undefined
+        NotFound -> do
+          putToResults userNode $ makeResult record (Left "NotFound twice")
+          modifyActionsSent userNode (OrderedMap.delete record.uuid)
     other -> do
       log $ "User: status for action " <> show record.uuid <> ": " <> show other
-      modifyActionsSent userNode (OrderedMap.push record.uuid (record.action /\ record.status))
+      modifyActionsSent userNode
+        (OrderedMap.push record.uuid (record.action /\ record.status))
+  where
+  makeResult
+    :: { uuid :: UUID
+       , action :: UserAction a
+       , status :: ActionStatus
+       , previousStatus :: ActionStatus
+       }
+    -> Either String TransactionHash
+    -> { uuid :: UUID
+       , action :: UserAction a
+       , status :: Either String TransactionHash
+       }
+  makeResult old result = { uuid: old.uuid, action: old.action, status: result }
 
 -- | This is intended to be the only function that manipulates `transactionsSent` in the 
 -- | `UserCOnfiguration`
@@ -207,10 +243,14 @@ transactionsSentHandler = undefined
 newUserNode :: forall a. UserConfiguration a -> Aff (UserNode a)
 newUserNode conf = do
   state <- newUserState
-  pure $ wrap
-    { state: state
-    , configuration: conf
-    }
+  let
+    userNode = wrap
+      { state: state
+      , configuration: conf
+      }
+  liftEffect $ Queue.on (unwrap state).actionsSentQueue $ makeActionsSentHandler
+    userNode
+  pure $ userNode
 
 startActionStatusCheck :: forall a. Show a => UserNode a -> Aff (Fiber Unit)
 startActionStatusCheck userNode = do
