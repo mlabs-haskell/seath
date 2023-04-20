@@ -192,6 +192,18 @@ singTransactionAndSend userNode afs = do
       pure Nothing
     Left e -> pure <<< Just $ show e
 
+{- TODO: Many possible errors can be caught here:
+ - error during status request to the leader over HTTP (e.g. leader is offline)
+ - can't parse UUID returned by the leader
+ - JSON decode errors
+ - error during encoding and deconding transaction CBOR
+ - error while running signing Contract
+ - error while sending signed Tx to the leader over HTTP
+ - AcceptSignedTransactionError
+
+ Not sure atm how granular error handler need to be.
+ For now, we put a string with the error.
+-}
 -- | This is intended to be the only function that manipulates `actionsSent` in the 
 -- | `UserCOnfiguration`
 makeActionsSentHandler
@@ -291,17 +303,6 @@ startActionStatusCheck userNode = do
           in
             liftEffect $ Queue.put actionsSentQueue
               { uuid, action, status, previousStatus }
-        {- TODO: Many possible errors can be caught here:
-         - error during status request to the leader over HTTP (e.g. leader is offline)
-         - can't parse UUID returned by the leader
-         - JSON decode errors
-         - error during encoding and deconding transaction CBOR
-         - error while running signing Contract
-         - error while sending signed Tx to the leader over HTTP
-         - AcceptSignedTransactionError
-
-         Not sure atm how granular error handler need to be
-        -}
         Left e -> log $ "User: failed to check status for " <> show uuid
           <> ": "
           <> show e
