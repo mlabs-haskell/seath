@@ -469,7 +469,7 @@ leaderLoop leaderNode = do
   setStage SubmittingChain
   submissionResults <- submitChain leaderNode signatureSucess
   let
-    { sucess: submissionSucess, failures: submissionFailures } = purgeResponses
+    { sucess: submissionSucess, failures: submissionFailures } = purgeResponses2
       batchToProcess
       submissionResults
   log $ "Leader: sumission sucess: " <> showUUIDs submissionSucess
@@ -569,3 +569,43 @@ leaderStateInfo ln@(LeaderNode node) = do
     , maxTimeOutForSignature
     , serverStage
     }
+
+
+purgeResponses2
+  :: forall a b e
+   . OrderedMap UUID (UserAction a)
+  -> OrderedMap UUID $ Either e b
+  -> { sucess :: OrderedMap UUID b
+     , failures :: OrderedMap UUID (UserAction a)
+     }
+purgeResponses2 originalRequest responses =
+  let
+    responsesArray = OrderedMap.toArray responses
+  in
+    case Array.findIndex (isLeft <<< snd) responsesArray of
+      Nothing ->
+        -- TODO: Add test to ensure is safe to use this
+        { sucess: OrderedMap.fromFoldable (unsafeFromRight <$> responsesArray)
+        , failures: OrderedMap.empty
+        }
+      Just ind ->
+        let
+          { before: sucess, after: failuresArray } = Array.splitAt ind
+            responsesArray
+          -- TODO: Add test to ensure is safe to use this
+          lookup x = unsafeFromJust $ OrderedMap.lookup x originalRequest
+          -- remove all items that were rejected or whose response we won't get in time.
+          newFailures = Array.drop 1 $ Array.filter (isLeft <<< snd) failuresArray
+          failures = OrderedMap.fromFoldable
+            ((\(uuid /\ _) -> (uuid /\ lookup uuid)) <$> newFailures)
+        in
+          -- TODO: Add test to ensure is safe to use this
+          { sucess: OrderedMap.fromFoldable (unsafeFromRight <$> sucess)
+          , failures
+          }
+  where
+  unsafeFromRight :: UUID /\ Either e b -> UUID /\ b
+  unsafeFromRight (uuid /\ v) = unsafePartial (\(Right x) -> (uuid /\ x)) v
+
+  unsafeFromJust :: Maybe (UserAction a) -> UserAction a
+  unsafeFromJust = unsafePartial fromJust
