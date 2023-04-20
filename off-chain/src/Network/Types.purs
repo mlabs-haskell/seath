@@ -28,6 +28,7 @@ module Seath.Network.Types
   , LeaderConfigurationInner
   , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode(LeaderNode)
+  , UserStateInner
   , UserState(UserState)
   , UserHandlers
   , UserConfiguration(UserConfiguration)
@@ -136,10 +137,9 @@ data ActionStatus
   | ToBeProcessed Int
   | ToBeSubmitted Int
   | Processing
-  -- TODO : add TransactionHashs here (the use would be manipulating user sentQueue)
-  | WaitingOtherChainSignatures
+  | WaitingOtherChainSignatures (Maybe TransactionHash)
   | PrioritaryToBeProcessed Int
-  | Submitted
+  | Submitted TransactionHash
   | NotFound
 
 derive instance Generic ActionStatus _
@@ -154,10 +154,11 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
     ToBeSubmitted i -> encodeTagged' "ToBeSubmitted" i
     Processing -> encodeTagged' "Processing" ""
-    WaitingOtherChainSignatures -> encodeTagged' "WaitingOtherChainSignatures"
-      ""
+    WaitingOtherChainSignatures txH -> encodeTagged'
+      "WaitingOtherChainSignatures"
+      (encodeAeson txH)
     PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
-    Submitted -> encodeTagged' "Submitted" ""
+    Submitted txH -> encodeTagged' "Submitted" (encodeAeson txH)
     NotFound -> encodeTagged' "NotFound" ""
 
     where
@@ -182,10 +183,11 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
       "ToBeSubmitted" -> ToBeSubmitted <$> decodeAeson contents
       "Processing" -> Right Processing
-      "WaitingOtherChainSignatures" -> Right WaitingOtherChainSignatures
+      "WaitingOtherChainSignatures" -> WaitingOtherChainSignatures <$>
+        decodeAeson contents
       "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
-      "Submitted" -> Right Submitted
+      "Submitted" -> Submitted <$> decodeAeson contents
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
@@ -226,7 +228,7 @@ type LeaderStateInner a =
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
   , signatureResponses ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
-        (UUID /\ Either Unit Transaction)
+        (UUID /\ Maybe Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
   , submitted :: Ref $ OrderedMap UUID TransactionHash
   , stage :: Ref LeaderServerStage
@@ -265,7 +267,7 @@ newtype LeaderNode a = LeaderNode
 
 derive instance Newtype (LeaderNode a) _
 
-newtype UserState a = UserState
+type UserStateInner a =
   { actionsSentQueue ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
         { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
@@ -273,13 +275,17 @@ newtype UserState a = UserState
   -- | send the to the `leader`that are confirmed to be accepted
   -- | but are still waiting to reach the requirement of signature.
   , actionsSent :: Ref (OrderedMap UUID (UserAction a /\ ActionStatus))
-  -- | For actions whose transaction is already signed and sent 
-  -- | to the server.
-  , transactionsSentQueue ::
+  , resultsQueue ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
-        { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
-  , transactionsSent :: Ref (OrderedMap UUID (UserAction a /\ TransactionHash))
+        -- TODO: make this a newtype 
+        { uuid :: UUID
+        , action :: UserAction a
+        -- TODO: Introduce proper type for error instead of String
+        , status :: Either String TransactionHash
+        }
   }
+
+newtype UserState a = UserState (UserStateInner a)
 
 derive instance Newtype (UserState a) _
 

@@ -14,10 +14,15 @@ module Seath.Network.Utils
   , takeFromPending
   , userRunContract
   , withRefFromState
+  , userWithRefFromState
+  , modifyActionsSent
+  , putToResults
+  , lookupActionsSent
   ) where
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
+import Contract.Transaction (TransactionHash)
 import Control.Applicative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
@@ -26,6 +31,7 @@ import Data.Array as Array
 import Data.Either (Either(Left))
 import Data.Function (const, ($))
 import Data.Functor ((<$>))
+import Data.Maybe (Maybe)
 import Data.Newtype (unwrap)
 import Data.Ord (class Ord)
 import Data.Semiring ((+))
@@ -51,6 +57,7 @@ import Seath.Network.Types
   , LeaderStateInner
   , UserHandlers
   , UserNode(UserNode)
+  , UserStateInner
   )
 
 getPublicKeyHash :: Contract PubKeyHash
@@ -59,6 +66,7 @@ getPublicKeyHash = do
     getWalletAddresses
   liftMaybe (error "can't get pubKeyHash of KeyWallet") $ toPubKeyHash address
 
+-- Leader ----------------------------------------------------------------------
 getFromRefAtLeaderState
   :: forall a b. LeaderNode a -> (LeaderStateInner a -> Ref b) -> Aff b
 getFromRefAtLeaderState ln f =
@@ -99,6 +107,49 @@ getFromLeaderConfiguration
   :: forall a b. LeaderNode a -> (LeaderConfigurationInner a -> b) -> b
 getFromLeaderConfiguration (LeaderNode node) accessor = accessor
   (unwrap node.configuration)
+
+-- TODO: Move User to their own folder, add a reader monad for it and 
+-- move this functions there (same for Leader).
+-- USER ----------------------------------------------------------------------
+userWithRefFromState
+  :: forall a b c
+   . UserNode a
+  -> (UserStateInner a -> Ref b)
+  -> (Ref b -> Effect c)
+  -> Aff c
+userWithRefFromState (UserNode node) acessor f =
+  liftEffect $ f $ acessor (unwrap node.state)
+
+lookupActionsSent
+  :: forall a. UserNode a -> UUID -> Aff (Maybe (UserAction a /\ ActionStatus))
+lookupActionsSent userNode uuid = do
+  _map <- userWithRefFromState userNode _.actionsSent Ref.read
+  pure $ OrderedMap.lookup uuid _map
+
+modifyActionsSent
+  :: forall a
+   . UserNode a
+  -> ( OrderedMap UUID (UserAction a /\ ActionStatus)
+       -> OrderedMap UUID (UserAction a /\ ActionStatus)
+     )
+  -> Aff Unit
+modifyActionsSent userNode transform =
+  userWithRefFromState userNode _.actionsSent (Ref.modify_ transform)
+
+putToResults
+  :: forall a
+   . UserNode a
+  -> { uuid :: UUID
+     , action :: UserAction a
+     , status :: Either String TransactionHash
+     }
+  -> Aff Unit
+putToResults userNode result =
+  let
+    resultsQueue = (unwrap (unwrap userNode).state).resultsQueue
+  in
+    do
+      liftEffect $ Queue.put resultsQueue result
 
 userRunContract
   :: forall a. UserNode a -> FunctionToPerformContract

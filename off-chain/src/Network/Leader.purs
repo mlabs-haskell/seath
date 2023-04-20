@@ -130,11 +130,11 @@ actionStatus leaderNode actionId = do
   signResponses <- liftEffect $
     OrderedMap.fromFoldable <$> Queue.read signResponseQueue
   signResponseCheck <- checkIsIn actionId signResponses
-    (\_ _ _ -> pure $ WaitingOtherChainSignatures)
+    transfromForSignResponses
 
   waitingSubmissionCheck <- check _.waitingForSubmission
     (\_ ind _ -> pure $ ToBeSubmitted ind)
-  submittedCheck <- check _.submitted (\_ _ _ -> pure $ Submitted)
+  submittedCheck <- check _.submitted (\_ _ txH -> pure $ Submitted txH)
 
   pure $ foldl mergeChecks submittedCheck
     [ waitingSubmissionCheck
@@ -169,6 +169,17 @@ actionStatus leaderNode actionId = do
     case eitherTxCborHex of
       Left e -> liftEffect $ throw $ "cbor encoding error: " <> show e
       Right txCborHex -> pure $ AskForSignature { uuid, txCborHex }
+
+  transfromForSignResponses
+    :: UUID -> Int -> Maybe Transaction -> Aff ActionStatus
+  transfromForSignResponses _ _ (Just tx) = do
+    let
+      (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
+        leaderNode
+        _.fromContract
+    WaitingOtherChainSignatures <<< Just <$>
+      (fromContract <<< getFinalizedTransactionHash <<< wrap) tx
+  transfromForSignResponses _ _ Nothing = pure $ NotFound
 
 -- `waitingForSignature` relies on this function and `acceptRefuseToSign`
 -- to be the only ones that append things to `signatureResponses`
@@ -209,7 +220,7 @@ acceptSignedTransaction leaderNode signedTx = do
                   "Already got a response for this uuid: " <> show uuid
                 Nothing -> do
                   liftEffect $ Queue.put sigResponsesQueue
-                    (uuid /\ Right receivedSignedTx)
+                    (uuid /\ Just receivedSignedTx)
                   pure $ Right $ unit
           else
             pure $ Left $ "The received transaction hash: " <> show hashOfSigned
@@ -238,7 +249,7 @@ acceptRefuseToSign leaderNode uuid = do
         Just _ -> pure $ Left $
           "Already got a response for this uuid: " <> show uuid
         Nothing -> do
-          liftEffect $ Queue.put requestsQueue (uuid /\ Left unit)
+          liftEffect $ Queue.put requestsQueue (uuid /\ Nothing)
           pure $ Right $ unit
     Nothing -> pure $ Left
       "can't find transactions in the waiting for signature list"
@@ -248,7 +259,7 @@ acceptRefuseToSign leaderNode uuid = do
 waitForChainSignatures
   :: forall a
    . LeaderNode a
-  -> Aff $ OrderedMap UUID $ Either Unit Transaction
+  -> Aff $ OrderedMap UUID $ Maybe Transaction
 waitForChainSignatures leaderNode = do
   mapOfTransactions <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   let
@@ -259,7 +270,7 @@ waitForChainSignatures leaderNode = do
   loop maxAttempts numberOfTransactions
 
   where
-  loop :: Int -> Int -> Aff $ OrderedMap UUID $ Either Unit Transaction
+  loop :: Int -> Int -> Aff $ OrderedMap UUID $ Maybe Transaction
   loop remainAttempts numberOfTransactions =
     if remainAttempts <= 0 then
       endAction
@@ -275,14 +286,14 @@ waitForChainSignatures leaderNode = do
             -- TODO: 1000 is harcoded here representing 1 second and 1 attempt
             loop (remainAttempts - 1000) numberOfTransactions
 
-  endAction :: Aff $ OrderedMap UUID $ Either Unit Transaction
+  endAction :: Aff $ OrderedMap UUID $ Maybe Transaction
   endAction = do
     signResponses <- liftEffect $ OrderedMap.fromFoldable <$>
       (Queue.takeAll $ getFromLeaderState leaderNode _.signatureResponses)
     waitingForSignatureMap <- getFromRefAtLeaderState leaderNode
       _.waitingForSignature
     let
-      lookup uuid = maybe (Left unit) identity $ OrderedMap.lookup uuid
+      lookup uuid = maybe Nothing identity $ OrderedMap.lookup uuid
         signResponses
       results = (\(x /\ _) -> (x /\ lookup x)) <$> OrderedMap.toArray
         waitingForSignatureMap
@@ -460,7 +471,10 @@ leaderLoop leaderNode = do
   let
     { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
       batchToProcess
-      signatureResults
+      ( ( OrderedMap.fromFoldable <<< ((<$>) (\(k /\ v) -> (k /\ note unit v)))
+            <<< OrderedMap.toArray
+        ) signatureResults
+      )
   log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
   log $ "Leader: for priority list: " <> showUUIDs signatureFailures
   log $ "Leader: setting failures and submission list"

@@ -39,7 +39,14 @@ import Seath.Network.Types
   , UserNode
   , UserState
   )
-import Seath.Network.Utils (getUserHandlers, readSentActions, userRunContract)
+import Seath.Network.Utils
+  ( getUserHandlers
+  , lookupActionsSent
+  , modifyActionsSent
+  , putToResults
+  , readSentActions
+  , userRunContract
+  )
 import Type.Function (type ($))
 
 -- | This function won't raise a exception if we can't reach the network.
@@ -140,7 +147,7 @@ singTransactionAndSend
   :: forall a
    . Show a
   => UserNode a
-  -> { uuid :: UUID, txCborHex :: String, action :: UserAction a }
+  -> { uuid :: UUID, txCborHex :: String, action :: UserAction a, previousStatus ::ActionStatus}
   -> Aff (Maybe String)
 singTransactionAndSend userNode afs = do
   tx <- TxHex.fromCborHex afs.txCborHex
@@ -152,15 +159,7 @@ singTransactionAndSend userNode afs = do
       { uuid: afs.uuid, txCborHex: signedCbor }
   result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
   case result of
-    -- TODO : How to tell back a failure?
     Right _ -> do
-      -- TODO: add the `TransactionHash` to the `WaitingOtherChainSignatures` in 
-      -- the type `ActionStatus`.
-      let
-        transactionsSentQueue =
-          (unwrap (unwrap userNode).state).transactionsSentQueue
-      Queue.put transactionsSentQueue
-        { uuid: afs.uuid, status: undefined, action: afs.action }
       log $ "User: Successfully signed and sent Tx " <> show afs.uid
         <> " to the Leader"
       pure Nothing
@@ -168,26 +167,34 @@ singTransactionAndSend userNode afs = do
 
 -- | This is intended to be the only function that manipulates `actionsSent` in the 
 -- | `UserCOnfiguration`
-actionsSentHandler
+makeActionsSentHandler
   :: forall a
    . Show a
-  => { uuid :: UUID, action :: UserAction a, status :: ActionStatus }
+  => UserNode a
+  -> {uuid :: UUID, action :: UserAction a, status :: ActionStatus, previousStatus::ActionStatus}
   -> Effect Unit
-actionsSentHandler record =
+makeActionsSentHandler userNode record =
   case record.status of
     -- This must block the thread, otherwise if we allow `actionHandler` to spawn
     -- threads, we would face race conditions again.
-    AskForSignature afs -> liftAff $ singTransactionAndSend
-      { uuid: afs.uuid, txCborHex: afs.txCborHex, action: record.action }
-    Submitted -> do
-      -- removeFromTransactionsSent : this is a push to transactionsSentQueue with status `Submitted` 
-      undefined
-      -- removeFromActionsSent : We can remove it without fearing race condition, handler must be the only one modifying actionsSent
-      undefined
+    AskForSignature afs -> do
+      result <- singTransactionAndSend
+        { uuid: afs.uuid, txCborHex: afs.txCborHex, action: record.action }
+      case result of
+        -- We don't have a state to represent `sent but we haven't ask the server to update the state`.
+        Nothing -> modifyActionsSent userNode
+          (OrderedMap.push record.uuid record.action record.status)
+        Just msg -> putToResults${ uuid:record.uuid, action:record.action, status: Left msg }
+    Submitted txH -> do
+      putToResults record { status = txH }
+      modifyActionsSent userNode (OrderedMap.delete record.uuid)
     -- Variety of cases here but we going to assume that it failed
-    NotFound -> undefined
-    other -> log $ "User: status for action " <> show record.uid <> ": " <> show
-      other
+    NotFound -> 
+      case record.previousStatus of
+          _ -> undefined
+    other -> do
+      log $ "User: status for action " <> show record.uuid <> ": " <> show other
+      modifyActionsSent userNode (OrderedMap.push record.uuid (record.action /\ record.status))
 
 -- | This is intended to be the only function that manipulates `transactionsSent` in the 
 -- | `UserCOnfiguration`
@@ -214,7 +221,8 @@ startActionStatusCheck userNode = do
     sent <- readSentActions userNode
     for_ sent $ \entry -> do
       -- TODO: process response
-      res <- try $ checkStatusAndProcess entry
+      -- TODO: push to Queue
+      res <- try $ undefined entry
       case res of
         Right _ -> pure unit
         {- TODO: Many possible errors can be caught here:
@@ -233,27 +241,3 @@ startActionStatusCheck userNode = do
           <> show e
     delay $ Milliseconds 500.0
     check
-  -- TODO: remove this function, now handler of the queue is in charge of this
-  -- we only need to trigger it by puting things in it's queue (well, sometimes
-  -- we also put things to the other queue).
-  checkStatusAndProcess (uid /\ action) = do
-    status <- getActionStatus userNode uid
-    case status of
-      AskForSignature afs -> do
-        tx <- TxHex.fromCborHex afs.txCborHex
-        signedTx <- signTx userNode tx
-        signedCbor <- TxHex.toCborHex signedTx
-
-        let
-          singedRequest = SendSignedTransaction
-            { uuid: uid, txCborHex: signedCbor }
-        result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
-        case result of
-          Right _ -> do
-            addToTransactionsSent userNode (uid /\ action)
-            log $ "User: Successfully signed and sent Tx " <> show uid
-              <> " to the Leader"
-          Left e -> throwError (error $ show e)
-
-      other -> log $ "User: status for action " <> show uid <> ": " <> show
-        other
