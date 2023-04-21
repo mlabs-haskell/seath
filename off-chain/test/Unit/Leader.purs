@@ -1,0 +1,125 @@
+module Seath.Test.Unit.Leader where
+
+import Contract.Prelude
+
+import Contract.Test.Mote (TestPlanM, interpretWithConfig)
+import Contract.Test.Plutip
+  ( PlutipTest
+  , testPlutipContracts
+  , withKeyWallet
+  , withWallets
+  )
+import Contract.Test.Utils (exitCode, interruptOnSignal)
+import Control.Monad.Error.Class (liftMaybe)
+import Control.Monad.Reader (ask)
+import Data.Array ((!!))
+import Data.BigInt (fromInt) as BigInt
+import Data.Posix.Signal (Signal(SIGINT))
+import Data.UUID (genUUID)
+import Effect.Aff
+  ( Milliseconds(Milliseconds)
+  , cancelWith
+  , effectCanceler
+  , error
+  , launchAff
+  )
+import Effect.Ref as Ref
+import Mote (group, test)
+import Queue as Queue
+import Seath.Core.Utils as Core.Utils
+import Seath.Network.Leader as Leader
+import Seath.Network.OrderedMap as OrderedMap
+import Seath.Network.Types
+  ( FunctionToPerformContract(FunctionToPerformContract)
+  , LeaderConfiguration(LeaderConfiguration)
+  )
+import Seath.Network.Utils (getFromLeaderState, setToRefAtLeaderState)
+import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
+import Seath.Test.Utils (Distribution, makeDistribution)
+import Seath.Test.Utils as Test.Utils
+import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
+import Test.Spec.Runner (defaultConfig)
+import Undefined (undefined)
+
+main :: Effect Unit
+main = interruptOnSignal SIGINT =<< launchAff do
+  flip cancelWith (effectCanceler (exitCode 1)) do
+    interpretWithConfig
+      defaultConfig { timeout = Just $ Milliseconds 70_000.0, exit = true } $
+      testPlutipContracts Test.Utils.plutipConfig suite
+
+testLeaderConfig :: LeaderConfiguration AdditionAction
+testLeaderConfig =
+  LeaderConfiguration
+    { maxWaitingTimeForSignature: 5000
+    , maxQueueSize: 4
+    , numberOfActionToTriggerChainBuilder: 3
+    , maxWaitingTimeBeforeBuildChain: 5
+    , fromContract: FunctionToPerformContract undefined
+    }
+
+suite :: TestPlanM PlutipTest Unit
+suite = do
+  group "Leader" do
+    test "Do not accept 2nd action" testDuplicateUserAddition
+
+{- Do not accept 2nd action from same user if there is already
+   action in procass form this user
+-}
+testDuplicateUserAddition ∷ PlutipTest
+testDuplicateUserAddition = do
+  let
+    distribution :: Distribution
+    distribution = makeDistribution 1
+  withWallets distribution \((_admin /\ _leader) /\ users) -> do
+    _env <- ask
+    user1 <- liftMaybe (error "No user wallet") (users !! 0)
+    let
+      newNode = liftAff
+        $ Leader.newLeaderNode testLeaderConfig (const $ pure undefined)
+
+    node1 <- newNode
+
+    testAction1 <- withKeyWallet user1 do
+      Core.Utils.makeActionContract (AddAmount $ BigInt.fromInt 1)
+    testAction2 <- withKeyWallet user1 do
+      Core.Utils.makeActionContract (AddAmount $ BigInt.fromInt 11)
+
+    -- check adding actions "intended way" through main mailbox queue
+    result1 <- liftAff $ node1 `Leader.includeAction` testAction1
+    result1 `shouldSatisfy` isRight
+    result2 <- liftAff $ node1 `Leader.includeAction` testAction2
+    result2 `shouldSatisfy` isLeft
+
+    let
+      testThroughRefInState' =
+        testThroughRefInState newNode testAction1 testAction2
+
+    -- check through adding actions directly to node state
+    testThroughPendingQueue newNode testAction1 testAction2
+    testThroughRefInState' _.prioritaryPendingActions
+    testThroughRefInState' _.processing
+
+  where
+
+  testThroughPendingQueue newNode testAction1 testAction2 = do
+    node <- newNode
+    uuid <- liftEffect genUUID
+    let pendingQueue = node `getFromLeaderState` _.pendingActionsRequest
+    node2Pending <- liftEffect $ Queue.read pendingQueue
+    node2Pending `shouldEqual` []
+    liftEffect $ Queue.put pendingQueue (uuid /\ testAction1)
+    addResult <- liftAff $ node `Leader.includeAction` testAction2
+    addResult `shouldSatisfy` isLeft
+
+  testThroughRefInState newNode testAction1 testAction2 mapRefInState = do
+    node <- newNode
+    uuid <- liftEffect genUUID
+    orderedMap <- liftEffect $ Ref.read
+      (node `getFromLeaderState` mapRefInState)
+    orderedMap `shouldEqual` OrderedMap.empty
+    liftAff $ setToRefAtLeaderState node
+      (OrderedMap.fromFoldable [ uuid /\ testAction1 ])
+      mapRefInState
+    addResult <- liftAff $ node `Leader.includeAction` testAction2
+    addResult `shouldSatisfy` isLeft

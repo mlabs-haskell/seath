@@ -7,6 +7,8 @@ module Seath.Core.Types
   , changeAddress'
   ) where
 
+import Contract.Prelude
+
 import Aeson
   ( class DecodeAeson
   , class EncodeAeson
@@ -22,7 +24,6 @@ import Contract.Address
   )
 import Contract.Monad (Contract)
 import Contract.PlutusData (class FromData, class ToData)
-import Contract.Prelude (Maybe)
 import Contract.ScriptLookups (ScriptLookups)
 import Contract.Scripts (class DatumType, class RedeemerType, ValidatorHash)
 import Contract.Transaction (FinalizedTransaction)
@@ -64,12 +65,14 @@ instance
     , changeAddress :: ChangeAddress
     }
 
+derive newtype instance Eq a => Eq (UserAction a)
 derive newtype instance EncodeAeson a => EncodeAeson (UserAction a)
 derive newtype instance DecodeAeson a => DecodeAeson (UserAction a)
 
 newtype ChangeAddress = ChangeAddress AddressWithNetworkTag
 
 derive instance Newtype ChangeAddress _
+derive newtype instance Eq ChangeAddress
 
 instance DecodeAeson ChangeAddress where
   decodeAeson a = do

@@ -10,6 +10,7 @@ import Node.Process (argv)
 import Seath.Test.PlutipRunner as PlutipRunner
 import Seath.Test.PreprodRunner as PreprodRunner
 import Seath.Test.Spec as Spec
+import Seath.Test.Unit.Leader as Leader
 
 main :: Effect Unit
 main = do
@@ -18,5 +19,6 @@ main = do
     Just "preprod" -> PreprodRunner.run
     Just "plutip" -> PlutipRunner.run
     Just "unit" -> Spec.test
+    Just "leader" -> Leader.main
     Nothing -> Spec.test *> PlutipRunner.run -- default for CI
     other -> throw $ "Unknown args: " <> show other

@@ -81,15 +81,6 @@ mainTest env admin leader users = do
   user2 <- liftMaybe (error "No user wallet") (users !! 1)
   user3 <- liftMaybe (error "No user wallet") (users !! 2)
 
-  -- leaderPkhs <- runContractInEnv env $ withKeyWallet leader ownPubKeyHashes
-  -- log $ "leader pkhs: " <> show leaderPkhs
-
-  -- userPkhs <- runContractInEnv env $ withKeyWallet user ownPubKeyHashes
-  -- log $ "user pkhs: " <> show userPkhs
-
-  -- userUtxo <- runContractInEnv env $ withKeyWallet user getWalletUtxos
-  -- log $ "user UTXO: " <> show userUtxo
-
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     mkAdditionCoreConfig
 
@@ -133,7 +124,6 @@ mainTest env admin leader users = do
   log "Fire user-3 include action request"
   Users.performAction userNode3
     (AddAmount $ BigInt.fromInt 10)
-  -- Leader.showDebugState leaderNode >>= log
 
   delay (wrap 5000.0)
   -- we don't really need this as all is run in supervise, but is good to have 
