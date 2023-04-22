@@ -17,19 +17,13 @@ import Contract.Transaction
   , signTransaction
   )
 import Control.Monad (bind)
+import Data.Bifunctor (bimap, lmap)
 import Data.Either (Either)
 import Data.Function (($))
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff
-  ( Aff
-  , Fiber
-  , delay
-  , forkAff
-  , launchAff_
-  , try
-  )
+import Effect.Aff (Aff, Fiber, delay, forkAff, launchAff_, try)
 import Effect.Class (liftEffect)
 import Effect.Ref as Ref
 import Queue as Queue
@@ -50,7 +44,6 @@ import Seath.Network.Types
       )
   , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError
-  , SendSignedTransaction(SendSignedTransaction)
   , SignedTransaction
   , UserConfiguration
   , UserNode
@@ -83,11 +76,11 @@ getActionStatus userNode =
   (getUserHandlers userNode).getActionStatus
 
 signTx
-  :: forall a. UserNode a -> Transaction -> Aff Transaction
+  :: forall a. UserNode a -> Transaction -> Aff (Either String Transaction)
 signTx userNode tx = do
   let (FunctionToPerformContract run) = userRunContract userNode
-  signedTx <- run $ signTransaction (FinalizedTransaction tx)
-  pure $ unwrap signedTx
+  bimap show (unwrap) <$>
+    (try $ run $ signTransaction (FinalizedTransaction tx))
 
 sendSignedTransactionToLeader
   :: forall a
@@ -95,22 +88,32 @@ sendSignedTransactionToLeader
   -> UUID
   -> SignedTransaction
   -- the first Either is to catch the network errors
-  -> Aff Unit
+  -> Aff (Maybe String)
 sendSignedTransactionToLeader userNode uuid signedTx = do
   let
     (FinalizedTransaction tx) = unwrap signedTx
 
   cbor <- try $ TxHex.toCborHex tx
   case cbor of
-    Left e -> log $ "User: could not serialize signed Tx to CBOR: " <> show e
+    Left e -> do
+      let msg = "User: could not serialize signed Tx to CBOR: " <> show e
+      log msg
+      pure $ pure msg
     Right (cbor' :: String) -> do
       res <- try $ (getUserHandlers userNode).sendSignedToLeader
         (wrap { uuid: uuid, txCborHex: cbor' })
       case res of
-        Left e -> log $ "User: failed to send signed Tx to leader: " <> show e
-        Right (Left e) -> log $ "User: failed to send signed Tx to leader: " <>
-          show e
-        Right (Right _) -> log "User: signet Tx sent seuccessfully"
+        Left e -> do
+          let msg = "User: failed to send signed Tx to leader: " <> show e
+          log $ msg
+          pure $ pure msg
+        Right (Left e) -> do
+          let msg = "User: failed to send signed Tx to leader: " <> show e
+          log $ msg
+          pure $ pure msg
+        Right (Right _) -> do
+          log "User: signet Tx sent successfully"
+          pure Nothing
 
 -- | We refuse to sign the given transaction and inform the server
 -- | explicitly.
@@ -177,20 +180,15 @@ singTransactionAndSend
      }
   -> Aff (Maybe String)
 singTransactionAndSend userNode afs = do
-  tx <- TxHex.fromCborHex afs.txCborHex
-  signedTx <- signTx userNode tx
-  signedCbor <- TxHex.toCborHex signedTx
-
-  let
-    singedRequest = SendSignedTransaction
-      { uuid: afs.uuid, txCborHex: signedCbor }
-  result <- (getUserHandlers userNode).sendSignedToLeader singedRequest
-  case result of
-    Right _ -> do
-      log $ "User: Successfully signed and sent Tx " <> show afs.uuid
-        <> " to the Leader"
-      pure Nothing
-    Left e -> pure <<< Just $ show e
+  decoded <- lmap show <$> (try $ TxHex.fromCborHex afs.txCborHex)
+  case decoded of
+    Left msg -> pure $ pure $ msg
+    Right decodedTx -> do
+      (signed :: Either String Transaction) <- signTx userNode decodedTx
+      case signed of
+        Left msg -> pure $ pure $ msg
+        Right signedTx -> sendSignedTransactionToLeader userNode afs.uuid
+          (wrap $ wrap signedTx)
 
 {- TODO: Many possible errors can be caught here:
  - error during status request to the leader over HTTP (e.g. leader is offline)
