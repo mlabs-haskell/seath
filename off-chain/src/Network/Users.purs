@@ -23,8 +23,18 @@ import Data.Function (($))
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, Fiber, delay, forkAff, launchAff_, try)
+import Effect.Aff
+  ( Aff
+  , Fiber
+  , delay
+  , error
+  , forkAff
+  , launchAff_
+  , throwError
+  , try
+  )
 import Effect.Class (liftEffect)
+import Effect.Exception (message)
 import Effect.Ref as Ref
 import Queue as Queue
 import Seath.Core.Types (UserAction)
@@ -68,6 +78,11 @@ sendActionToLeader
   -> Aff $ Either IncludeActionError UUID
 sendActionToLeader userNode action =
   (getNetworkHandlers userNode).submitToLeader action
+
+checkChainedTx
+  :: forall a. UserNode a -> Transaction -> Aff (Either String Transaction)
+checkChainedTx userNode =
+  (unwrap (unwrap userNode).configuration).checkChainedTx
 
 -- Query server for action status
 getActionStatus
@@ -180,15 +195,27 @@ singTransactionAndSend
      }
   -> Aff (Maybe String)
 singTransactionAndSend userNode afs = do
-  decoded <- lmap show <$> (try $ TxHex.fromCborHex afs.txCborHex)
-  case decoded of
-    Left msg -> pure $ pure $ msg
-    Right decodedTx -> do
-      (signed :: Either String Transaction) <- signTx userNode decodedTx
-      case signed of
-        Left msg -> pure $ pure $ msg
-        Right signedTx -> sendSignedTransactionToLeader userNode afs.uuid
-          (wrap $ wrap signedTx)
+  result <- try $ do
+    signedTx <-
+      TxHex.fromCborHex afs.txCborHex
+        >>= checkChained
+        >>= signChecked
+    sendSignedTransactionToLeader userNode afs.uuid (wrap $ wrap signedTx)
+  case result of
+    Left err -> pure $ pure (message err)
+    Right (Just msg) -> pure $ pure msg
+    Right Nothing -> pure Nothing
+  where
+  checkChained tx = do
+    res <- checkChainedTx userNode tx
+    case res of
+      Left refused -> do
+        sendRejectionToLeader userNode afs.uuid
+        modifyActionsSent userNode (OrderedMap.delete afs.uuid)
+        throwError (error refused)
+      Right checkedTx -> pure checkedTx
+
+  signChecked tx = signTx userNode tx >>= either (error >>> throwError) pure
 
 {- TODO: Many possible errors can be caught here:
  - error during status request to the leader over HTTP (e.g. leader is offline)

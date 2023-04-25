@@ -12,6 +12,7 @@ import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
+import Contract.Transaction (Transaction)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, throwError, try)
@@ -92,19 +93,19 @@ mainTest env admin leader users = do
 
   log "Starting user-1 node"
   (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user1)
+    (makeTestUserConf leaderUrl env user1 (pure <<< Right))
 
   log "Starting user-2 node"
   (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user2)
+    (makeTestUserConf leaderUrl env user2 (pure <<< Right))
 
   log "Starting user-3 node"
   (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user3)
+    (makeTestUserConf leaderUrl env user3 (\_ -> pure $ Left "refuse to sign"))
 
   log "Starting user-4 node"
   (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user4)
+    (makeTestUserConf leaderUrl env user4 (pure <<< Right))
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
@@ -134,8 +135,11 @@ mainTest env admin leader users = do
   Users.performAction userNode4
     (AddAmount $ BigInt.fromInt 1000)
 
-  delay (wrap 5000.0)
+  delay (wrap 10000.0)
+  log "User 1 res:"
   readResults userNode1 >>= log <<< show
+  log "User 4 res:"
+  readResults userNode4 >>= log <<< show
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
   killFiber (error "can't cleanup user") userFiber1
@@ -151,16 +155,20 @@ makeTestLeaderConf
   :: ContractEnv -> KeyWallet -> LeaderConfiguration AdditionAction
 makeTestLeaderConf env kw =
   LeaderConfiguration
-    { maxWaitingTimeForSignature: 5000
+    { maxWaitingTimeForSignature: 3000
     , maxQueueSize: 4
-    , numberOfActionToTriggerChainBuilder: 3
-    , maxWaitingTimeBeforeBuildChain: 5
+    , numberOfActionToTriggerChainBuilder: 4
+    , maxWaitingTimeBeforeBuildChain: 3
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }
 
 makeTestUserConf
-  :: String -> ContractEnv -> KeyWallet -> UserConfiguration AdditionAction
-makeTestUserConf leaderUrl env kw =
+  :: String
+  -> ContractEnv
+  -> KeyWallet
+  -> (Transaction -> Aff (Either String Transaction))
+  -> UserConfiguration AdditionAction
+makeTestUserConf leaderUrl env kw checkChainedTx =
   UserConfiguration
     { maxQueueSize: undefined
     , networkHandlers:
@@ -170,7 +178,7 @@ makeTestUserConf leaderUrl env kw =
         , getActionStatus: userHandlerGetStatus httpClient
         }
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
-
+    , checkChainedTx
     }
   where
   httpClient :: UserClient AdditionAction
