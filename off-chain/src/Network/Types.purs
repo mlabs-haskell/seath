@@ -17,8 +17,8 @@ module Seath.Network.Types
       , ToBeSubmitted
       , Processing
       , WaitingOtherChainSignatures
-      , DiscardedBySignRejection
       , PrioritaryToBeProcessed
+      , Submitted
       , NotFound
       )
   , SendSignedTransaction(SendSignedTransaction)
@@ -28,6 +28,7 @@ module Seath.Network.Types
   , LeaderConfigurationInner
   , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode(LeaderNode)
+  , UserStateInner
   , UserState(UserState)
   , UserHandlers
   , UserConfiguration(UserConfiguration)
@@ -48,7 +49,7 @@ import Aeson
   , toString
   )
 import Contract.Monad (Contract)
-import Contract.Transaction (FinalizedTransaction, Transaction)
+import Contract.Transaction (FinalizedTransaction, Transaction, TransactionHash)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
 import Data.Generic.Rep (class Generic)
@@ -130,15 +131,15 @@ derive instance Newtype GetActionStatus _
 
 data ActionStatus
   = AskForSignature
-      { uuid :: UUID
+      { uuid :: UUID -- Remove it? we don't need anymore with current types.
       , txCborHex :: String -- TODO: maybe separate type?
       }
   | ToBeProcessed Int
   | ToBeSubmitted Int
   | Processing
-  | WaitingOtherChainSignatures
-  | DiscardedBySignRejection
+  | WaitingOtherChainSignatures (Maybe TransactionHash)
   | PrioritaryToBeProcessed Int
+  | Submitted TransactionHash
   | NotFound
 
 derive instance Generic ActionStatus _
@@ -153,10 +154,11 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
     ToBeProcessed i -> encodeTagged' "ToBeProcessed" i
     ToBeSubmitted i -> encodeTagged' "ToBeSubmitted" i
     Processing -> encodeTagged' "Processing" ""
-    WaitingOtherChainSignatures -> encodeTagged' "WaitingOtherChainSignatures"
-      ""
-    DiscardedBySignRejection -> encodeTagged' "DiscardedBySignRejection" ""
+    WaitingOtherChainSignatures txH -> encodeTagged'
+      "WaitingOtherChainSignatures"
+      (encodeAeson txH)
     PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
+    Submitted txH -> encodeTagged' "Submitted" (encodeAeson txH)
     NotFound -> encodeTagged' "NotFound" ""
 
     where
@@ -181,10 +183,11 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "ToBeProcessed" -> ToBeProcessed <$> decodeAeson contents
       "ToBeSubmitted" -> ToBeSubmitted <$> decodeAeson contents
       "Processing" -> Right Processing
-      "WaitingOtherChainSignatures" -> Right WaitingOtherChainSignatures
-      "DiscardedBySignRejection" -> Right DiscardedBySignRejection
+      "WaitingOtherChainSignatures" -> WaitingOtherChainSignatures <$>
+        decodeAeson contents
       "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
+      "Submitted" -> Submitted <$> decodeAeson contents
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
@@ -225,8 +228,9 @@ type LeaderStateInner a =
   , waitingForSignature :: Ref $ OrderedMap UUID Transaction
   , signatureResponses ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
-        (UUID /\ Either Unit Transaction)
+        (UUID /\ Maybe Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
+  , submitted :: Ref $ OrderedMap UUID TransactionHash
   , stage :: Ref LeaderServerStage
   }
 
@@ -263,25 +267,29 @@ newtype LeaderNode a = LeaderNode
 
 derive instance Newtype (LeaderNode a) _
 
-newtype UserState a = UserState
-  {
-    -- | `actionsSent` pourpose is to store the actions already
-    -- | send the to the `leader`that are confirmed to be accepted
-    -- | but are still waiting to reach the requirement of signature.
-    actionsSent :: Ref (OrderedMap UUID a)
-  -- | For actions whose transaction is already signed and sent 
-  -- | to the server.
-  , transactionsSent :: Ref (OrderedMap UUID a)
-  -- | Those signed transactions are confirmed to be in the chain 
-  -- | ready for submission.
-  -- | Once a transaction is confirmed to be done, we can safely 
-  -- | remove it from this.
-  -- | Is advisable to clean it from time to time, Seath WON'T clean it.
-  -- Well maybe we can put a extra call back in the interface that
-  -- is automatically called wen the transaction is confirmed in the 
-  -- blockchain and then we autoremove this transactions.
-  , submitedTransactions :: Ref (OrderedMap UUID a)
+type UserStateInner a =
+  { actionsSentQueue ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        { uuid :: UUID
+        , action :: UserAction a
+        , status :: ActionStatus
+        , previousStatus :: ActionStatus
+        }
+  -- | `actionsSent` pourpose is to store the actions already
+  -- | send the to the `leader`that are confirmed to be accepted
+  -- | but are still waiting to reach the requirement of signature.
+  , actionsSent :: Ref (OrderedMap UUID (UserAction a /\ ActionStatus))
+  , resultsQueue ::
+      Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
+        -- TODO: make this a newtype 
+        { uuid :: UUID
+        , action :: UserAction a
+        -- TODO: Introduce proper type for error instead of String
+        , status :: Either String TransactionHash
+        }
   }
+
+newtype UserState a = UserState (UserStateInner a)
 
 derive instance Newtype (UserState a) _
 

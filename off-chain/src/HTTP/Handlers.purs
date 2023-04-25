@@ -64,7 +64,6 @@ includeAction
   -> { body :: IncludeRequest a }
   -> Aff (JSend IncludeActionError UID)
 includeAction leaderNode req = do
-  -- undefined
   log $ "Leader HTTP-server: include action request: " <> show req
   result <- leaderNode `Leader.includeAction` (unwrap req.body)
   let response = toJsend (rmap UID result)

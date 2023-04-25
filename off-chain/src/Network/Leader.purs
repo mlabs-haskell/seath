@@ -43,11 +43,12 @@ import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
   ( ActionStatus
       ( NotFound
+      , Submitted
       , AskForSignature
       , ToBeProcessed
+      , ToBeSubmitted
       , PrioritaryToBeProcessed
       , Processing
-      , DiscardedBySignRejection
       , WaitingOtherChainSignatures
       )
   , FunctionToPerformContract(FunctionToPerformContract)
@@ -71,6 +72,7 @@ import Seath.Network.Utils
   , getFromLeaderState
   , getFromRefAtLeaderState
   , getNumberOfPending
+  , isAnotherActionInProcess
   , maxPendingCapacity
   , setToRefAtLeaderState
   , signTimeout
@@ -85,13 +87,17 @@ includeAction
   -> UserAction a
   -> Aff (Either IncludeActionError UUID)
 includeAction leaderNode action = do
-  let receivedQueue = getFromLeaderState leaderNode _.receivedActionsRequests
-  queueResponse <- liftEffect $ Ref.new (Right Nothing)
-  _ <- liftEffect $ Queue.put receivedQueue (Right (action /\ queueResponse))
-  value <- loop queueResponse
-  case value of
-    Nothing -> (Left <<< RejectedServerBussy) <$> leaderStateInfo leaderNode
-    (Just uuid) -> pure $ Right uuid
+  inProcess <- isAnotherActionInProcess leaderNode action
+  if inProcess then (Left <<< RejectedServerBussy) <$> leaderStateInfo
+    leaderNode
+  else do
+    let receivedQueue = getFromLeaderState leaderNode _.receivedActionsRequests
+    queueResponse <- liftEffect $ Ref.new (Right Nothing)
+    _ <- liftEffect $ Queue.put receivedQueue (Right (action /\ queueResponse))
+    value <- loop queueResponse
+    case value of
+      Nothing -> (Left <<< RejectedServerBussy) <$> leaderStateInfo leaderNode
+      (Just uuid) -> pure $ Right uuid
 
   where
   loop :: Ref (Either Unit (Maybe UUID)) -> Aff (Maybe UUID)
@@ -124,21 +130,20 @@ actionStatus leaderNode actionId = do
   processCheck <- check _.processing (\_ _ _ -> pure $ Processing)
 
   waitingSignCheck <- check _.waitingForSignature transformForSignature
-  let sigResponseQueue = getFromLeaderState leaderNode _.signatureResponses
+  let signResponseQueue = getFromLeaderState leaderNode _.signatureResponses
 
   signResponses <- liftEffect $
-    OrderedMap.fromFoldable <$> Queue.read sigResponseQueue
+    OrderedMap.fromFoldable <$> Queue.read signResponseQueue
   signResponseCheck <- checkIsIn actionId signResponses
-    (\_ index _ -> pure $ ToBeProcessed index)
+    transfromForSignResponses
 
-  submissionCheck <- checkIsIn actionId signResponses
-    ( \_ _ v -> pure case v of
-        Left _unit -> DiscardedBySignRejection
-        Right _tx -> WaitingOtherChainSignatures
-    )
+  waitingSubmissionCheck <- check _.waitingForSubmission
+    (\_ ind _ -> pure $ ToBeSubmitted ind)
+  submittedCheck <- check _.submitted (\_ _ txH -> pure $ Submitted txH)
 
-  pure $ foldl mergeChecks submissionCheck
-    [ signResponseCheck
+  pure $ foldl mergeChecks submittedCheck
+    [ waitingSubmissionCheck
+    , signResponseCheck
     , waitingSignCheck
     , processCheck
     , prioritarycheck
@@ -169,6 +174,17 @@ actionStatus leaderNode actionId = do
     case eitherTxCborHex of
       Left e -> liftEffect $ throw $ "cbor encoding error: " <> show e
       Right txCborHex -> pure $ AskForSignature { uuid, txCborHex }
+
+  transfromForSignResponses
+    :: UUID -> Int -> Maybe Transaction -> Aff ActionStatus
+  transfromForSignResponses _ _ (Just tx) = do
+    let
+      (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
+        leaderNode
+        _.fromContract
+    WaitingOtherChainSignatures <<< Just <$>
+      (fromContract <<< getFinalizedTransactionHash <<< wrap) tx
+  transfromForSignResponses _ _ Nothing = pure $ NotFound
 
 -- `waitingForSignature` relies on this function and `acceptRefuseToSign`
 -- to be the only ones that append things to `signatureResponses`
@@ -209,7 +225,7 @@ acceptSignedTransaction leaderNode signedTx = do
                   "Already got a response for this uuid: " <> show uuid
                 Nothing -> do
                   liftEffect $ Queue.put sigResponsesQueue
-                    (uuid /\ Right receivedSignedTx)
+                    (uuid /\ Just receivedSignedTx)
                   pure $ Right $ unit
           else
             pure $ Left $ "The received transaction hash: " <> show hashOfSigned
@@ -238,7 +254,7 @@ acceptRefuseToSign leaderNode uuid = do
         Just _ -> pure $ Left $
           "Already got a response for this uuid: " <> show uuid
         Nothing -> do
-          liftEffect $ Queue.put requestsQueue (uuid /\ Left unit)
+          liftEffect $ Queue.put requestsQueue (uuid /\ Nothing)
           pure $ Right $ unit
     Nothing -> pure $ Left
       "can't find transactions in the waiting for signature list"
@@ -248,7 +264,7 @@ acceptRefuseToSign leaderNode uuid = do
 waitForChainSignatures
   :: forall a
    . LeaderNode a
-  -> Aff $ OrderedMap UUID $ Either Unit Transaction
+  -> Aff $ OrderedMap UUID $ Maybe Transaction
 waitForChainSignatures leaderNode = do
   mapOfTransactions <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   let
@@ -259,7 +275,7 @@ waitForChainSignatures leaderNode = do
   loop maxAttempts numberOfTransactions
 
   where
-  loop :: Int -> Int -> Aff $ OrderedMap UUID $ Either Unit Transaction
+  loop :: Int -> Int -> Aff $ OrderedMap UUID $ Maybe Transaction
   loop remainAttempts numberOfTransactions =
     if remainAttempts <= 0 then
       endAction
@@ -275,14 +291,14 @@ waitForChainSignatures leaderNode = do
             -- TODO: 1000 is harcoded here representing 1 second and 1 attempt
             loop (remainAttempts - 1000) numberOfTransactions
 
-  endAction :: Aff $ OrderedMap UUID $ Either Unit Transaction
+  endAction :: Aff $ OrderedMap UUID $ Maybe Transaction
   endAction = do
     signResponses <- liftEffect $ OrderedMap.fromFoldable <$>
       (Queue.takeAll $ getFromLeaderState leaderNode _.signatureResponses)
     waitingForSignatureMap <- getFromRefAtLeaderState leaderNode
       _.waitingForSignature
     let
-      lookup uuid = maybe (Left unit) identity $ OrderedMap.lookup uuid
+      lookup uuid = maybe Nothing identity $ OrderedMap.lookup uuid
         signResponses
       results = (\(x /\ _) -> (x /\ lookup x)) <$> OrderedMap.toArray
         waitingForSignatureMap
@@ -427,12 +443,12 @@ resetLeaderState leaderNode = do
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSignature
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSubmission
   setToRefAtLeaderState leaderNode WaitingForActions _.stage
+  setToRefAtLeaderState leaderNode OrderedMap.empty _.submitted
 
 leaderLoop
   :: forall actionType. Show actionType => LeaderNode actionType -> Aff Unit
 leaderLoop leaderNode = do
   log "Leader: New leader loop begins"
-  resetLeaderState leaderNode
   setStage WaitingForActions
   waitForRequests leaderNode
   log "Leader: Taking batch to process"
@@ -460,7 +476,10 @@ leaderLoop leaderNode = do
   let
     { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
       batchToProcess
-      signatureResults
+      ( ( OrderedMap.fromFoldable <<< ((<$>) (\(k /\ v) -> (k /\ note unit v)))
+            <<< OrderedMap.toArray
+        ) signatureResults
+      )
   log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
   log $ "Leader: for priority list: " <> showUUIDs signatureFailures
   log $ "Leader: setting failures and submission list"
@@ -472,11 +491,14 @@ leaderLoop leaderNode = do
     { sucess: submissionSucess, failures: submissionFailures } = purgeResponses
       batchToProcess
       submissionResults
-  log $ "Leader: sumission sucess: " <> showUUIDs submissionSucess
+  log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
   log $ "Leader: to priority list: " <> showUUIDs submissionFailures
   log $ "Leader: Setting prioritary list"
   let newPrioritary = OrderedMap.union signatureFailures submissionFailures
   setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
+  resetLeaderState leaderNode
+  -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
+  setToRefAtLeaderState leaderNode submissionSucess _.submitted
   log "Leader: Node loop complete!"
   leaderLoop leaderNode
 
@@ -506,6 +528,7 @@ newLeaderState maxRequestAllowed = do
   waitingForSignature <- liftEffect $ Ref.new OrderedMap.empty
   signatureResponses <- liftEffect $ Queue.new
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
+  submitted <- liftEffect $ Ref.new OrderedMap.empty
   stage <- liftEffect $ Ref.new WaitingForActions
   pure $ wrap
     { receivedActionsRequests
@@ -515,6 +538,7 @@ newLeaderState maxRequestAllowed = do
     , waitingForSignature
     , signatureResponses
     , waitingForSubmission
+    , submitted
     , stage
     }
 

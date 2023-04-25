@@ -48,8 +48,6 @@ lookupWithPosition
   :: forall k v. Ord k => k -> OrderedMap k v -> Maybe (Int /\ v)
 lookupWithPosition k (OrderedMap oMap) = Map.lookup k oMap.map
 
--- TODO: tests when API will stabilaze
-
 -- | Add `key` and `value` to `OrderedMap` tracking order of addition.
 -- | Will update element if it member of `OrderedMap`
 push
