@@ -1,9 +1,11 @@
-module Seath.Test.Unit.OrderedMap (spec) where
+module Seath.Test.Unit.OrderedMap (suite) where
 
 import Contract.Prelude hiding (length, lookup)
 
+import Contract.Test.Mote (TestPlanM)
 import Data.Array as Array
 import Data.Map as Map
+import Mote (group, test)
 import Seath.Network.OrderedMap
   ( OrderedMap
   , delete
@@ -21,25 +23,24 @@ import Seath.Network.OrderedMap
   , toArray
   , union
   )
-import Test.Spec (Spec, describe, it)
 import Test.Spec.Assertions (shouldEqual, shouldNotEqual)
 
-spec :: Spec Unit
-spec =
-  describe "OrderedMap" do
-    it "lookupPosition" testLookupPosition
-    it "lookup" testLookup
-    it "lookupWithPosition" testLookupWithPosition
-    it "length" testLength
-    it "empty" testEmpty
-    it "push" testPush
-    it "conversions to array" testToArray
-    it "orderedKeys" testOrderedKeys
-    it "take" testTake
-    it "drop" testDrop
-    it "fromFoldable" testFromFoldable
-    it "union" testUnion
-    it "delete" testDelete
+suite :: TestPlanM (Aff Unit) Unit
+suite =
+  group "OrderedMap" do
+    test "lookupPosition" testLookupPosition
+    test "lookup" testLookup
+    test "lookupWithPosition" testLookupWithPosition
+    test "length" testLength
+    test "empty" testEmpty
+    test "push" testPush
+    test "conversions to array" testToArray
+    test "orderedKeys" testOrderedKeys
+    test "take" testTake
+    test "drop" testDrop
+    test "fromFoldable" testFromFoldable
+    test "union" testUnion
+    test "delete" testDelete
 
 testMap ∷ OrderedMap String String
 testMap = fromFoldable [ "1" /\ "a", "2" /\ "b", "3" /\ "c" ]

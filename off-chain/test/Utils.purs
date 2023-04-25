@@ -1,9 +1,15 @@
 module Seath.Test.Utils
-  ( runnerConfInfo
-  , makeKeyWallet
+  ( Distribution
   , makeDistribution
+  , makeKeyWallet
+  , plutipConfig
+  , runnerConfInfo
   ) where
 
+import Contract.Prelude
+
+import Contract.Config (emptyHooks)
+import Contract.Test.Plutip (PlutipConfig)
 import Contract.Wallet (KeyWallet, privateKeysToKeyWallet)
 import Contract.Wallet.KeyFile
   ( privatePaymentKeyFromFile
@@ -22,7 +28,9 @@ import Data.Functor ((<$>))
 import Data.Monoid ((<>))
 import Data.Newtype (unwrap)
 import Data.Show (show)
+import Data.Time.Duration (Seconds(Seconds))
 import Data.Tuple.Nested (type (/\), (/\))
+import Data.UInt as UInt
 import Effect.Aff (Aff)
 import Node.Path as Path
 import Seath.Test.Types (RunnerConfiguration)
@@ -56,3 +64,26 @@ makeDistribution participantsNumber =
   in
     (adminDistribution /\ leaderDistribution) /\ usersDistribution
 
+plutipConfig :: PlutipConfig
+plutipConfig =
+  { host: "127.0.0.1"
+  , port: UInt.fromInt 8082
+  , logLevel: Info
+  , ogmiosConfig:
+      { port: UInt.fromInt 8081
+      , host: "127.0.0.1"
+      , secure: false
+      , path: Nothing
+      }
+  , kupoConfig:
+      { port: UInt.fromInt 8080
+      , host: "127.0.0.1"
+      , secure: false
+      , path: Nothing
+      }
+  , customLogger: Nothing
+  , suppressLogs: false
+  , hooks: emptyHooks
+  , clusterConfig:
+      { slotLength: Seconds 1.0 }
+  }

@@ -72,6 +72,7 @@ import Seath.Network.Utils
   , getFromLeaderState
   , getFromRefAtLeaderState
   , getNumberOfPending
+  , isAnotherActionInProcess
   , maxPendingCapacity
   , setToRefAtLeaderState
   , signTimeout
@@ -86,13 +87,17 @@ includeAction
   -> UserAction a
   -> Aff (Either IncludeActionError UUID)
 includeAction leaderNode action = do
-  let receivedQueue = getFromLeaderState leaderNode _.receivedActionsRequests
-  queueResponse <- liftEffect $ Ref.new (Right Nothing)
-  _ <- liftEffect $ Queue.put receivedQueue (Right (action /\ queueResponse))
-  value <- loop queueResponse
-  case value of
-    Nothing -> (Left <<< RejectedServerBussy) <$> leaderStateInfo leaderNode
-    (Just uuid) -> pure $ Right uuid
+  inProcess <- isAnotherActionInProcess leaderNode action
+  if inProcess then (Left <<< RejectedServerBussy) <$> leaderStateInfo
+    leaderNode
+  else do
+    let receivedQueue = getFromLeaderState leaderNode _.receivedActionsRequests
+    queueResponse <- liftEffect $ Ref.new (Right Nothing)
+    _ <- liftEffect $ Queue.put receivedQueue (Right (action /\ queueResponse))
+    value <- loop queueResponse
+    case value of
+      Nothing -> (Left <<< RejectedServerBussy) <$> leaderStateInfo leaderNode
+      (Just uuid) -> pure $ Right uuid
 
   where
   loop :: Ref (Either Unit (Maybe UUID)) -> Aff (Maybe UUID)

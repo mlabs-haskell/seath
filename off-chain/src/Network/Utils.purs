@@ -6,25 +6,26 @@ module Seath.Network.Utils
   , getNumberOfPending
   , getPublicKeyHash
   , getUserHandlers
+  , isAnotherActionInProcess
+  , lookupActionsSent
   , maxPendingCapacity
+  , modifyActionsSent
   , pushRefMap_
+  , putToResults
   , readSentActions
   , setToRefAtLeaderState
   , signTimeout
   , takeFromPending
   , userRunContract
-  , withRefFromState
   , userWithRefFromState
-  , modifyActionsSent
-  , putToResults
-  , lookupActionsSent
+  , withRefFromState
   ) where
+
+import Contract.Prelude
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
 import Contract.Transaction (TransactionHash)
-import Control.Applicative (pure)
-import Control.Monad (bind)
 import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head)
 import Data.Array as Array
@@ -34,8 +35,6 @@ import Data.Functor ((<$>))
 import Data.Maybe (Maybe)
 import Data.Newtype (unwrap)
 import Data.Ord (class Ord)
-import Data.Semiring ((+))
-import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID)
 import Data.Unit (Unit)
 import Effect (Effect)
@@ -43,7 +42,6 @@ import Effect.Aff (Aff, error)
 import Effect.Class (liftEffect)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
-import Prelude (discard)
 import Queue as Queue
 import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
@@ -192,3 +190,37 @@ pushRefMap_ k v mutMap =
   Ref.modify_
     (OrderedMap.push k v)
     mutMap
+
+isAnotherActionInProcess
+  :: forall a. LeaderNode a -> UserAction a -> Aff Boolean
+isAnotherActionInProcess ln ua = do
+  inPending <- checkPending
+  inPrioritaryPending <- checkPrioritaryPending
+  inProcessing <- checkProcessing
+  inReceived <- checkReceived
+  pure $ inPending || inPrioritaryPending || inProcessing || inReceived
+  where
+  checkReceived = do
+    received <- liftEffect $ Queue.read $ getFromLeaderState ln
+      _.receivedActionsRequests
+    pure $ (flip Array.any) received $
+      \a -> case a of
+        Right (action /\ _)
+        -> (unwrap action).publicKey == (unwrap ua).publicKey
+        _ -> false
+
+  checkPending = do
+    pending <- liftEffect $ Queue.read $ getFromLeaderState ln
+      _.pendingActionsRequest
+    pure $ (flip Array.any) pending check
+
+  checkPrioritaryPending = do
+    prioritaryPending <- liftEffect $ Ref.read $ getFromLeaderState ln
+      _.prioritaryPendingActions
+    pure $ (flip Array.any) (OrderedMap.toArray prioritaryPending) check
+
+  checkProcessing = do
+    processing <- liftEffect $ Ref.read $ getFromLeaderState ln _.processing
+    pure $ (flip Array.any) (OrderedMap.toArray processing) check
+
+  check (_uuid /\ action) = (unwrap action).publicKey == (unwrap ua).publicKey
