@@ -90,7 +90,6 @@ plutipAction increase wallets = do
       pure unit
     Nothing -> liftEffect $ throw "Can't consume plutip configuration"
   where
-  -- TODO: Maybe we can change this for a `traverse` with a environment? 
   loop
     :: ValidatorHash
     -> Maybe (Array KeyWallet)

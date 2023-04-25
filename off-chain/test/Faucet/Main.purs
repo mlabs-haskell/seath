@@ -15,7 +15,7 @@ import Effect.Class.Console (log)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
 import Seath.Test.Faucet.Contract as Faucet
-import Seath.Test.TestSetup (makeKeyWallet)
+import Seath.Test.Utils (makeKeyWallet)
 
 main :: Effect Unit
 main = launchAff_ $ do
