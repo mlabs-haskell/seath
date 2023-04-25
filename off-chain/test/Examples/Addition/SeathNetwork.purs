@@ -51,7 +51,7 @@ import Seath.Network.Types
   , UserNode
   )
 import Seath.Network.Users as Users
-import Seath.Network.Utils (getPublicKeyHash)
+import Seath.Network.Utils (getPublicKeyHash, readResults)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
@@ -80,6 +80,7 @@ mainTest env admin leader users = do
   user1 <- liftMaybe (error "No user wallet") (users !! 0)
   user2 <- liftMaybe (error "No user wallet") (users !! 1)
   user3 <- liftMaybe (error "No user wallet") (users !! 2)
+  user4 <- liftMaybe (error "No user wallet") (users !! 3)
 
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     mkAdditionCoreConfig
@@ -101,6 +102,10 @@ mainTest env admin leader users = do
   (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
     (makeTestUserConf leaderUrl env user3)
 
+  log "Starting user-4 node"
+  (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
+    (makeTestUserConf leaderUrl env user4)
+
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
     _testLeaderConf
@@ -120,17 +125,23 @@ mainTest env admin leader users = do
     (AddAmount $ BigInt.fromInt 1)
   log "Fire user-2 include action request"
   Users.performAction userNode2
-    (AddAmount $ BigInt.fromInt 5)
+    (AddAmount $ BigInt.fromInt 10)
   log "Fire user-3 include action request"
   Users.performAction userNode3
-    (AddAmount $ BigInt.fromInt 10)
+    (AddAmount $ BigInt.fromInt 100)
+
+  log "Fire user-4 include action request"
+  Users.performAction userNode4
+    (AddAmount $ BigInt.fromInt 1000)
 
   delay (wrap 5000.0)
+  readResults userNode1 >>= log <<< show
   -- we don't really need this as all is run in supervise, but is good to have 
   -- the option
   killFiber (error "can't cleanup user") userFiber1
   killFiber (error "can't cleanup user") userFiber2
   killFiber (error "can't cleanup user") userFiber3
+  killFiber (error "can't cleanup user") userFiber4
   killFiber (error "can't cleanup leader loop") leaderLoopFiber
   Payload.Server.close server
   log "end"
@@ -152,7 +163,7 @@ makeTestUserConf
 makeTestUserConf leaderUrl env kw =
   UserConfiguration
     { maxQueueSize: undefined
-    , clientHandlers:
+    , networkHandlers:
         { submitToLeader: userHandlerSendAction httpClient
         , sendSignedToLeader: userHandlerSendSignedToLeader httpClient
         , refuseToSign: userHandlerRefuseToSign httpClient

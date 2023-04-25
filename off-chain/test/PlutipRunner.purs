@@ -1,11 +1,8 @@
 module Seath.Test.PlutipRunner (run) where
 
-import Contract.Config (LogLevel(Info), emptyHooks)
 import Contract.Monad (launchAff_)
-import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
-import Data.Maybe (Maybe(Nothing))
+import Contract.Test.Plutip (withPlutipContractEnv)
 import Data.Tuple.Nested ((/\))
-import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (supervise)

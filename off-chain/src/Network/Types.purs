@@ -1,38 +1,25 @@
 module Seath.Network.Types
-  ( MilliSeconds
-  , IncludeActionError(RejectedServerBussy)
-  , AcceptSignedTransactionError(AcceptSignedTransactionError)
-  , LeaderServerStage
-      ( WaitingForActions
-      , BuildingChain
-      , WaitingForChainSignatures
-      , SubmittingChain
-      )
-  , SignedTransaction(SignedTransaction)
-  , LeaderServerInfo(LeaderServerInfo)
-  , GetActionStatus(GetActionStatus)
-  , ActionStatus
-      ( AskForSignature
-      , ToBeProcessed
-      , ToBeSubmitted
-      , Processing
-      , WaitingOtherChainSignatures
-      , PrioritaryToBeProcessed
-      , Submitted
-      , NotFound
-      )
-  , SendSignedTransaction(SendSignedTransaction)
-  , LeaderStateInner
-  , LeaderState(LeaderState)
-  , FunctionToPerformContract(FunctionToPerformContract)
+  ( AcceptSignedTransactionError(..)
+  , ActionResult
+  , ActionStatus(..)
+  , FunctionToPerformContract(..)
+  , GetActionStatus(..)
+  , IncludeActionError(..)
+  , LeaderConfiguration(..)
   , LeaderConfigurationInner
-  , LeaderConfiguration(LeaderConfiguration)
-  , LeaderNode(LeaderNode)
+  , LeaderNode(..)
+  , LeaderServerInfo(..)
+  , LeaderServerStage(..)
+  , LeaderState(..)
+  , LeaderStateInner
+  , MilliSeconds
+  , SendSignedTransaction(..)
+  , SignedTransaction(..)
+  , UserConfiguration(..)
+  , NetworkHandlers
+  , UserNode(..)
+  , UserState(..)
   , UserStateInner
-  , UserState(UserState)
-  , UserHandlers
-  , UserConfiguration(UserConfiguration)
-  , UserNode(UserNode)
   ) where
 
 import Contract.Prelude
@@ -267,6 +254,13 @@ newtype LeaderNode a = LeaderNode
 
 derive instance Newtype (LeaderNode a) _
 
+type ActionResult a =
+  { uuid :: UUID
+  , action :: UserAction a
+  -- TODO: Introduce proper type for error instead of String
+  , status :: Either String TransactionHash
+  }
+
 type UserStateInner a =
   { actionsSentQueue ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
@@ -282,18 +276,14 @@ type UserStateInner a =
   , resultsQueue ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
         -- TODO: make this a newtype 
-        { uuid :: UUID
-        , action :: UserAction a
-        -- TODO: Introduce proper type for error instead of String
-        , status :: Either String TransactionHash
-        }
+        (ActionResult a)
   }
 
 newtype UserState a = UserState (UserStateInner a)
 
 derive instance Newtype (UserState a) _
 
-type UserHandlers a =
+type NetworkHandlers a =
   { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
   , sendSignedToLeader ::
       SendSignedTransaction
@@ -304,7 +294,7 @@ type UserHandlers a =
 
 newtype UserConfiguration a = UserConfiguration
   { maxQueueSize :: Int
-  , clientHandlers :: UserHandlers a
+  , networkHandlers :: NetworkHandlers a
   , fromContract :: FunctionToPerformContract
   }
 

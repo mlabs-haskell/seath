@@ -50,7 +50,7 @@ import Seath.Network.Types
   , UserState
   )
 import Seath.Network.Utils
-  ( getUserHandlers
+  ( getNetworkHandlers
   , modifyActionsSent
   , putToResults
   , readSentActions
@@ -67,13 +67,13 @@ sendActionToLeader
   -> UserAction a
   -> Aff $ Either IncludeActionError UUID
 sendActionToLeader userNode action =
-  (getUserHandlers userNode).submitToLeader action
+  (getNetworkHandlers userNode).submitToLeader action
 
 -- Query server for action status
 getActionStatus
   :: forall a. UserNode a -> UUID -> Aff ActionStatus
 getActionStatus userNode =
-  (getUserHandlers userNode).getActionStatus
+  (getNetworkHandlers userNode).getActionStatus
 
 signTx
   :: forall a. UserNode a -> Transaction -> Aff (Either String Transaction)
@@ -100,7 +100,7 @@ sendSignedTransactionToLeader userNode uuid signedTx = do
       log msg
       pure $ pure msg
     Right (cbor' :: String) -> do
-      res <- try $ (getUserHandlers userNode).sendSignedToLeader
+      res <- try $ (getNetworkHandlers userNode).sendSignedToLeader
         (wrap { uuid: uuid, txCborHex: cbor' })
       case res of
         Left e -> do
@@ -123,7 +123,7 @@ sendRejectionToLeader
   -> UUID
   -> Aff Unit
 sendRejectionToLeader userNode uuid = do
-  res <- try $ (getUserHandlers userNode).refuseToSign uuid
+  res <- try $ (getNetworkHandlers userNode).refuseToSign uuid
   log $ "User: refusing to sing " <> show uuid <> ", result: " <> show res
 
 -- | The right function to begin the process of a new action (don't use `sendActionToLeader`)
@@ -203,7 +203,7 @@ singTransactionAndSend userNode afs = do
  For now, we put a string with the error.
 -}
 -- | This is intended to be the only function that manipulates `actionsSent` in the 
--- | `UserCOnfiguration`
+-- | `UserConfiguration`
 makeActionsSentHandler
   :: forall a
    . Show a

@@ -5,13 +5,14 @@ module Seath.Network.Utils
   , getFromRefAtLeaderState
   , getNumberOfPending
   , getPublicKeyHash
-  , getUserHandlers
+  , getNetworkHandlers
   , isAnotherActionInProcess
   , lookupActionsSent
   , maxPendingCapacity
   , modifyActionsSent
   , pushRefMap_
   , putToResults
+  , readResults
   , readSentActions
   , setToRefAtLeaderState
   , signTimeout
@@ -47,13 +48,14 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( ActionStatus
+  ( ActionResult
+  , ActionStatus
   , FunctionToPerformContract
   , LeaderConfiguration
   , LeaderConfigurationInner
   , LeaderNode(LeaderNode)
   , LeaderStateInner
-  , UserHandlers
+  , NetworkHandlers
   , UserNode(UserNode)
   , UserStateInner
   )
@@ -140,16 +142,23 @@ modifyActionsSent userNode transform =
 putToResults
   :: forall a
    . UserNode a
-  -> { uuid :: UUID
-     , action :: UserAction a
-     , status :: Either String TransactionHash
-     }
+  -> ActionResult a
   -> Aff Unit
 putToResults userNode result =
   let
     resultsQueue = (unwrap (unwrap userNode).state).resultsQueue
   in
     liftEffect $ Queue.put resultsQueue result
+
+readResults
+  :: forall a
+   . UserNode a
+  -> Aff (Array (ActionResult a))
+readResults userNode =
+  let
+    resultsQueue = (unwrap (unwrap userNode).state).resultsQueue
+  in
+    liftEffect $ Queue.read resultsQueue
 
 userRunContract
   :: forall a. UserNode a -> FunctionToPerformContract
@@ -181,8 +190,8 @@ readSentActions
 readSentActions (UserNode node) = liftEffect $
   OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
 
-getUserHandlers :: forall a. UserNode a -> UserHandlers a
-getUserHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
+getNetworkHandlers :: forall a. UserNode a -> NetworkHandlers a
+getNetworkHandlers (UserNode node) = (unwrap node.configuration).networkHandlers
 
 pushRefMap_
   :: forall k v. Ord k => k -> v -> Ref (OrderedMap k v) -> Effect Unit
