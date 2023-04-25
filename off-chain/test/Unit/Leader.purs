@@ -2,27 +2,14 @@ module Seath.Test.Unit.Leader where
 
 import Contract.Prelude
 
-import Contract.Test.Mote (TestPlanM, interpretWithConfig)
-import Contract.Test.Plutip
-  ( PlutipTest
-  , testPlutipContracts
-  , withKeyWallet
-  , withWallets
-  )
-import Contract.Test.Utils (exitCode, interruptOnSignal)
+import Contract.Test.Mote (TestPlanM)
+import Contract.Test.Plutip (PlutipTest, withKeyWallet, withWallets)
 import Control.Monad.Error.Class (liftMaybe)
 import Control.Monad.Reader (ask)
 import Data.Array ((!!))
 import Data.BigInt (fromInt) as BigInt
-import Data.Posix.Signal (Signal(SIGINT))
 import Data.UUID (genUUID)
-import Effect.Aff
-  ( Milliseconds(Milliseconds)
-  , cancelWith
-  , effectCanceler
-  , error
-  , launchAff
-  )
+import Effect.Aff (error)
 import Effect.Ref as Ref
 import Mote (group, test)
 import Queue as Queue
@@ -36,17 +23,8 @@ import Seath.Network.Types
 import Seath.Network.Utils (getFromLeaderState, setToRefAtLeaderState)
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
 import Seath.Test.Utils (Distribution, makeDistribution)
-import Seath.Test.Utils as Test.Utils
 import Test.Spec.Assertions (shouldEqual, shouldSatisfy)
-import Test.Spec.Runner (defaultConfig)
 import Undefined (undefined)
-
-main :: Effect Unit
-main = interruptOnSignal SIGINT =<< launchAff do
-  flip cancelWith (effectCanceler (exitCode 1)) do
-    interpretWithConfig
-      defaultConfig { timeout = Just $ Milliseconds 70_000.0, exit = true } $
-      testPlutipContracts Test.Utils.plutipConfig suite
 
 testLeaderConfig :: LeaderConfiguration AdditionAction
 testLeaderConfig =
