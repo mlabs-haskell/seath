@@ -17,7 +17,7 @@ import Contract.Transaction
   , signTransaction
   )
 import Control.Monad (bind)
-import Data.Bifunctor (bimap, lmap)
+import Data.Bifunctor (bimap)
 import Data.Either (Either)
 import Data.Function (($))
 import Data.Time.Duration (Milliseconds(Milliseconds))

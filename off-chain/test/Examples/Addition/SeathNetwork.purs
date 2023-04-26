@@ -10,7 +10,6 @@ import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
-import Contract.Transaction (FinalizedTransaction, Transaction)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, try)
@@ -24,19 +23,12 @@ import Data.Unit (Unit)
 import Effect.Aff (delay, error, forkAff, killFiber)
 import Payload.Server as Payload.Server
 import Prelude (show)
-import Seath.Core.ChainBuilder as ChainBuilder
-import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.UserHandlers as HttpUser
+import Seath.HTTP.Utils (mkLeaderConfig, mkUserConfig)
 import Seath.Network.Leader as Leader
-import Seath.Network.Types
-  ( LeaderConfiguration(LeaderConfiguration)
-  , LeaderNode
-  , RunContract(..)
-  , UserConfiguration(UserConfiguration)
-  , UserNode
-  )
+import Seath.Network.Types (LeaderNode, RunContract(RunContract), UserNode)
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash, readResults)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
@@ -71,34 +63,29 @@ mainTest env admin leader users = do
   user4 <- liftMaybe (error "No user wallet") (users !! 3)
 
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
-    mkAdditionCoreConfig
-
-  let -- hadler for the User to make action using CTL Contract
-    buildChain actions =
-      runContractInEnv env $ withKeyWallet leader $ fst
-        <$> ChainBuilder.buildChain coreConfig actions Nothing
+    buildAdditionCoreConfig
 
   log "Starting user-1 node"
   (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl (mkRunner user1) (pure <<< Right))
+    (mkUserConfig leaderUrl (mkRunner user1) (pure <<< Right))
 
   log "Starting user-2 node"
   (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl (mkRunner user2) (pure <<< Right))
+    (mkUserConfig leaderUrl (mkRunner user2) (pure <<< Right))
 
   log "Starting user-3 node"
   (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
-    ( makeTestUserConf leaderUrl (mkRunner user3)
+    ( mkUserConfig leaderUrl (mkRunner user3)
         (\_ -> pure $ Left "refuse to sign")
     )
 
   log "Starting user-4 node"
   (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl (mkRunner user4) (pure <<< Right))
+    (mkUserConfig leaderUrl (mkRunner user4) (pure <<< Right))
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
-    (makeTestLeaderConf (mkRunner leader) buildChain)
+    (mkLeaderConfig coreConfig (mkRunner leader))
 
   log "Starting leader node loop"
   leaderLoopFiber <- forkAff $ Leader.leaderLoop leaderNode
@@ -126,6 +113,8 @@ mainTest env admin leader users = do
   delay (wrap 10000.0)
   log "User 1 res:"
   readResults userNode1 >>= log <<< show
+  log "User 3 res:"
+  readResults userNode3 >>= log <<< show
   log "User 4 res:"
   readResults userNode4 >>= log <<< show
   -- we don't really need this as all is run in supervise, but is good to have 
@@ -139,33 +128,6 @@ mainTest env admin leader users = do
   log "end"
 
 -- LeaderNode config
-makeTestLeaderConf
-  :: RunContract
-  -> ( Array (UserAction AdditionAction)
-       -> Aff (Array (FinalizedTransaction /\ UserAction AdditionAction))
-     )
-  -> LeaderConfiguration AdditionAction
-makeTestLeaderConf runContract buildChain =
-  LeaderConfiguration
-    { maxWaitingTimeForSignature: 3000
-    , maxQueueSize: 4
-    , numberOfActionToTriggerChainBuilder: 4
-    , maxWaitingTimeBeforeBuildChain: 3000
-    , runContract
-    , buildChain
-    }
-
-makeTestUserConf
-  :: String
-  -> RunContract
-  -> (Transaction -> Aff (Either String Transaction))
-  -> UserConfiguration AdditionAction
-makeTestUserConf leaderUrl runContract checkChainedTx =
-  UserConfiguration
-    { networkHandlers: HttpUser.mkHttpHandlers leaderUrl
-    , runContract
-    , checkChainedTx
-    }
 
 checkInitSctipt
   :: ContractEnv
@@ -208,7 +170,7 @@ waitForFunding options = do
           else pure unit
         Nothing -> waitNSlots slots *> loop slots (remainingAttempts - 1)
 
-mkAdditionCoreConfig
+buildAdditionCoreConfig
   ∷ Contract
       ( CoreConfiguration
           AdditionAction
@@ -217,7 +179,7 @@ mkAdditionCoreConfig
           AdditionDatum
           AdditionRedeemer
       )
-mkAdditionCoreConfig = do
+buildAdditionCoreConfig = do
   vaildatorHash <- Addition.fixedValidatorHash
   leaderPkh <- getPublicKeyHash
   pure $ CoreConfiguration
