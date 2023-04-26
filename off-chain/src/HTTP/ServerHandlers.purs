@@ -1,4 +1,4 @@
-module Seath.HTTP.Handlers where
+module Seath.HTTP.ServerHandlers where
 
 import Contract.Prelude
 

@@ -7,7 +7,7 @@ import Data.Either (Either)
 import Effect.Aff (Aff)
 import Payload.Server (Server)
 import Payload.Server as Payload
-import Seath.HTTP.Handlers as Handlers
+import Seath.HTTP.ServerHandlers as Handlers
 import Seath.HTTP.Spec as Spec
 import Seath.Network.Types (LeaderNode)
 

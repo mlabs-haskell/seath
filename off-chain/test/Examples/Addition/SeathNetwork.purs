@@ -1,11 +1,9 @@
 module Test.Examples.Addition.SeathNetwork
   ( mainTest
-  , userHandlerRefuseToSign
   ) where
 
 import Contract.Prelude
 
-import Aeson (class EncodeAeson, decodeJsonString)
 import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, ContractEnv, runContractInEnv)
@@ -15,39 +13,29 @@ import Contract.Test (withKeyWallet)
 import Contract.Transaction (Transaction)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
-import Control.Monad.Error.Class (liftMaybe, throwError, try)
+import Control.Monad.Error.Class (liftMaybe, try)
 import Data.Array ((!!))
 import Data.Bifunctor (lmap)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Map as Map
 import Data.Time.Duration (Milliseconds(Milliseconds))
-import Data.UUID (UUID, parseUUID)
 import Data.Unit (Unit)
 import Effect.Aff (delay, error, forkAff, killFiber)
-import Payload.ResponseTypes (Response(Response))
 import Payload.Server as Payload.Server
 import Prelude (show)
-import Seath.Common.Types (UID(UID))
 import Seath.Core.ChainBuilder as ChainBuilder
-import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.HTTP.Client (UserClient)
 import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
-import Seath.HTTP.Types
-  ( IncludeRequest(IncludeRequest)
-  , SendSignedRequest(SendSignedRequest)
-  )
+import Seath.HTTP.UserHandlers as HttpUser
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
-  ( AcceptSignedTransactionError
-  , ActionStatus
-  , FunctionToPerformContract(FunctionToPerformContract)
-  , IncludeActionError
+  ( FunctionToPerformContract(FunctionToPerformContract)
   , LeaderConfiguration(LeaderConfiguration)
   , LeaderNode
-  , SendSignedTransaction
   , UserConfiguration(UserConfiguration)
   , UserNode
   )
@@ -171,84 +159,13 @@ makeTestUserConf
 makeTestUserConf leaderUrl env kw checkChainedTx =
   UserConfiguration
     { maxQueueSize: undefined
-    , networkHandlers:
-        { submitToLeader: userHandlerSendAction httpClient
-        , sendSignedToLeader: userHandlerSendSignedToLeader httpClient
-        , refuseToSign: userHandlerRefuseToSign httpClient
-        , getActionStatus: userHandlerGetStatus httpClient
-        }
+    , networkHandlers: HttpUser.mkHttpHandlers httpClient
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     , checkChainedTx
     }
   where
   httpClient :: UserClient AdditionAction
   httpClient = Client.mkUserClient (Proxy :: Proxy AdditionAction) leaderUrl
-
-userHandlerSendAction
-  :: forall a
-   . EncodeAeson a
-  => UserClient a
-  -> UserAction a
-  -> Aff (Either IncludeActionError UUID)
-userHandlerSendAction client action = do
-  res <- client.leader.includeAction
-    { body: IncludeRequest action }
-  case res of
-    Right resp -> do
-      convertResonse resp
-    Left r -> throwError
-      (error $ "Leader failed to respond to send action: " <> show r)
-  where
-  convertResonse (Response r) =
-    if (r.body.status == "success") then
-      maybe (throwError $ error "Can't parse request ID") (Right >>> pure)
-        (parseUUID r.body.data)
-    else either (show >>> error >>> throwError) (Left >>> pure)
-      (decodeJsonString r.body.data)
-
-userHandlerGetStatus
-  :: UserClient AdditionAction
-  -> UUID
-  -> Aff ActionStatus
-userHandlerGetStatus client uuid = do
-  res <-
-    client.leader.actionStatus
-      { params: { uid: UID uuid } }
-  case res of
-    Right resp -> convertResonse resp
-    Left r -> throwError (error $ "Leader failed to respond: " <> show r)
-  where
-  convertResonse (Response r) =
-    if (r.body.status == "success") then
-      either (show >>> error >>> throwError) pure
-        (decodeJsonString r.body.data)
-    else either (show >>> error >>> throwError) (error >>> throwError)
-      (decodeJsonString r.body.data)
-
-userHandlerSendSignedToLeader
-  :: UserClient AdditionAction
-  -> SendSignedTransaction
-  -> Aff (Either AcceptSignedTransactionError Unit)
-userHandlerSendSignedToLeader client sendSig = do
-  res <- client.leader.acceptSignedTransaction
-    { body: SendSignedRequest sendSig }
-  case res of
-    -- FIXME: leader responds witn Unit always
-    -- but client expects AcceptSignedTransactionError as well
-    Right _resp -> pure $ Right unit
-    Left e -> throwError (error $ show e)
-
-userHandlerRefuseToSign
-  :: UserClient AdditionAction
-  -> UUID
-  -> Aff Unit
-userHandlerRefuseToSign client uuid = do
-  res <-
-    client.leader.refuseToSign
-      { params: { uid: UID uuid } }
-  case res of
-    Right _ -> pure unit
-    Left r -> throwError (error $ show r)
 
 makeToPerformContract
   :: forall b. ContractEnv -> KeyWallet -> Contract b -> Aff b
