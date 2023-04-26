@@ -117,7 +117,6 @@ newtype CoreConfiguration
                 (StateReturn validatorType datumType redeemerType userStateType)
          )
   , queryBlockchainState :: Contract (UtxoMap /\ userStateType)
-  , numberOfBuiltChains :: Int
   }
 
 newtype ChainBuilderState actionType userStateType = ChainBuilderState

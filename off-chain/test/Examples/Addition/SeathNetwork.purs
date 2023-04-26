@@ -230,5 +230,4 @@ mkAdditionCoreConfig = do
     , stateVaildatorHash: vaildatorHash
     , actionHandler: Addition.handleAction
     , queryBlockchainState: Addition.queryBlockchainState
-    , numberOfBuiltChains: 0
     }
