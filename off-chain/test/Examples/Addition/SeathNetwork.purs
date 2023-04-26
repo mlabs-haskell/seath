@@ -10,7 +10,7 @@ import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
-import Contract.Transaction (Transaction)
+import Contract.Transaction (FinalizedTransaction, Transaction)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, try)
@@ -25,7 +25,7 @@ import Effect.Aff (delay, error, forkAff, killFiber)
 import Payload.Server as Payload.Server
 import Prelude (show)
 import Seath.Core.ChainBuilder as ChainBuilder
-import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration), UserAction)
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.UserHandlers as HttpUser
@@ -98,8 +98,7 @@ mainTest env admin leader users = do
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
-    (makeTestLeaderConf (mkRunner leader))
-    buildChain
+    (makeTestLeaderConf (mkRunner leader) buildChain)
 
   log "Starting leader node loop"
   leaderLoopFiber <- forkAff $ Leader.leaderLoop leaderNode
@@ -141,14 +140,19 @@ mainTest env admin leader users = do
 
 -- LeaderNode config
 makeTestLeaderConf
-  :: RunContract -> LeaderConfiguration AdditionAction
-makeTestLeaderConf runContract =
+  :: RunContract
+  -> ( Array (UserAction AdditionAction)
+       -> Aff (Array (FinalizedTransaction /\ UserAction AdditionAction))
+     )
+  -> LeaderConfiguration AdditionAction
+makeTestLeaderConf runContract buildChain =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 3000
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 4
     , maxWaitingTimeBeforeBuildChain: 3000
     , runContract
+    , buildChain
     }
 
 makeTestUserConf

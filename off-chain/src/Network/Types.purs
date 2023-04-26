@@ -230,16 +230,17 @@ derive instance Newtype (LeaderState a) _
 newtype RunContract = RunContract
   (forall b. Contract b -> Aff b)
 
-type LeaderConfigurationInner :: forall k. k -> Type
 type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
   , runContract :: RunContract
+  , buildChain ::
+      Array (UserAction a)
+      -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }
 
-newtype LeaderConfiguration :: forall k. k -> Type
 newtype LeaderConfiguration a = LeaderConfiguration (LeaderConfigurationInner a)
 
 derive instance Newtype (LeaderConfiguration a) _
@@ -247,9 +248,6 @@ derive instance Newtype (LeaderConfiguration a) _
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
-  , buildChain ::
-      Array (UserAction a)
-      -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }
 
 derive instance Newtype (LeaderNode a) _

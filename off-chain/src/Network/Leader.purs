@@ -35,6 +35,7 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Partial.Unsafe (unsafePartial)
 import Queue as Queue
+import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types (UserAction)
 import Seath.Core.Utils (getFinalizedTransactionHash)
 import Seath.Network.OrderedMap (OrderedMap)
@@ -376,17 +377,13 @@ newLeaderNode
   :: forall a
    . Show a
   => LeaderConfiguration a
-  -> ( Array (UserAction a)
-       -> Aff (Array (FinalizedTransaction /\ UserAction a))
-     )
   -> Aff (LeaderNode a)
-newLeaderNode conf buildChain' = do
+newLeaderNode conf = do
   newState <- newLeaderState (unwrap conf).numberOfActionToTriggerChainBuilder
   let
     node = LeaderNode
       { state: newState
       , configuration: conf
-      , buildChain: buildChain'
       }
   pure node
 
@@ -408,7 +405,14 @@ buildChain
   -> OrderedMap UUID (UserAction a)
   -> Aff (Either String (OrderedMap UUID Transaction))
 buildChain leaderNode toProcess = do
-  txChain <- try $ (unwrap leaderNode).buildChain
+
+  -- let (RunContract runContract) = getFromLeaderConfiguration
+  --       leaderNode _.runContract
+
+  -- txChainTst <- try $ runContract (fst
+  --       <$> ChainBuilder.buildChain undefined (snd <$> OrderedMap.orderedElems toProcess) Nothing)
+
+  txChain <- try $ getFromLeaderConfiguration leaderNode _.buildChain
     (snd <$> OrderedMap.orderedElems toProcess)
   case txChain of
     Left e -> pure $ Left (show e)

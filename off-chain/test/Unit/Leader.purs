@@ -33,7 +33,8 @@ testLeaderConfig =
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 3
     , maxWaitingTimeBeforeBuildChain: 5
-    , runContract: RunContract undefined
+    , runContract: RunContract undefined -- not used in this test case scenario
+    , buildChain: \_ -> undefined -- not used in this test case scenario
     }
 
 suite :: TestPlanM PlutipTest Unit
@@ -55,7 +56,6 @@ testDuplicateUserAddition = do
     let
       newNode = liftAff
         $ Leader.newLeaderNode testLeaderConfig
-            (const $ pure undefined) -- not used in this test case scenario
 
     node1 <- newNode
 
