@@ -25,6 +25,7 @@ import Contract.Transaction
 import Data.Array as Array
 import Data.Bifunctor (lmap)
 import Data.Either (Either)
+import Data.Int (toNumber)
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
@@ -64,6 +65,7 @@ import Seath.Network.Types
       )
   , LeaderState
   , LeaderStateInner
+  , MilliSeconds
   , RunContract(RunContract)
   , SendSignedTransaction
   )
@@ -269,16 +271,20 @@ waitForChainSignatures
 waitForChainSignatures leaderNode = do
   mapOfTransactions <- getFromRefAtLeaderState leaderNode _.waitingForSignature
   let
-    maxAttempts = getFromLeaderConfiguration leaderNode
+    maxWaitingTime = getFromLeaderConfiguration leaderNode
       _.maxWaitingTimeForSignature
     numberOfTransactions = OrderedMap.length mapOfTransactions
 
-  loop maxAttempts numberOfTransactions
+  loop maxWaitingTime 0 numberOfTransactions
 
   where
-  loop :: Int -> Int -> Aff $ OrderedMap UUID $ Maybe Transaction
-  loop remainAttempts numberOfTransactions =
-    if remainAttempts <= 0 then
+  loop
+    :: MilliSeconds
+    -> MilliSeconds
+    -> Int
+    -> Aff $ OrderedMap UUID $ Maybe Transaction
+  loop maxWaitingTime waitedTime numberOfTransactions =
+    if waitedTime >= maxWaitingTime then
       endAction
     else
       do
@@ -288,10 +294,9 @@ waitForChainSignatures leaderNode = do
           endAction
         else
           do
-            delay $ wrap 500.0 -- TODO: should be configurable
-            -- TODO: 1000 is harcoded here representing 1 second and 1 attempt
-            -- TODO: should be configurable
-            loop (remainAttempts - 1000) numberOfTransactions
+            let stepDelay = 1000 -- TODO: should be configurable
+            delay $ wrap (toNumber stepDelay)
+            loop maxWaitingTime (waitedTime + stepDelay) numberOfTransactions
 
   endAction :: Aff $ OrderedMap UUID $ Maybe Transaction
   endAction = do
@@ -428,17 +433,21 @@ buildChain leaderNode toProcess = do
 waitForRequests :: forall a. LeaderNode a -> Aff Unit
 waitForRequests ln = do
   let
-    attempts = getFromLeaderConfiguration ln _.maxWaitingTimeBeforeBuildChain
-  loop attempts
+    maxWatingTime = getFromLeaderConfiguration ln
+      _.maxWaitingTimeBeforeBuildChain
+  loop maxWatingTime 0
   where
-  loop 0 = pure unit
-  loop attempts = do
-    let tHold = getChaintriggerTreshold ln
-    pendingNum <- getNumberOfPending ln
-    if pendingNum >= tHold then pure unit
+  -- loop 0 = pure unit
+  loop maxWatingTime waitedTime =
+    if waitedTime >= maxWatingTime then pure unit
     else do
-      delay (Milliseconds 1000.0) -- TODO: should be configurable
-      loop (attempts - 1000) -- TODO: should be configurable
+      let tHold = getChaintriggerTreshold ln
+      pendingNum <- getNumberOfPending ln
+      if pendingNum >= tHold then pure unit
+      else do
+        let stepDelay = 1000 -- TODO: should be configurable
+        delay (wrap $ toNumber stepDelay)
+        loop maxWatingTime (waitedTime + stepDelay)
 
 -- | Put an empty value in every ref of the `LeaderState` 
 -- | except for `pendingActionsRequest` and `prioritaryPendingActions`

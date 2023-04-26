@@ -36,8 +36,6 @@ import Aeson
   , toString
   )
 import Contract.Monad (Contract)
-import Contract.PlutusData (class FromData, class ToData)
-import Contract.Scripts (class DatumType, class RedeemerType)
 import Contract.Transaction (FinalizedTransaction, Transaction, TransactionHash)
 import Ctl.Internal.Helpers (encodeTagged')
 import Data.Either (Either)
@@ -49,7 +47,7 @@ import Effect.Aff (Aff)
 import Effect.Ref (Ref)
 import Queue as Queue
 import Seath.Common.Types (UID(UID))
-import Seath.Core.Types (CoreConfiguration, UserAction)
+import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Type.Function (type ($))
 
@@ -236,7 +234,7 @@ type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
-  , maxWaitingTimeBeforeBuildChain :: Int
+  , maxWaitingTimeBeforeBuildChain :: MilliSeconds
   , runContract :: RunContract
   , buildChain ::
       Array (UserAction a)

@@ -29,7 +29,11 @@ mkLeaderConfig
        redeemerType
   -> RunContract
   -> LeaderConfiguration actionType
-mkLeaderConfig coreConfig runContract =
+mkLeaderConfig
+  -- maxQueueSize
+  -- maxWaitingTimeForSignature
+  coreConfig
+  runContract =
 
   let
     (RunContract runC) = runContract

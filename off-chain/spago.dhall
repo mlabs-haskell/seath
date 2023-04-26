@@ -16,6 +16,7 @@ You can edit this file as you like.
   , "effect"
   , "either"
   , "exceptions"
+  , "integers"
   , "maybe"
   , "monad-logger"
   , "mote"
