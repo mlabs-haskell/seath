@@ -232,7 +232,6 @@ newtype RunContract = RunContract
 
 type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
-  , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: MilliSeconds
   , runContract :: RunContract

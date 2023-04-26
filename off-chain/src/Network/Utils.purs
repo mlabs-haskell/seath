@@ -1,14 +1,14 @@
 module Seath.Network.Utils
-  ( getChaintriggerTreshold
+  ( actionToTriggerChainBuild
+  , getChaintriggerTreshold
   , getFromLeaderConfiguration
   , getFromLeaderState
   , getFromRefAtLeaderState
+  , getNetworkHandlers
   , getNumberOfPending
   , getPublicKeyHash
-  , getNetworkHandlers
   , isAnotherActionInProcess
   , lookupActionsSent
-  , maxPendingCapacity
   , modifyActionsSent
   , pushRefMap_
   , putToResults
@@ -172,11 +172,12 @@ getNumberOfPending ln = do
     _.pendingActionsRequest
   pure $ numberOfPrioritary + numberOfPending
 
-maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
-maxPendingCapacity conf = (unwrap conf).maxQueueSize
-
 signTimeout :: forall a. LeaderConfiguration a -> Int
 signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
+
+actionToTriggerChainBuild :: forall a. LeaderConfiguration a -> Int
+actionToTriggerChainBuild conf =
+  (unwrap conf).numberOfActionToTriggerChainBuilder
 
 getChaintriggerTreshold :: forall a. LeaderNode a -> Int
 getChaintriggerTreshold (LeaderNode node) =

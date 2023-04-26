@@ -70,13 +70,13 @@ import Seath.Network.Types
   , SendSignedTransaction
   )
 import Seath.Network.Utils
-  ( getChaintriggerTreshold
+  ( actionToTriggerChainBuild
+  , getChaintriggerTreshold
   , getFromLeaderConfiguration
   , getFromLeaderState
   , getFromRefAtLeaderState
   , getNumberOfPending
   , isAnotherActionInProcess
-  , maxPendingCapacity
   , setToRefAtLeaderState
   , signTimeout
   , takeFromPending
@@ -598,7 +598,7 @@ showDebugState leaderNode = do
 leaderStateInfo :: forall a. LeaderNode a -> Aff LeaderServerInfo
 leaderStateInfo ln@(LeaderNode node) = do
   numberOfActionsToProcess <- getNumberOfPending ln
-  let maxNumberOfPendingActions = maxPendingCapacity node.configuration
+  let maxNumberOfPendingActions = actionToTriggerChainBuild node.configuration
   let maxTimeOutForSignature = signTimeout node.configuration
   serverStage <- getFromRefAtLeaderState ln _.stage
   pure $ LeaderServerInfo

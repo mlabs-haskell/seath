@@ -30,7 +30,6 @@ testLeaderConfig :: LeaderConfiguration AdditionAction
 testLeaderConfig =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 5000
-    , maxQueueSize: 1
     , numberOfActionToTriggerChainBuilder: 3
     , maxWaitingTimeBeforeBuildChain: 5000
     , runContract: RunContract undefined -- not used in this test case scenario

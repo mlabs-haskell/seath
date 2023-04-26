@@ -43,7 +43,6 @@ mkLeaderConfig
   in
     LeaderConfiguration
       { maxWaitingTimeForSignature: 3000
-      , maxQueueSize: 4
       , numberOfActionToTriggerChainBuilder: 4
       , maxWaitingTimeBeforeBuildChain: 3000
       , runContract
