@@ -9,6 +9,7 @@ import Payload.ResponseTypes (Response(Response))
 import Seath.Common.Types (UID(UID))
 import Seath.Core.Types (UserAction)
 import Seath.HTTP.Client (UserClient)
+import Seath.HTTP.Client as Client
 import Seath.HTTP.Types
   ( IncludeRequest(IncludeRequest)
   , SendSignedRequest(SendSignedRequest)
@@ -20,18 +21,22 @@ import Seath.Network.Types
   , NetworkHandlers
   , SendSignedTransaction
   )
+import Type.Proxy (Proxy(Proxy))
 
 mkHttpHandlers
   :: forall a
    . EncodeAeson a
-  => UserClient a
+  => String
   -> NetworkHandlers a
-mkHttpHandlers client =
+mkHttpHandlers leaderUrl =
   { submitToLeader: handleSendAction client
   , sendSignedToLeader: handleSendSignedToLeader client
   , refuseToSign: handleRefuseToSign client
   , getActionStatus: handleGetStatus client
   }
+  where
+  client :: UserClient a
+  client = Client.mkUserClient (Proxy :: Proxy a) leaderUrl
 
 handleSendAction
   :: forall a

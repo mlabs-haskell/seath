@@ -49,12 +49,12 @@ import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
   ( ActionResult
   , ActionStatus
-  , FunctionToPerformContract
   , LeaderConfiguration
   , LeaderConfigurationInner
   , LeaderNode(LeaderNode)
   , LeaderStateInner
   , NetworkHandlers
+  , RunContract
   , UserNode(UserNode)
   , UserStateInner
   )
@@ -160,9 +160,9 @@ readResults userNode =
     liftEffect $ Queue.read resultsQueue
 
 userRunContract
-  :: forall a. UserNode a -> FunctionToPerformContract
+  :: forall a. UserNode a -> RunContract
 userRunContract (UserNode node) =
-  (unwrap node.configuration).fromContract
+  (unwrap node.configuration).runContract
 
 getNumberOfPending :: forall a. LeaderNode a -> Aff Int
 getNumberOfPending ln = do

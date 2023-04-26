@@ -2,7 +2,7 @@ module Seath.Network.Types
   ( AcceptSignedTransactionError(..)
   , ActionResult
   , ActionStatus(..)
-  , FunctionToPerformContract(..)
+  , RunContract(..)
   , GetActionStatus(..)
   , IncludeActionError(..)
   , LeaderConfiguration(..)
@@ -227,7 +227,7 @@ derive instance Newtype (LeaderState a) _
 
 -- Needed to avoid purescript to reject the newtype instance of 
 -- `LeaderConfiguration`.
-newtype FunctionToPerformContract = FunctionToPerformContract
+newtype RunContract = RunContract
   (forall b. Contract b -> Aff b)
 
 type LeaderConfigurationInner :: forall k. k -> Type
@@ -236,7 +236,7 @@ type LeaderConfigurationInner a =
   , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
   , maxWaitingTimeBeforeBuildChain :: Int
-  , fromContract :: FunctionToPerformContract
+  , runContract :: RunContract
   }
 
 newtype LeaderConfiguration :: forall k. k -> Type
@@ -294,7 +294,7 @@ type NetworkHandlers a =
 
 newtype UserConfiguration a = UserConfiguration
   { networkHandlers :: NetworkHandlers a
-  , fromContract :: FunctionToPerformContract
+  , runContract :: RunContract
   , checkChainedTx :: Transaction -> Aff (Either String Transaction)
   }
 

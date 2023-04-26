@@ -52,8 +52,8 @@ import Seath.Network.Types
       , Submitted
       , NotFound
       )
-  , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError
+  , RunContract(RunContract)
   , SignedTransaction
   , UserConfiguration
   , UserNode
@@ -93,7 +93,7 @@ getActionStatus userNode =
 signTx
   :: forall a. UserNode a -> Transaction -> Aff (Either String Transaction)
 signTx userNode tx = do
-  let (FunctionToPerformContract run) = userRunContract userNode
+  let (RunContract run) = userRunContract userNode
   bimap show (unwrap) <$>
     (try $ run $ signTransaction (FinalizedTransaction tx))
 
@@ -144,7 +144,7 @@ sendRejectionToLeader userNode uuid = do
 -- | The right function to begin the process of a new action (don't use `sendActionToLeader`)
 performAction :: forall a. UserNode a -> a -> Aff Unit
 performAction userNode action = do
-  let (FunctionToPerformContract run) = userRunContract userNode
+  let (RunContract run) = userRunContract userNode
   userAction <- run $ Core.Utils.makeActionContract action
   result <- try $ userNode `sendActionToLeader` userAction
   case result of

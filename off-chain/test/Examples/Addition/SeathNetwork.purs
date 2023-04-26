@@ -26,16 +26,14 @@ import Payload.Server as Payload.Server
 import Prelude (show)
 import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
-import Seath.HTTP.Client (UserClient)
-import Seath.HTTP.Client as Client
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Server as Server
 import Seath.HTTP.UserHandlers as HttpUser
 import Seath.Network.Leader as Leader
 import Seath.Network.Types
-  ( FunctionToPerformContract(FunctionToPerformContract)
-  , LeaderConfiguration(LeaderConfiguration)
+  ( LeaderConfiguration(LeaderConfiguration)
   , LeaderNode
+  , RunContract(..)
   , UserConfiguration(UserConfiguration)
   , UserNode
   )
@@ -50,14 +48,15 @@ import Seath.Test.Examples.Addition.Types
   , AdditionRedeemer
   , AdditionValidator
   )
-import Type.Proxy (Proxy(Proxy))
 import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin leader users = do
   let
     initializationOptions = { waitingTime: 3, maxAttempts: 10 }
-    _testLeaderConf = makeTestLeaderConf env leader
+
+    mkRunner :: KeyWallet -> RunContract
+    mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
     leaderUrl = "http://localhost:3000"
 
   checkInitSctipt env admin initializationOptions
@@ -81,23 +80,25 @@ mainTest env admin leader users = do
 
   log "Starting user-1 node"
   (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user1 (pure <<< Right))
+    (makeTestUserConf leaderUrl (mkRunner user1) (pure <<< Right))
 
   log "Starting user-2 node"
   (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user2 (pure <<< Right))
+    (makeTestUserConf leaderUrl (mkRunner user2) (pure <<< Right))
 
   log "Starting user-3 node"
   (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user3 (\_ -> pure $ Left "refuse to sign"))
+    ( makeTestUserConf leaderUrl (mkRunner user3)
+        (\_ -> pure $ Left "refuse to sign")
+    )
 
   log "Starting user-4 node"
   (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
-    (makeTestUserConf leaderUrl env user4 (pure <<< Right))
+    (makeTestUserConf leaderUrl (mkRunner user4) (pure <<< Right))
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
-    _testLeaderConf
+    (makeTestLeaderConf (mkRunner leader))
     buildChain
 
   log "Starting leader node loop"
@@ -140,36 +141,27 @@ mainTest env admin leader users = do
 
 -- LeaderNode config
 makeTestLeaderConf
-  :: ContractEnv -> KeyWallet -> LeaderConfiguration AdditionAction
-makeTestLeaderConf env kw =
+  :: RunContract -> LeaderConfiguration AdditionAction
+makeTestLeaderConf runContract =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 3000
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 4
     , maxWaitingTimeBeforeBuildChain: 3000
-    , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
+    , runContract
     }
 
 makeTestUserConf
   :: String
-  -> ContractEnv
-  -> KeyWallet
+  -> RunContract
   -> (Transaction -> Aff (Either String Transaction))
   -> UserConfiguration AdditionAction
-makeTestUserConf leaderUrl env kw checkChainedTx =
+makeTestUserConf leaderUrl runContract checkChainedTx =
   UserConfiguration
-    { networkHandlers: HttpUser.mkHttpHandlers httpClient
-    , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
+    { networkHandlers: HttpUser.mkHttpHandlers leaderUrl
+    , runContract
     , checkChainedTx
     }
-  where
-  httpClient :: UserClient AdditionAction
-  httpClient = Client.mkUserClient (Proxy :: Proxy AdditionAction) leaderUrl
-
-makeToPerformContract
-  :: forall b. ContractEnv -> KeyWallet -> Contract b -> Aff b
-makeToPerformContract env kw contract = runContractInEnv env
-  $ withKeyWallet kw contract
 
 checkInitSctipt
   :: ContractEnv

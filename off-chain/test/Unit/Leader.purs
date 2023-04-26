@@ -17,8 +17,8 @@ import Seath.Core.Utils as Core.Utils
 import Seath.Network.Leader as Leader
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( FunctionToPerformContract(FunctionToPerformContract)
-  , LeaderConfiguration(LeaderConfiguration)
+  ( LeaderConfiguration(LeaderConfiguration)
+  , RunContract(RunContract)
   )
 import Seath.Network.Utils (getFromLeaderState, setToRefAtLeaderState)
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
@@ -33,7 +33,7 @@ testLeaderConfig =
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 3
     , maxWaitingTimeBeforeBuildChain: 5
-    , fromContract: FunctionToPerformContract undefined
+    , runContract: RunContract undefined
     }
 
 suite :: TestPlanM PlutipTest Unit

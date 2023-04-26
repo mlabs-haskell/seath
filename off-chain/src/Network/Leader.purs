@@ -51,7 +51,6 @@ import Seath.Network.Types
       , Processing
       , WaitingOtherChainSignatures
       )
-  , FunctionToPerformContract(FunctionToPerformContract)
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
@@ -64,6 +63,7 @@ import Seath.Network.Types
       )
   , LeaderState
   , LeaderStateInner
+  , RunContract(RunContract)
   , SendSignedTransaction
   )
 import Seath.Network.Utils
@@ -179,11 +179,11 @@ actionStatus leaderNode actionId = do
     :: UUID -> Int -> Maybe Transaction -> Aff ActionStatus
   transfromForSignResponses _ _ (Just tx) = do
     let
-      (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
+      (RunContract runContract) = getFromLeaderConfiguration
         leaderNode
-        _.fromContract
+        _.runContract
     WaitingOtherChainSignatures <<< Just <$>
-      (fromContract <<< getFinalizedTransactionHash <<< wrap) tx
+      (runContract <<< getFinalizedTransactionHash <<< wrap) tx
   transfromForSignResponses _ _ Nothing = pure $ NotFound
 
 -- `waitingForSignature` relies on this function and `acceptRefuseToSign`
@@ -208,10 +208,10 @@ acceptSignedTransaction leaderNode signedTx = do
       case OrderedMap.lookup uuid waitingMap of
         Just tx -> do
           let
-            (FunctionToPerformContract fromContract) =
-              getFromLeaderConfiguration leaderNode _.fromContract
-          originalHash <- fromContract $ getFinalizedTransactionHash (wrap tx)
-          hashOfSigned <- fromContract $ getFinalizedTransactionHash
+            (RunContract runContract) =
+              getFromLeaderConfiguration leaderNode _.runContract
+          originalHash <- runContract $ getFinalizedTransactionHash (wrap tx)
+          hashOfSigned <- runContract $ getFinalizedTransactionHash
             (wrap receivedSignedTx)
           if originalHash == hashOfSigned then
             do
@@ -352,22 +352,22 @@ submitChain
   -> Aff $ OrderedMap UUID (Either String TransactionHash)
 submitChain leaderNode chain = do
   let
-    (FunctionToPerformContract fromContract) = getFromLeaderConfiguration
+    (RunContract runContract) = getFromLeaderConfiguration
       leaderNode
-      _.fromContract
+      _.runContract
   -- TODO: short circuit the submission, to end early
-  OrderedMap.fromFoldable <$> traverse (submitAndWait fromContract)
+  OrderedMap.fromFoldable <$> traverse (submitAndWait runContract)
     (OrderedMap.toArray chain)
   where
   submitAndWait
     :: (forall b. Contract b -> Aff b)
     -> (UUID /\ Transaction)
     -> Aff (UUID /\ Either String TransactionHash)
-  submitAndWait fromContract (uuid /\ tx) = do
+  submitAndWait runContract (uuid /\ tx) = do
     ethTxId <- try do
-      sginedByLeaderTx <- fromContract
+      sginedByLeaderTx <- runContract
         $ signTransaction (wrap tx :: FinalizedTransaction)
-      txId <- fromContract $ submit sginedByLeaderTx
+      txId <- runContract $ submit sginedByLeaderTx
       log $ "Leader: Submited chaned Tx ID: " <> show txId
       pure txId
     pure $ uuid /\ (lmap show ethTxId)
