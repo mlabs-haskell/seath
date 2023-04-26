@@ -293,8 +293,7 @@ type NetworkHandlers a =
   }
 
 newtype UserConfiguration a = UserConfiguration
-  { maxQueueSize :: Int
-  , networkHandlers :: NetworkHandlers a
+  { networkHandlers :: NetworkHandlers a
   , fromContract :: FunctionToPerformContract
   , checkChainedTx :: Transaction -> Aff (Either String Transaction)
   }

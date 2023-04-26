@@ -54,7 +54,8 @@ testDuplicateUserAddition = do
     user1 <- liftMaybe (error "No user wallet") (users !! 0)
     let
       newNode = liftAff
-        $ Leader.newLeaderNode testLeaderConfig (const $ pure undefined)
+        $ Leader.newLeaderNode testLeaderConfig
+            (const $ pure undefined) -- not used in this test case scenario
 
     node1 <- newNode
 

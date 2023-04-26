@@ -146,7 +146,7 @@ makeTestLeaderConf env kw =
     { maxWaitingTimeForSignature: 3000
     , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 4
-    , maxWaitingTimeBeforeBuildChain: 3
+    , maxWaitingTimeBeforeBuildChain: 3000
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     }
 
@@ -158,8 +158,7 @@ makeTestUserConf
   -> UserConfiguration AdditionAction
 makeTestUserConf leaderUrl env kw checkChainedTx =
   UserConfiguration
-    { maxQueueSize: undefined
-    , networkHandlers: HttpUser.mkHttpHandlers httpClient
+    { networkHandlers: HttpUser.mkHttpHandlers httpClient
     , fromContract: FunctionToPerformContract (makeToPerformContract env kw)
     , checkChainedTx
     }

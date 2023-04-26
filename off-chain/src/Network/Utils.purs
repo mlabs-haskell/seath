@@ -26,7 +26,6 @@ import Contract.Prelude
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
-import Contract.Transaction (TransactionHash)
 import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head)
 import Data.Array as Array

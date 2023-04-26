@@ -287,8 +287,9 @@ waitForChainSignatures leaderNode = do
           endAction
         else
           do
-            delay $ wrap 500.0
+            delay $ wrap 500.0 -- TODO: should be configurable
             -- TODO: 1000 is harcoded here representing 1 second and 1 attempt
+            -- TODO: should be configurable
             loop (remainAttempts - 1000) numberOfTransactions
 
   endAction :: Aff $ OrderedMap UUID $ Maybe Transaction
@@ -432,8 +433,8 @@ waitForRequests ln = do
     pendingNum <- getNumberOfPending ln
     if pendingNum >= tHold then pure unit
     else do
-      delay (Milliseconds 1000.0)
-      loop (attempts - 1)
+      delay (Milliseconds 1000.0) -- TODO: should be configurable
+      loop (attempts - 1000) -- TODO: should be configurable
 
 -- | Put an empty value in every ref of the `LeaderState` 
 -- | except for `pendingActionsRequest` and `prioritaryPendingActions`
