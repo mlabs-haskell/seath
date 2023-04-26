@@ -26,7 +26,6 @@ import Data.Array as Array
 import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Int (toNumber)
-import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
@@ -36,7 +35,6 @@ import Effect.Ref (Ref)
 import Effect.Ref as Ref
 import Partial.Unsafe (unsafePartial)
 import Queue as Queue
-import Seath.Core.ChainBuilder as ChainBuilder
 import Seath.Core.Types (UserAction)
 import Seath.Core.Utils (getFinalizedTransactionHash)
 import Seath.Network.OrderedMap (OrderedMap)

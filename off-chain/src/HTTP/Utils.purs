@@ -11,6 +11,7 @@ import Seath.Core.Types (CoreConfiguration)
 import Seath.HTTP.UserHandlers as HttpUser
 import Seath.Network.Types
   ( LeaderConfiguration(LeaderConfiguration)
+  , MilliSeconds
   , RunContract(RunContract)
   , UserConfiguration(UserConfiguration)
   )
@@ -25,13 +26,17 @@ mkLeaderConfig
   => ToData datumType
   => FromData redeemerType
   => ToData redeemerType
-  => CoreConfiguration actionType userStateType validatorType datumType
+  => MilliSeconds
+  -> Int
+  -> MilliSeconds
+  -> CoreConfiguration actionType userStateType validatorType datumType
        redeemerType
   -> RunContract
   -> LeaderConfiguration actionType
 mkLeaderConfig
-  -- maxQueueSize
-  -- maxWaitingTimeForSignature
+  maxWaitingTimeBeforeBuildChain
+  numberOfActionToTriggerChainBuilder
+  maxWaitingTimeForSignature
   coreConfig
   runContract =
 
@@ -42,9 +47,9 @@ mkLeaderConfig
       Nothing
   in
     LeaderConfiguration
-      { maxWaitingTimeForSignature: 3000
-      , numberOfActionToTriggerChainBuilder: 4
-      , maxWaitingTimeBeforeBuildChain: 3000
+      { maxWaitingTimeForSignature
+      , numberOfActionToTriggerChainBuilder
+      , maxWaitingTimeBeforeBuildChain
       , runContract
       , buildChain
       }

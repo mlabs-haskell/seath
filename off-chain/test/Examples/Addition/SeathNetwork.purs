@@ -44,12 +44,22 @@ import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin leader users = do
+  coreConfig <- runContractInEnv env $ withKeyWallet leader $
+    buildAdditionCoreConfig
   let
     initializationOptions = { waitingTime: 3, maxAttempts: 10 }
 
     mkRunner :: KeyWallet -> RunContract
     mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
     leaderUrl = "http://localhost:3000"
+
+    testLeaderConfig =
+      mkLeaderConfig
+        3000
+        4
+        3000
+        coreConfig
+        (mkRunner leader)
 
   checkInitSctipt env admin initializationOptions
 
@@ -61,9 +71,6 @@ mainTest env admin leader users = do
   user2 <- liftMaybe (error "No user wallet") (users !! 1)
   user3 <- liftMaybe (error "No user wallet") (users !! 2)
   user4 <- liftMaybe (error "No user wallet") (users !! 3)
-
-  coreConfig <- runContractInEnv env $ withKeyWallet leader $
-    buildAdditionCoreConfig
 
   log "Starting user-1 node"
   (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
@@ -85,7 +92,7 @@ mainTest env admin leader users = do
 
   log "Initializing leader node"
   (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
-    (mkLeaderConfig coreConfig (mkRunner leader))
+    testLeaderConfig
 
   log "Starting leader node loop"
   leaderLoopFiber <- forkAff $ Leader.leaderLoop leaderNode
