@@ -3,10 +3,11 @@ module Seath.Network.Leader
   , acceptSignedTransaction
   , actionStatus
   , includeAction
+  , leaderLoop
+  , newLeaderNode
   , newLeaderState
   , showDebugState
-  , newLeaderNode
-  , leaderLoop
+  , startLeaderNode
   , stopLeaderNode
   , submitChain
   , waitForChainSignatures
@@ -29,7 +30,7 @@ import Data.Int (toNumber)
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, delay, try)
+import Effect.Aff (Aff, Fiber, delay, forkAff, try)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -456,6 +457,16 @@ resetLeaderState leaderNode = do
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSubmission
   setToRefAtLeaderState leaderNode WaitingForActions _.stage
   setToRefAtLeaderState leaderNode OrderedMap.empty _.submitted
+
+startLeaderNode
+  :: forall a
+   . Show a
+  => LeaderConfiguration a
+  -> Aff (Fiber Unit /\ LeaderNode a)
+startLeaderNode conf = do
+  node <- newLeaderNode conf
+  fiber <- forkAff $ leaderLoop node
+  pure $ fiber /\ node
 
 leaderLoop
   :: forall actionType. Show actionType => LeaderNode actionType -> Aff Unit

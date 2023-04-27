@@ -16,9 +16,8 @@ run = launchAff_
   $ withPlutipContractEnv Test.Utils.plutipConfig (makeDistribution 4)
   $
     \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
-      ( supervise -- ! misha: I've added it here so we get the same behavior as with `withContractEnv``
+      ( supervise -- added it here so we get the same behavior as with `withContractEnv`
 
           $ mainTest env adminWallet leaderWallet
               participantsWallets
       )
-

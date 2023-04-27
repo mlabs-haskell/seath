@@ -14,21 +14,18 @@ import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, try)
 import Data.Array ((!!))
-import Data.Bifunctor (lmap)
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Map as Map
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Unit (Unit)
-import Effect.Aff (delay, error, forkAff, killFiber)
-import Payload.Server as Payload.Server
+import Effect.Aff (delay, error, killFiber)
 import Prelude (show)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
+import Seath.HTTP.SeathNode as SeathNode
 import Seath.HTTP.Server (SeathServerConfig)
-import Seath.HTTP.Server as Server
 import Seath.HTTP.Utils (mkLeaderConfig, mkUserConfig)
-import Seath.Network.Leader as Leader
-import Seath.Network.Types (LeaderNode, RunContract(RunContract), UserNode)
+import Seath.Network.Types (RunContract(RunContract), UserNode)
 import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash, readResults)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
@@ -40,18 +37,18 @@ import Seath.Test.Examples.Addition.Types
   , AdditionRedeemer
   , AdditionValidator
   )
-import Undefined (undefined)
 
 mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
 mainTest env admin leader users = do
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     buildAdditionCoreConfig
   let
-    initializationOptions = { waitingTime: 3, maxAttempts: 10 }
+
+    leaderPort = 3000
+    leaderUrl = "http://localhost:" <> show leaderPort
 
     mkRunner :: KeyWallet -> RunContract
     mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
-    leaderUrl = "http://localhost:3000"
 
     testLeaderConfig =
       mkLeaderConfig
@@ -61,11 +58,17 @@ mainTest env admin leader users = do
         coreConfig
         (mkRunner leader)
 
-  checkInitSctipt env admin initializationOptions
+  checkInitSctipt env admin { waitingTime: 3, maxAttempts: 10 }
 
   let
     serverConf :: SeathServerConfig
-    serverConf = undefined
+    serverConf = { port: leaderPort }
+
+  seathNode <-
+    SeathNode.start
+      serverConf
+      testLeaderConfig
+      (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
 
   user1 <- liftMaybe (error "No user wallet") (users !! 0)
   user2 <- liftMaybe (error "No user wallet") (users !! 1)
@@ -90,16 +93,13 @@ mainTest env admin leader users = do
   (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
     (mkUserConfig leaderUrl (mkRunner user4) (pure <<< Right))
 
-  log "Initializing leader node"
-  (leaderNode :: LeaderNode AdditionAction) <- Leader.newLeaderNode
-    testLeaderConfig
+  -- log "Initializing leader node"
+  -- (leaderFiber /\ (leaderNode :: LeaderNode AdditionAction)) <-
+  --   Leader.startLeaderNode testLeaderConfig
 
-  log "Starting leader node loop"
-  leaderLoopFiber <- forkAff $ Leader.leaderLoop leaderNode
-
-  log "Starting server"
-  server <- Server.runServer serverConf leaderNode >>= liftEither <<< lmap error
-  log "Leader server started"
+  -- log "Starting server"
+  -- server <- Server.runServer serverConf leaderNode >>= liftEither <<< lmap error
+  -- log "Leader server started"
 
   log "Delay before user include action request"
   delay $ Milliseconds 1000.0
@@ -130,8 +130,9 @@ mainTest env admin leader users = do
   killFiber (error "can't cleanup user") userFiber2
   killFiber (error "can't cleanup user") userFiber3
   killFiber (error "can't cleanup user") userFiber4
-  killFiber (error "can't cleanup leader loop") leaderLoopFiber
-  Payload.Server.close server
+  SeathNode.stop seathNode
+  -- killFiber (error "can't cleanup leader loop") leaderFiber
+  -- Payload.Server.close server
   log "end"
 
 -- LeaderNode config

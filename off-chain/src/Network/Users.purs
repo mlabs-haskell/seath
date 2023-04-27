@@ -161,7 +161,7 @@ performAction userNode action = do
     Right (Left refused) ->
       log $ "User: leader refused to include action: " <> show refused
     Left err -> log $ "User: unexpected: failed to submit action to Leader " <>
-      show err
+      show (message err)
 
 startUserNode
   :: forall a
