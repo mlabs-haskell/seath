@@ -15,11 +15,13 @@ module Seath.Network.Leader
 
 import Contract.Prelude
 
+import Aeson (encodeAeson)
 import Contract.Monad (Contract)
 import Contract.Transaction
   ( FinalizedTransaction
   , Transaction
   , TransactionHash
+  , awaitTxConfirmed
   , signTransaction
   , submit
   )
@@ -30,7 +32,7 @@ import Data.Int (toNumber)
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff, Fiber, delay, forkAff, try)
+import Effect.Aff (Aff, Fiber, delay, forkAff, message, try)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -197,7 +199,7 @@ acceptSignedTransaction
   -> Aff (Either String Unit)
 acceptSignedTransaction leaderNode signedTx = do
   let uuid = (unwrap signedTx).uuid
-  log $ "Leader accepts Signed Transaction " <> show uuid
+  log $ "Leader: accepting Signed Transaction " <> show uuid
   incomingTx <- try $ TxHex.fromCborHex (unwrap signedTx).txCborHex
   case incomingTx of
     Left e -> do
@@ -205,7 +207,7 @@ acceptSignedTransaction leaderNode signedTx = do
       log msg
       pure $ Left msg
     Right receivedSignedTx -> do
-      log "Leader received signed tx successfully"
+      log "Leader: received signed tx successfully"
       waitingMap <- getFromRefAtLeaderState leaderNode _.waitingForSignature
       case OrderedMap.lookup uuid waitingMap of
         Just tx -> do
@@ -375,6 +377,8 @@ submitChain leaderNode chain = do
       txId <- runContract $ submit sginedByLeaderTx
       log $ "Leader: Submited chaned Tx ID: " <> show txId
       pure txId
+    log $ "Leader: result of submission " <> show uuid <> ": "
+      <> show (lmap message ethTxId)
     pure $ uuid /\ (lmap show ethTxId)
 
 newLeaderNode
@@ -409,13 +413,6 @@ buildChain
   -> OrderedMap UUID (UserAction a)
   -> Aff (Either String (OrderedMap UUID Transaction))
 buildChain leaderNode toProcess = do
-
-  -- let (RunContract runContract) = getFromLeaderConfiguration
-  --       leaderNode _.runContract
-
-  -- txChainTst <- try $ runContract (fst
-  --       <$> ChainBuilder.buildChain undefined (snd <$> OrderedMap.orderedElems toProcess) Nothing)
-
   txChain <- try $ getFromLeaderConfiguration leaderNode _.buildChain
     (snd <$> OrderedMap.orderedElems toProcess)
   case txChain of
@@ -492,8 +489,8 @@ leaderLoop leaderNode = do
       leaderLoop leaderNode
     Right builtChain -> do
       setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
-  batchToSign <- getFromRefAtLeaderState leaderNode _.waitingForSignature
-  log $ "Leader: builder result: " <> show batchToSign
+  -- getFromRefAtLeaderState leaderNode _.waitingForSignature
+  --   >>= log <<< ("Leader: builder result: " <> _) <<< show
   setStage WaitingForChainSignatures
   signatureResults <- waitForChainSignatures leaderNode
   let
@@ -516,13 +513,15 @@ leaderLoop leaderNode = do
       submissionResults
   log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
   log $ "Leader: to priority list: " <> showUUIDs submissionFailures
-  log $ "Leader: Setting prioritary list"
+  log $ "Leader: setting prioritary list"
   let newPrioritary = OrderedMap.union signatureFailures submissionFailures
   setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
   resetLeaderState leaderNode
   -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
   setToRefAtLeaderState leaderNode submissionSucess _.submitted
-  log "Leader: Node loop complete!"
+  log $ "Leader: awaiting chain confirmed"
+  awaitChainConfirmed leaderNode submissionSucess
+  log "Leader: node loop complete!"
   leaderLoop leaderNode
 
   where
@@ -533,6 +532,20 @@ leaderLoop leaderNode = do
 
   showUUIDs :: forall b. OrderedMap UUID b -> String
   showUUIDs _map = show $ OrderedMap.orderedKeys _map
+
+awaitChainConfirmed
+  :: forall a. LeaderNode a -> OrderedMap UUID TransactionHash -> Aff Unit
+awaitChainConfirmed node chainMap = do
+  let
+    (RunContract runContract) = getFromLeaderConfiguration
+      node
+      _.runContract
+  for_ (OrderedMap.toArray chainMap) $
+    \(uid /\ txHash) -> do
+      log $ "Leader: awaiting confirmation of " <> show uid <> " | " <> show
+        (encodeAeson txHash)
+      runContract $ awaitTxConfirmed txHash
+  log "Leader: chain confirmed"
 
 stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
 stopLeaderNode = undefined

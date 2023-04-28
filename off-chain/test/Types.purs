@@ -3,8 +3,12 @@ module Seath.Test.Types
   , Leader(Leader)
   , Participant(Participant)
   , RunnerConfiguration(RunnerConfiguration)
+  , TmpRunner
   ) where
 
+import Contract.Prelude
+
+import Contract.Monad (ContractEnv)
 import Contract.Utxos (UtxoMap)
 import Contract.Wallet (KeyWallet)
 import Data.Array.NonEmpty (NonEmptyArray)
@@ -43,3 +47,6 @@ newtype RunnerConfiguration (s :: Type) actionType = RunnerConfiguration
   }
 
 derive instance Newtype (RunnerConfiguration s actionType) _
+
+type TmpRunner =
+  ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit

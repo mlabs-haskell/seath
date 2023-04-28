@@ -3,12 +3,12 @@ module Seath.Test.Examples.Addition.Actions
   , fixedValidatorHash
   , handleAction
   , queryBlockchainState
-  , getScriptUtxosFromChain
   ) where
+
+import Contract.Prelude
 
 import Contract.Monad (Contract, liftedE, liftedM, throwContractError)
 import Contract.PlutusData (toData)
-import Contract.Prelude (liftEither)
 import Contract.ScriptLookups as ScriptLookups
 import Contract.Scripts (Validator, ValidatorHash, applyArgs, validatorHash)
 import Contract.TextEnvelope (decodeTextEnvelope, plutusScriptV2FromEnvelope)
@@ -43,12 +43,6 @@ import Seath.Test.Examples.Addition.Types
   )
 import Seath.Test.Examples.Addition.Validator (validatorScript)
 import Seath.Test.Examples.Utils (getScriptUtxos, getTypedDatum)
-
--- todo: maybe check here what we returning
-getScriptUtxosFromChain ∷ Contract UtxoMap
-getScriptUtxosFromChain = do
-  valHash <- fixedValidatorHash
-  getScriptUtxos valHash
 
 handleAction
   :: UserAction AdditionAction
@@ -108,3 +102,10 @@ fixedValidator = do
 
 fixedValidatorHash :: Contract ValidatorHash
 fixedValidatorHash = validatorHash <$> fixedValidator
+
+-- Helpers
+-- todo: maybe check here what we returning
+getScriptUtxosFromChain ∷ Contract UtxoMap
+getScriptUtxosFromChain = do
+  valHash <- fixedValidatorHash
+  getScriptUtxos valHash

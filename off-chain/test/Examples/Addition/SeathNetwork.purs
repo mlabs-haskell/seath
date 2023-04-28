@@ -30,7 +30,7 @@ import Seath.Network.Users as Users
 import Seath.Network.Utils (getPublicKeyHash, readResults)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Actions as Addition
-import Seath.Test.Examples.Addition.Contract (initialSeathContract) as Addition.Contract
+import Seath.Test.Examples.Addition.ContractUtils (initialSeathContract) as Addition.Contract
 import Seath.Test.Examples.Addition.Types
   ( AdditionAction(AddAmount)
   , AdditionDatum
@@ -77,11 +77,15 @@ mainTest env admin leader users = do
 
   log "Starting user-1 node"
   (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
-    (mkUserConfig leaderUrl (mkRunner user1) (pure <<< Right))
+    ( mkUserConfig leaderUrl (mkRunner user1)
+        (pure <<< Right)
+    )
 
   log "Starting user-2 node"
   (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
-    (mkUserConfig leaderUrl (mkRunner user2) (pure <<< Right))
+    ( mkUserConfig leaderUrl (mkRunner user2)
+        (pure <<< Right)
+    )
 
   log "Starting user-3 node"
   (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
@@ -91,24 +95,20 @@ mainTest env admin leader users = do
 
   log "Starting user-4 node"
   (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
-    (mkUserConfig leaderUrl (mkRunner user4) (pure <<< Right))
-
-  -- log "Initializing leader node"
-  -- (leaderFiber /\ (leaderNode :: LeaderNode AdditionAction)) <-
-  --   Leader.startLeaderNode testLeaderConfig
-
-  -- log "Starting server"
-  -- server <- Server.runServer serverConf leaderNode >>= liftEither <<< lmap error
-  -- log "Leader server started"
+    ( mkUserConfig leaderUrl (mkRunner user4)
+        (pure <<< Right)
+    )
 
   log "Delay before user include action request"
   delay $ Milliseconds 1000.0
   log "Fire user-1 include action request"
   Users.performAction userNode1
     (AddAmount $ BigInt.fromInt 1)
+
   log "Fire user-2 include action request"
   Users.performAction userNode2
     (AddAmount $ BigInt.fromInt 10)
+
   log "Fire user-3 include action request"
   Users.performAction userNode3
     (AddAmount $ BigInt.fromInt 100)
@@ -117,9 +117,11 @@ mainTest env admin leader users = do
   Users.performAction userNode4
     (AddAmount $ BigInt.fromInt 1000)
 
-  delay (wrap 10000.0)
+  delay (wrap 30000.0)
   log "User 1 res:"
   readResults userNode1 >>= log <<< show
+  log "User 2 res:"
+  readResults userNode2 >>= log <<< show
   log "User 3 res:"
   readResults userNode3 >>= log <<< show
   log "User 4 res:"
@@ -131,11 +133,7 @@ mainTest env admin leader users = do
   killFiber (error "can't cleanup user") userFiber3
   killFiber (error "can't cleanup user") userFiber4
   SeathNode.stop seathNode
-  -- killFiber (error "can't cleanup leader loop") leaderFiber
-  -- Payload.Server.close server
   log "end"
-
--- LeaderNode config
 
 checkInitSctipt
   :: ContractEnv

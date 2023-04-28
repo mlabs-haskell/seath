@@ -13,7 +13,7 @@ import Test.Examples.Addition.SeathNetwork (mainTest)
 
 run :: Effect Unit
 run = launchAff_
-  $ withPlutipContractEnv Test.Utils.plutipConfig (makeDistribution 4)
+  $ withPlutipContractEnv Test.Utils.plutipConfig (makeDistribution 6)
   $
     \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
       ( supervise -- added it here so we get the same behavior as with `withContractEnv`

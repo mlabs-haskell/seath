@@ -260,7 +260,10 @@ makeActionsSentHandler userNode record = launchAff_ $
     Submitted txH -> do
       putToResults userNode $ makeResult (Right txH)
       modifyActionsSent userNode (OrderedMap.delete record.uuid)
-    NotFound ->
+      log $ "User: action submited! Removing from status check."
+    NotFound -> do
+      log $ "User: status for action " <> show record.uuid <> ": " <> show
+        NotFound
       case record.previousStatus of
         AskForSignature _ ->
           putFailure "Send signature but can't find it"
