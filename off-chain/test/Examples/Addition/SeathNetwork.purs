@@ -37,9 +37,16 @@ import Seath.Test.Examples.Addition.Types
   , AdditionRedeemer
   , AdditionValidator
   )
+import Seath.Test.Types (RunnerSetup)
 
-mainTest :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
-mainTest env admin leader users = do
+mainTest :: RunnerSetup -> Aff Unit
+mainTest setup = do
+  let
+    env = setup.contractEnv
+    admin = setup.adminWallet
+    leader = setup.leaderWallet
+    users = setup.userWallets
+
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     buildAdditionCoreConfig
   let

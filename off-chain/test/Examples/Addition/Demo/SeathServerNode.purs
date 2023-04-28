@@ -4,31 +4,29 @@ module Test.Examples.Addition.Demo.SeathServerNode
 
 import Contract.Prelude
 
-import Contract.Monad (Contract, ContractEnv, runContractInEnv)
+import Contract.Monad (launchAff_, runContractInEnv)
 import Contract.Test (withKeyWallet)
 import Contract.Wallet (KeyWallet)
-import Data.BigInt (BigInt)
+import Data.Posix.Signal (Signal(..))
 import Data.Unit (Unit)
 import Effect.Aff (delay)
+import Node.Process (onSignal)
 import Prelude (show)
-import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.HTTP.SeathNode as SeathNode
 import Seath.HTTP.Server (SeathServerConfig)
 import Seath.HTTP.Utils (mkLeaderConfig, mkUserConfig)
 import Seath.Network.Types (RunContract(RunContract))
-import Seath.Network.Utils (getPublicKeyHash)
-import Seath.Test.Examples.Addition.Actions as Addition
-import Seath.Test.Examples.Addition.ContractUtils as Addition
-import Seath.Test.Examples.Addition.Types
-  ( AdditionAction
-  , AdditionDatum
-  , AdditionRedeemer
-  , AdditionValidator
-  )
+import Seath.Test.Examples.Addition.ContractUtils (buildAdditionCoreConfig) as Addition
+import Seath.Test.Types (RunnerSetup)
 
 startLeaderSeathNode
-  :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
-startLeaderSeathNode env _admin leader _users = do
+  :: RunnerSetup -> Aff Unit
+startLeaderSeathNode setup = do
+
+  let
+    env = setup.contractEnv
+    leader = setup.leaderWallet
+
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     Addition.buildAdditionCoreConfig
   let
@@ -56,5 +54,9 @@ startLeaderSeathNode env _admin leader _users = do
       serverConf
       testLeaderConfig
       (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
-  delay (wrap 300000.0)
+
+  liftEffect $ onSignal SIGINT $ launchAff_ do
+    SeathNode.stop seathNode
+
+  delay (wrap 3000000.0)
   log "server done"

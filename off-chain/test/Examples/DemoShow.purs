@@ -11,7 +11,6 @@ import Contract.Transaction
 import Contract.Value (valueToCoin')
 import Ctl.Internal.Plutus.Types.Transaction (_amount)
 import Data.Array as Arr
-import Data.Array.NonEmpty as NE
 import Data.BigInt as BigInt
 import Data.Lens ((^.))
 import Data.Map as Map
@@ -21,15 +20,10 @@ import Seath.Test.Examples.Addition.Types (AdditionDatum)
 import Seath.Test.Examples.Utils (getTypedDatum)
 import Seath.Test.Types
   ( BlockchainState(BlockchainState)
-  , RunnerConfiguration(RunnerConfiguration)
   )
 
 class DemoShow a where
   dShow :: a -> String
-
-instance runnerConfig :: DemoShow (RunnerConfiguration s actionType) where
-  dShow (RunnerConfiguration cfg) =
-    "leaders: 1, participants: " <> show (NE.length cfg.participants)
 
 instance blockChainState :: Show s => DemoShow (BlockchainState s) where
   dShow (BlockchainState st) = mconcat

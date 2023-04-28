@@ -15,9 +15,13 @@ run :: Effect Unit
 run = launchAff_
   $ withPlutipContractEnv Test.Utils.plutipConfig (makeDistribution 6)
   $
-    \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
+    \env ((adminWallet /\ leaderWallet) /\ userWallets) -> do
       ( supervise -- added it here so we get the same behavior as with `withContractEnv`
 
-          $ mainTest env adminWallet leaderWallet
-              participantsWallets
+          $ mainTest
+              { contractEnv: env
+              , adminWallet
+              , leaderWallet
+              , userWallets
+              }
       )

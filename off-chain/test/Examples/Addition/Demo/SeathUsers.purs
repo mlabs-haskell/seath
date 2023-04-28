@@ -11,20 +11,16 @@ import Contract.Monad (Contract, ContractEnv, launchAff_, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
-import Contract.Transaction (Transaction(..))
+import Contract.Transaction (Transaction)
 import Contract.Utxos (getWalletUtxos)
-import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, try)
-import Control.Monad.List.Trans (zipWith)
-import Ctl.Internal.Wallet.Key (KeyWallet(..))
-import Data.Array ((!!))
+import Ctl.Internal.Wallet.Key (KeyWallet)
 import Data.Array as Array
 import Data.BigInt as BigInt
 import Data.Map as Map
 import Data.Posix.Signal (Signal(..))
-import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Unit (Unit)
-import Effect.Aff (Fiber, delay, error, killFiber, runAff_)
+import Effect.Aff (Fiber, delay, error, killFiber)
 import Node.Process (onSignal)
 import Prelude (show)
 import Seath.HTTP.Utils (mkUserConfig)
@@ -34,19 +30,22 @@ import Seath.Network.Utils (readResults)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.ContractUtils (initialSeathContract) as Addition.Contract
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
+import Seath.Test.Types (RunnerSetup)
 
 startScenario
-  :: ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit
-startScenario env admin _leader users = do
+  :: RunnerSetup -> Aff Unit
+startScenario setup = do
   let
 
     leaderPort = 3000
     leaderUrl = "http://localhost:" <> show leaderPort
 
     mkRunner :: KeyWallet -> RunContract
-    mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
+    mkRunner kw = RunContract
+      (\c -> runContractInEnv setup.contractEnv $ withKeyWallet kw c)
 
-  checkInitSctipt env admin { waitingTime: 3, maxAttempts: 10 }
+  checkInitSctipt setup.contractEnv setup.adminWallet
+    { waitingTime: 3, maxAttempts: 10 }
 
   let
     refuser = 2
@@ -64,7 +63,8 @@ startScenario env admin _leader users = do
           user
       pure (ix /\ fiber /\ node)
 
-  namedNodes <- Array.zipWithA zipFun users (Array.range 1 (length users))
+  namedNodes <- Array.zipWithA zipFun setup.userWallets
+    (Array.range 1 (length setup.userWallets))
 
   log $ "Starting with num of users " <> show (Array.length namedNodes)
 
