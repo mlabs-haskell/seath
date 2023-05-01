@@ -42,16 +42,7 @@ import Seath.Core.Utils as Core.Utils
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus
-      ( AskForSignature
-      , ToBeProcessed
-      , ToBeSubmitted
-      , Processing
-      , WaitingOtherChainSignatures
-      , PrioritaryToBeProcessed
-      , Submitted
-      , NotFound
-      )
+  ( ActionStatus(..)
   , IncludeActionError
   , RunContract(RunContract)
   , SignedTransaction
@@ -127,7 +118,7 @@ sendSignedTransactionToLeader userNode uuid signedTx = do
           log $ msg
           pure $ pure msg
         Right (Right _) -> do
-          log "User: signet Tx sent successfully"
+          log "User: signed Tx sent successfully"
           pure Nothing
 
 -- | We refuse to sign the given transaction and inform the server
@@ -261,24 +252,32 @@ makeActionsSentHandler userNode record = launchAff_ $
       putToResults userNode $ makeResult (Right txH)
       modifyActionsSent userNode (OrderedMap.delete record.uuid)
       log $ "User: action submited! Removing from status check."
+    SubmissionFailed err -> do
+      putToResults userNode $ makeResult (Left err)
+      modifyActionsSent userNode (OrderedMap.delete record.uuid)
+      log $ "User: action failed! Removing from status check. Error: " <> err
     NotFound -> do
       log $ "User: status for action " <> show record.uuid <> ": " <> show
         NotFound
       case record.previousStatus of
         AskForSignature _ ->
-          putFailure "Send signature but can't find it"
+          putFailureAndDelete "Send signature but can't find it"
         ToBeProcessed _ ->
-          putFailure "Was in processing but can't find it"
+          putFailureAndDelete "Was in processing but can't find it"
         ToBeSubmitted _ ->
-          putFailure "Was in submission but can't find it"
+          putFailureAndDelete "Was in submission but can't find it"
         Processing ->
-          putFailure "Was in a batch to process but can't find it"
+          putFailureAndDelete "Was in a batch to process but can't find it"
         WaitingOtherChainSignatures _ ->
-          putFailure "Was waiting to end of signature cycle but can't find it"
+          putFailureAndDelete
+            "Was waiting to end of signature cycle but can't find it"
         PrioritaryToBeProcessed _ ->
-          putFailure "Was in prioritary queue but can't find it"
+          putFailureAndDelete "Was in prioritary queue but can't find it"
         Submitted txH -> do
           putToResults userNode $ makeResult (Right txH)
+          modifyActionsSent userNode (OrderedMap.delete record.uuid)
+        SubmissionFailed err -> do
+          putToResults userNode $ makeResult (Left err)
           modifyActionsSent userNode (OrderedMap.delete record.uuid)
         NotFound -> do
           putToResults userNode $ makeResult (Left "NotFound twice")
@@ -297,8 +296,8 @@ makeActionsSentHandler userNode record = launchAff_ $
   makeResult result =
     { uuid: record.uuid, action: record.action, status: result }
 
-  putFailure :: String -> Aff Unit
-  putFailure msg = do
+  putFailureAndDelete :: String -> Aff Unit
+  putFailureAndDelete msg = do
     putToResults userNode $ makeResult (Left msg)
     modifyActionsSent userNode (OrderedMap.delete record.uuid)
 
@@ -334,5 +333,5 @@ startActionStatusCheck userNode = do
         Left e -> log $ "User: failed to check status for " <> show uuid
           <> ": "
           <> show e
-    delay $ Milliseconds 500.0
+    delay $ Milliseconds 1000.0
     check

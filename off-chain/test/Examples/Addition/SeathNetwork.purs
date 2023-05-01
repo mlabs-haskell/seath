@@ -6,7 +6,7 @@ import Contract.Prelude
 
 import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
-import Contract.Monad (Contract, ContractEnv, runContractInEnv)
+import Contract.Monad (Contract, ContractEnv, launchAff_, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
@@ -17,9 +17,11 @@ import Data.Array ((!!))
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Map as Map
+import Data.Posix.Signal (Signal(..))
 import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Unit (Unit)
-import Effect.Aff (delay, error, killFiber)
+import Effect.Aff (delay, error, forkAff, joinFiber, killFiber, launchAff)
+import Node.Process (onSignal)
 import Prelude (show)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.HTTP.SeathNode as SeathNode
@@ -38,6 +40,7 @@ import Seath.Test.Examples.Addition.Types
   , AdditionValidator
   )
 import Seath.Test.Types (RunnerSetup)
+import Test.Examples.Addition.Demo.SeathUsers as DemoUsers
 
 mainTest :: RunnerSetup -> Aff Unit
 mainTest setup = do
@@ -77,70 +80,16 @@ mainTest setup = do
       testLeaderConfig
       (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
 
-  user1 <- liftMaybe (error "No user wallet") (users !! 0)
-  user2 <- liftMaybe (error "No user wallet") (users !! 1)
-  user3 <- liftMaybe (error "No user wallet") (users !! 2)
-  user4 <- liftMaybe (error "No user wallet") (users !! 3)
-
-  log "Starting user-1 node"
-  (userFiber1 /\ (userNode1 :: UserNode AdditionAction)) <- Users.startUserNode
-    ( mkUserConfig leaderUrl (mkRunner user1)
-        (pure <<< Right)
-    )
-
-  log "Starting user-2 node"
-  (userFiber2 /\ (userNode2 :: UserNode AdditionAction)) <- Users.startUserNode
-    ( mkUserConfig leaderUrl (mkRunner user2)
-        (pure <<< Right)
-    )
-
-  log "Starting user-3 node"
-  (userFiber3 /\ (userNode3 :: UserNode AdditionAction)) <- Users.startUserNode
-    ( mkUserConfig leaderUrl (mkRunner user3)
-        (\_ -> pure $ Left "refuse to sign")
-    )
-
-  log "Starting user-4 node"
-  (userFiber4 /\ (userNode4 :: UserNode AdditionAction)) <- Users.startUserNode
-    ( mkUserConfig leaderUrl (mkRunner user4)
-        (pure <<< Right)
-    )
-
-  log "Delay before user include action request"
-  delay $ Milliseconds 1000.0
-  log "Fire user-1 include action request"
-  Users.performAction userNode1
-    (AddAmount $ BigInt.fromInt 1)
-
-  log "Fire user-2 include action request"
-  Users.performAction userNode2
-    (AddAmount $ BigInt.fromInt 10)
-
-  log "Fire user-3 include action request"
-  Users.performAction userNode3
-    (AddAmount $ BigInt.fromInt 100)
-
-  log "Fire user-4 include action request"
-  Users.performAction userNode4
-    (AddAmount $ BigInt.fromInt 1000)
-
+  ff <- forkAff $ DemoUsers.startScenario setup
   delay (wrap 30000.0)
-  log "User 1 res:"
-  readResults userNode1 >>= log <<< show
-  log "User 2 res:"
-  readResults userNode2 >>= log <<< show
-  log "User 3 res:"
-  readResults userNode3 >>= log <<< show
-  log "User 4 res:"
-  readResults userNode4 >>= log <<< show
-  -- we don't really need this as all is run in supervise, but is good to have 
-  -- the option
-  killFiber (error "can't cleanup user") userFiber1
-  killFiber (error "can't cleanup user") userFiber2
-  killFiber (error "can't cleanup user") userFiber3
-  killFiber (error "can't cleanup user") userFiber4
+  killFiber (error "Done") ff
+  -- liftEffect $ onSignal SIGINT $ launchAff_ do
+  log "Stopping leader  node"
   SeathNode.stop seathNode
-  log "end"
+  log "Leader  node stopped"
+
+  -- launchAff_ $ joinFiber usersProcessFiber
+  log "Seath network test end"
 
 checkInitSctipt
   :: ContractEnv

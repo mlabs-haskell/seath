@@ -9,7 +9,6 @@ module Seath.Network.Leader
   , showDebugState
   , startLeaderNode
   , stopLeaderNode
-  , submitChain
   , waitForChainSignatures
   ) where
 
@@ -25,14 +24,15 @@ import Contract.Transaction
   , signTransaction
   , submit
   )
+import Control.Monad.Except (ExceptT, lift, runExceptT)
+import Control.Monad.State (StateT, modify_, runStateT)
 import Data.Array as Array
 import Data.Bifunctor (lmap)
 import Data.Either (Either)
 import Data.Int (toNumber)
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
-import Data.Unit (Unit)
-import Effect.Aff (Aff, Fiber, delay, forkAff, message, try)
+import Effect.Aff (Aff, Fiber, delay, error, forkAff, message, throwError, try)
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -44,16 +44,7 @@ import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus
-      ( NotFound
-      , Submitted
-      , AskForSignature
-      , ToBeProcessed
-      , ToBeSubmitted
-      , PrioritaryToBeProcessed
-      , Processing
-      , WaitingOtherChainSignatures
-      )
+  ( ActionStatus(..)
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)
@@ -144,9 +135,12 @@ actionStatus leaderNode actionId = do
   waitingSubmissionCheck <- check _.waitingForSubmission
     (\_ ind _ -> pure $ ToBeSubmitted ind)
   submittedCheck <- check _.submitted (\_ _ txH -> pure $ Submitted txH)
+  submissionFailedCheck <- check _.submissionFailed
+    (\_ _ err -> pure $ SubmissionFailed err)
 
   pure $ foldl mergeChecks submittedCheck
     [ waitingSubmissionCheck
+    , submissionFailedCheck
     , signResponseCheck
     , waitingSignCheck
     , processCheck
@@ -351,35 +345,148 @@ purgeResponses originalRequest responses =
   unsafeFromJust :: Maybe (UserAction a) -> UserAction a
   unsafeFromJust = unsafePartial fromJust
 
+type SubmitM = ExceptT (UUID /\ String)
+  (StateT (OrderedMap UUID TransactionHash) Aff)
+  Unit
+
 -- | Submit a Chain of `SignedTransaction`s
 submitChain
   :: forall a
    . LeaderNode a
+  -> OrderedMap UUID (UserAction a)
   -> OrderedMap UUID Transaction
-  -> Aff $ OrderedMap UUID (Either String TransactionHash)
-submitChain leaderNode chain = do
+  -> Aff $
+       { succeeded :: (OrderedMap UUID TransactionHash)
+       , failedOne :: Maybe (UUID /\ String)
+       , toRetry :: OrderedMap UUID (UserAction a)
+       }
+submitChain leaderNode batch chain = do
   let
     (RunContract runContract) = getFromLeaderConfiguration
       leaderNode
       _.runContract
-  -- TODO: short circuit the submission, to end early
-  OrderedMap.fromFoldable <$> traverse (submitAndWait runContract)
-    (OrderedMap.toArray chain)
+
+    removeExtra eth = if isLeft eth then 1 else 0
+    submissions = traverse (submitTx runContract) (OrderedMap.toArray chain)
+
+  (ethFailed /\ succeeded) <- runStateT (runExceptT submissions)
+    OrderedMap.empty
+
+  let
+    {- dropping UUIDs that were submitted successfully
+       and optionally dforpping failed transaction that broke the chain
+       (we can just drop relying on the preservation of order in map)
+    -}
+    toRetrySigned :: OrderedMap UUID Transaction
+    toRetrySigned =
+      OrderedMap.drop
+        (OrderedMap.length succeeded + removeExtra ethFailed)
+        chain
+
+    toRetry :: OrderedMap UUID (UserAction a)
+    toRetry = foldl
+      (\m k -> maybe identity (OrderedMap.push k) (lookupInBatch k) m)
+      OrderedMap.empty
+      (OrderedMap.orderedKeys toRetrySigned)
+
+    lookupInBatch k = OrderedMap.lookup k batch
+
+  pure $
+    { succeeded
+    , failedOne: getFailed ethFailed
+    , toRetry
+    }
   where
-  submitAndWait
+
+  submitTx
     :: (forall b. Contract b -> Aff b)
     -> (UUID /\ Transaction)
-    -> Aff (UUID /\ Either String TransactionHash)
-  submitAndWait runContract (uuid /\ tx) = do
-    ethTxId <- try do
+    -> SubmitM
+  submitTx runContract (uuid /\ tx) = do
+    ethTxId <- liftAff $ try do
       sginedByLeaderTx <- runContract
         $ signTransaction (wrap tx :: FinalizedTransaction)
       txId <- runContract $ submit sginedByLeaderTx
       log $ "Leader: Submited chaned Tx ID: " <> show txId
       pure txId
-    log $ "Leader: result of submission " <> show uuid <> ": "
-      <> show (lmap message ethTxId)
-    pure $ uuid /\ (lmap show ethTxId)
+    case lmap message ethTxId of
+      Left e -> throwError (uuid /\ e)
+      Right txId -> lift (modify_ $ OrderedMap.push uuid txId)
+
+  getFailed v = case v of
+    Left v' -> Just v'
+    Right _ -> Nothing
+
+submitChainBr
+  :: forall a
+   . LeaderNode a
+  -> OrderedMap UUID (UserAction a)
+  -> OrderedMap UUID Transaction
+  -> Aff $
+       { succeeded :: (OrderedMap UUID TransactionHash)
+       , failedOne :: Maybe (UUID /\ String)
+       , toRetry :: OrderedMap UUID (UserAction a)
+       }
+submitChainBr leaderNode batch chain = do
+  let
+    (RunContract runContract) = getFromLeaderConfiguration
+      leaderNode
+      _.runContract
+  let
+    elems :: Array (Int /\ (UUID /\ Transaction))
+    elems =
+      ( Array.zip
+          (Array.range 1 (OrderedMap.length chain))
+          (OrderedMap.toArray chain)
+      )
+    submissions = traverse (submitTx runContract) elems
+
+  (ethFailed /\ succeeded) <- runStateT (runExceptT submissions)
+    OrderedMap.empty
+
+  let
+    removeExtra eth = if isLeft eth then 1 else 0
+
+    toRetrySigned :: OrderedMap UUID Transaction
+    toRetrySigned =
+      OrderedMap.drop
+        (OrderedMap.length succeeded + removeExtra ethFailed)
+        chain
+
+    toRetry :: OrderedMap UUID (UserAction a)
+    toRetry = foldl
+      (\m k -> maybe identity (OrderedMap.push k) (lookupInBatch k) m)
+      OrderedMap.empty
+      (OrderedMap.orderedKeys toRetrySigned)
+
+    lookupInBatch k = OrderedMap.lookup k batch
+
+  pure $
+    { succeeded
+    , failedOne: getFailed ethFailed
+    , toRetry
+    }
+  where
+
+  submitTx
+    :: (forall b. Contract b -> Aff b)
+    -> (Int /\ (UUID /\ Transaction))
+    -> SubmitM
+  submitTx runContract (ix /\ (uuid /\ tx)) = do
+    ethTxId <- liftAff $ try do
+      when (ix == 2) $ throwError (error "Intentional Demo failure")
+      sginedByLeaderTx <- runContract
+        $ signTransaction (wrap tx :: FinalizedTransaction)
+      txId <- runContract $ submit sginedByLeaderTx
+      log $ "Leader: Submited chaned Tx ID: " <> show txId
+      pure txId
+    case lmap message ethTxId of
+      Left e -> throwError (uuid /\ e)
+      Right txId -> lift (modify_ $ OrderedMap.push uuid txId)
+
+  getFailed v = case v of
+    Left v' -> Just v'
+    Right _ -> Nothing
 
 newLeaderNode
   :: forall a
@@ -454,6 +561,7 @@ resetLeaderState leaderNode = do
   setToRefAtLeaderState leaderNode OrderedMap.empty _.waitingForSubmission
   setToRefAtLeaderState leaderNode WaitingForActions _.stage
   setToRefAtLeaderState leaderNode OrderedMap.empty _.submitted
+  setToRefAtLeaderState leaderNode OrderedMap.empty _.submissionFailed
 
 startLeaderNode
   :: forall a
@@ -501,30 +609,45 @@ leaderLoop leaderNode = do
         ) signatureResults
       )
   log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
-  log $ "Leader: for priority list: " <> showUUIDs signatureFailures
+  log $ "Leader: for priority list (after signing): " <> showUUIDs
+    signatureFailures
   log $ "Leader: setting failures and submission list"
   setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
   setToRefAtLeaderState leaderNode signatureSucess _.waitingForSubmission
   setStage SubmittingChain
-  submissionResults <- submitChain leaderNode signatureSucess
-  let
-    { sucess: submissionSucess, failures: submissionFailures } = purgeResponses
-      batchToProcess
-      submissionResults
+  { succeeded: submissionSucess
+  , failedOne: failedAction
+  , toRetry: priorityRetry
+  } <- submitChain leaderNode batchToProcess signatureSucess
+  -- } <- submitChainBr leaderNode batchToProcess signatureSucess
   log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
-  log $ "Leader: to priority list: " <> showUUIDs submissionFailures
-  log $ "Leader: setting prioritary list"
-  let newPrioritary = OrderedMap.union signatureFailures submissionFailures
+  log $ "Leader: failed chain breaking action: " <> show failedAction
+  log $ "Leader: to priority list (after submitting): " <> showUUIDs
+    priorityRetry
+  let newPrioritary = OrderedMap.union signatureFailures priorityRetry
+  log $ "Leader: setting prioritary list. Total: " <> show
+    (OrderedMap.length newPrioritary)
   setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
   resetLeaderState leaderNode
   -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
   setToRefAtLeaderState leaderNode submissionSucess _.submitted
+  maybeAddToFailed failedAction
   log $ "Leader: awaiting chain confirmed"
   awaitChainConfirmed leaderNode submissionSucess
-  log "Leader: node loop complete!"
+  log "Leader: chain loop complete!"
   leaderLoop leaderNode
 
   where
+
+  maybeAddToFailed maybeFailedAction =
+    maybe
+      (pure unit)
+      ( \failed -> setToRefAtLeaderState leaderNode
+          (OrderedMap.singleton failed)
+          _.submissionFailed
+      )
+      maybeFailedAction
+
   setStage :: LeaderServerStage -> Aff Unit
   setStage stage = do
     log $ "Leader: begining stage " <> show stage
@@ -565,6 +688,7 @@ newLeaderState maxRequestAllowed = do
   signatureResponses <- liftEffect $ Queue.new
   waitingForSubmission <- liftEffect $ Ref.new OrderedMap.empty
   submitted <- liftEffect $ Ref.new OrderedMap.empty
+  submissionFailed <- liftEffect $ Ref.new OrderedMap.empty
   stage <- liftEffect $ Ref.new WaitingForActions
   pure $ wrap
     { receivedActionsRequests
@@ -575,6 +699,7 @@ newLeaderState maxRequestAllowed = do
     , signatureResponses
     , waitingForSubmission
     , submitted
+    , submissionFailed
     , stage
     }
 

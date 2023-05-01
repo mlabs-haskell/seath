@@ -127,6 +127,7 @@ data ActionStatus
   | WaitingOtherChainSignatures (Maybe TransactionHash)
   | PrioritaryToBeProcessed Int
   | Submitted TransactionHash
+  | SubmissionFailed String
   | NotFound
 
 derive instance Generic ActionStatus _
@@ -146,6 +147,7 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
       (encodeAeson txH)
     PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
     Submitted txH -> encodeTagged' "Submitted" (encodeAeson txH)
+    SubmissionFailed err -> encodeTagged' "SubmissionFailed" (encodeAeson err)
     NotFound -> encodeTagged' "NotFound" ""
 
     where
@@ -175,6 +177,7 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
       "Submitted" -> Submitted <$> decodeAeson contents
+      "SubmissionFailed" -> SubmissionFailed <$> decodeAeson contents
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
@@ -218,6 +221,7 @@ type LeaderStateInner a =
         (UUID /\ Maybe Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
   , submitted :: Ref $ OrderedMap UUID TransactionHash
+  , submissionFailed :: Ref $ OrderedMap UUID String
   , stage :: Ref LeaderServerStage
   }
 
