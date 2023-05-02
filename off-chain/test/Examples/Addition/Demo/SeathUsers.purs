@@ -20,7 +20,7 @@ import Data.BigInt as BigInt
 import Data.Map as Map
 import Data.Posix.Signal (Signal(..))
 import Data.Unit (Unit)
-import Effect.Aff (Fiber, delay, error, killFiber)
+import Effect.Aff (delay, error)
 import Node.Process (onSignal)
 import Prelude (show)
 import Seath.HTTP.Utils (mkUserConfig)
@@ -53,7 +53,7 @@ startScenario setup = do
     ixName :: Int -> String
     ixName i = "User-" <> show i
     zipFun user ix = do
-      (fiber /\ (node :: UserNode AdditionAction)) <-
+      (node :: UserNode AdditionAction) <-
         mkUser
           leaderUrl
           mkRunner
@@ -61,22 +61,22 @@ startScenario setup = do
             else (pure <<< Right)
           )
           user
-      pure (ix /\ fiber /\ node)
+      pure (ix /\ node)
 
   namedNodes <- Array.zipWithA zipFun setup.userWallets
     (Array.range 1 (length setup.userWallets))
 
   log $ "Starting with num of users " <> show (Array.length namedNodes)
 
-  for_ namedNodes $ \(ix /\ _ /\ node) -> do
+  for_ namedNodes $ \(ix /\ node) -> do
     log $ ixName ix <> ": preform include action request"
     Users.performAction node (AddAmount $ BigInt.fromInt ix)
 
   liftEffect $ onSignal SIGINT $ launchAff_ do
-    for_ namedNodes $ \(ix /\ fiber /\ node) -> do
+    for_ namedNodes $ \(ix /\ node) -> do
       log $ ixName ix <> " results"
       readResults node >>= log <<< show
-      killFiber (error "can't cleanup user") fiber
+      Users.stopUserNode node
 
   delay (wrap 3000000.0)
   log "Users end"
@@ -89,7 +89,7 @@ mkUser
   -> (KeyWallet -> RunContract)
   -> (Transaction -> Aff (Either String Transaction))
   -> KeyWallet
-  -> Aff (Fiber Unit /\ UserNode a)
+  -> Aff (UserNode a)
 mkUser leaderUrl mkRunner txCheck kw = Users.startUserNode
   ( mkUserConfig leaderUrl (mkRunner kw)
       txCheck

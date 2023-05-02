@@ -6,6 +6,7 @@ module Seath.Network.Users
   , sendRejectionToLeader
   , sendSignedTransactionToLeader
   , startUserNode
+  , stopUserNode
   ) where
 
 import Contract.Prelude
@@ -17,6 +18,7 @@ import Contract.Transaction
   , signTransaction
   )
 import Control.Monad (bind)
+import Data.Array as Array
 import Data.Bifunctor (bimap)
 import Data.Either (Either)
 import Data.Function (($))
@@ -29,6 +31,7 @@ import Effect.Aff
   , delay
   , error
   , forkAff
+  , killFiber
   , launchAff_
   , throwError
   , try
@@ -42,7 +45,17 @@ import Seath.Core.Utils as Core.Utils
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus(..)
+  ( ActionStatus
+      ( ToBeProcessed
+      , AskForSignature
+      , Submitted
+      , SubmissionFailed
+      , NotFound
+      , PrioritaryToBeProcessed
+      , WaitingOtherChainSignatures
+      , Processing
+      , ToBeSubmitted
+      )
   , IncludeActionError
   , RunContract(RunContract)
   , SignedTransaction
@@ -158,11 +171,26 @@ startUserNode
   :: forall a
    . Show a
   => UserConfiguration a
-  -> Aff (Fiber Unit /\ UserNode a)
+  -> Aff (UserNode a)
 startUserNode conf = do
   node <- newUserNode conf
   fiber <- startActionStatusCheck node
-  pure $ fiber /\ node
+  liftEffect $ Ref.modify_ (Array.cons fiber) (unwrap node)._userFibers
+  pure node
+
+newUserNode :: forall a. Show a => UserConfiguration a -> Aff (UserNode a)
+newUserNode conf = do
+  state <- newUserState
+  fibers <- liftEffect $ Ref.new []
+  let
+    userNode = wrap
+      { state: state
+      , configuration: conf
+      , _userFibers: fibers
+      }
+  liftEffect $ Queue.on (unwrap state).actionsSentQueue $ makeActionsSentHandler
+    userNode
+  pure $ userNode
 
 newUserState :: forall a. Aff (UserState a)
 newUserState = do
@@ -174,6 +202,15 @@ newUserState = do
     , actionsSent
     , resultsQueue
     }
+
+stopUserNode
+  :: forall a
+   . UserNode a
+  -> Aff Unit
+stopUserNode node = do
+  fibers <- liftEffect $ Ref.read (unwrap node)._userFibers
+  for_ fibers $
+    \fiber -> killFiber (error "Failed to cleanup user fibers") fiber
 
 singTransactionAndSend
   :: forall a
@@ -300,18 +337,6 @@ makeActionsSentHandler userNode record = launchAff_ $
   putFailureAndDelete msg = do
     putToResults userNode $ makeResult (Left msg)
     modifyActionsSent userNode (OrderedMap.delete record.uuid)
-
-newUserNode :: forall a. Show a => UserConfiguration a -> Aff (UserNode a)
-newUserNode conf = do
-  state <- newUserState
-  let
-    userNode = wrap
-      { state: state
-      , configuration: conf
-      }
-  liftEffect $ Queue.on (unwrap state).actionsSentQueue $ makeActionsSentHandler
-    userNode
-  pure $ userNode
 
 startActionStatusCheck :: forall a. Show a => UserNode a -> Aff (Fiber Unit)
 startActionStatusCheck userNode = do

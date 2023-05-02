@@ -68,11 +68,10 @@ mainTest setup = do
         coreConfig
         (mkRunner leader)
 
-  checkInitSctipt env admin { waitingTime: 3, maxAttempts: 10 }
-
-  let
     serverConf :: SeathServerConfig
     serverConf = { port: leaderPort }
+
+  checkInitSctipt env admin { waitingTime: 3, maxAttempts: 10 }
 
   seathNode <-
     SeathNode.start
@@ -80,15 +79,12 @@ mainTest setup = do
       testLeaderConfig
       (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
 
-  ff <- forkAff $ DemoUsers.startScenario setup
+  usersFiber <- forkAff $ DemoUsers.startScenario setup
   delay (wrap 30000.0)
-  killFiber (error "Done") ff
-  -- liftEffect $ onSignal SIGINT $ launchAff_ do
+  killFiber (error "Test done - stoppping fibers") usersFiber
   log "Stopping leader  node"
   SeathNode.stop seathNode
   log "Leader  node stopped"
-
-  -- launchAff_ $ joinFiber usersProcessFiber
   log "Seath network test end"
 
 checkInitSctipt

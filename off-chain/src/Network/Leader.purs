@@ -32,7 +32,16 @@ import Data.Either (Either)
 import Data.Int (toNumber)
 import Data.Tuple.Nested (type (/\))
 import Data.UUID (UUID, genUUID)
-import Effect.Aff (Aff, Fiber, delay, error, forkAff, message, throwError, try)
+import Effect.Aff
+  ( Aff
+  , delay
+  , error
+  , forkAff
+  , killFiber
+  , message
+  , throwError
+  , try
+  )
 import Effect.Exception (throw)
 import Effect.Ref (Ref)
 import Effect.Ref as Ref
@@ -74,7 +83,125 @@ import Seath.Network.Utils
   , takeFromPending
   )
 import Type.Function (type ($))
-import Undefined (undefined)
+
+startLeaderNode
+  :: forall a
+   . Show a
+  => LeaderConfiguration a
+  -> Aff (LeaderNode a)
+startLeaderNode conf = do
+  node <- newLeaderNode conf
+  fiber <- forkAff $ leaderLoop node
+  liftEffect $ Ref.modify_ (Array.cons fiber) (unwrap node)._leaderFibers
+  pure node
+
+stopLeaderNode
+  :: forall a
+   . LeaderNode a
+  -> Aff Unit
+stopLeaderNode node = do
+  fibers <- liftEffect $ Ref.read (unwrap node)._leaderFibers
+  for_ fibers $
+    \fiber -> killFiber (error "Failed to cleanup leader fibers") fiber
+
+newLeaderNode
+  :: forall a
+   . Show a
+  => LeaderConfiguration a
+  -> Aff (LeaderNode a)
+newLeaderNode conf = do
+  newState <- newLeaderState (unwrap conf).numberOfActionToTriggerChainBuilder
+  fibers <- liftEffect $ Ref.new []
+  let
+    node = LeaderNode
+      { state: newState
+      , configuration: conf
+      , _leaderFibers: fibers
+      }
+  pure node
+
+leaderLoop
+  :: forall actionType. Show actionType => LeaderNode actionType -> Aff Unit
+leaderLoop leaderNode = do
+  log "Leader: New leader loop begins"
+  setStage WaitingForActions
+  waitForRequests leaderNode
+  log "Leader: Taking batch to process"
+  batchToProcess <- getBatchOfResponses leaderNode
+  setToRefAtLeaderState leaderNode batchToProcess _.processing
+  log $ "Leader: Batch to process: " <> showUUIDs batchToProcess
+  setStage BuildingChain
+  eitherBuiltChain <- buildChain leaderNode batchToProcess
+  case eitherBuiltChain of
+    Left e -> do
+      log $ "Leader: fail to built chain of size "
+        <> show (OrderedMap.length batchToProcess)
+        <> " "
+        <> e
+      -- TODO : We are discarting all the processing actions if the builder 
+      -- fails, we can't add them to the prioritaryPendingActions since 
+      -- the builder either sucess in all the chain or fails.
+      leaderLoop leaderNode
+    Right builtChain -> do
+      setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
+  -- getFromRefAtLeaderState leaderNode _.waitingForSignature
+  --   >>= log <<< ("Leader: builder result: " <> _) <<< show
+  setStage WaitingForChainSignatures
+  signatureResults <- waitForChainSignatures leaderNode
+  let
+    { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
+      batchToProcess
+      ( ( OrderedMap.fromFoldable <<< ((<$>) (\(k /\ v) -> (k /\ note unit v)))
+            <<< OrderedMap.toArray
+        ) signatureResults
+      )
+  log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
+  log $ "Leader: for priority list (after signing): " <> showUUIDs
+    signatureFailures
+  log $ "Leader: setting failures and submission list"
+  setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
+  setToRefAtLeaderState leaderNode signatureSucess _.waitingForSubmission
+  setStage SubmittingChain
+  { succeeded: submissionSucess
+  , failedOne: failedAction
+  , toRetry: priorityRetry
+  } <- submitChain leaderNode batchToProcess signatureSucess
+  -- } <- submitChainBr leaderNode batchToProcess signatureSucess
+  log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
+  log $ "Leader: failed chain breaking action: " <> show failedAction
+  log $ "Leader: to priority list (after submitting): " <> showUUIDs
+    priorityRetry
+  let newPrioritary = OrderedMap.union signatureFailures priorityRetry
+  log $ "Leader: setting prioritary list. Total: " <> show
+    (OrderedMap.length newPrioritary)
+  setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
+  resetLeaderState leaderNode
+  -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
+  setToRefAtLeaderState leaderNode submissionSucess _.submitted
+  maybeAddToFailed failedAction
+  log $ "Leader: awaiting chain confirmed"
+  awaitChainConfirmed leaderNode submissionSucess
+  log "Leader: chain loop complete!"
+  leaderLoop leaderNode
+
+  where
+
+  maybeAddToFailed maybeFailedAction =
+    maybe
+      (pure unit)
+      ( \failed -> setToRefAtLeaderState leaderNode
+          (OrderedMap.singleton failed)
+          _.submissionFailed
+      )
+      maybeFailedAction
+
+  setStage :: LeaderServerStage -> Aff Unit
+  setStage stage = do
+    log $ "Leader: begining stage " <> show stage
+    setToRefAtLeaderState leaderNode stage _.stage
+
+  showUUIDs :: forall b. OrderedMap UUID b -> String
+  showUUIDs _map = show $ OrderedMap.orderedKeys _map
 
 includeAction
   :: forall a
@@ -488,20 +615,6 @@ submitChainBr leaderNode batch chain = do
     Left v' -> Just v'
     Right _ -> Nothing
 
-newLeaderNode
-  :: forall a
-   . Show a
-  => LeaderConfiguration a
-  -> Aff (LeaderNode a)
-newLeaderNode conf = do
-  newState <- newLeaderState (unwrap conf).numberOfActionToTriggerChainBuilder
-  let
-    node = LeaderNode
-      { state: newState
-      , configuration: conf
-      }
-  pure node
-
 getBatchOfResponses
   :: forall a. Show a => LeaderNode a -> Aff (OrderedMap UUID (UserAction a))
 getBatchOfResponses ln = do
@@ -563,99 +676,6 @@ resetLeaderState leaderNode = do
   setToRefAtLeaderState leaderNode OrderedMap.empty _.submitted
   setToRefAtLeaderState leaderNode OrderedMap.empty _.submissionFailed
 
-startLeaderNode
-  :: forall a
-   . Show a
-  => LeaderConfiguration a
-  -> Aff (Fiber Unit /\ LeaderNode a)
-startLeaderNode conf = do
-  node <- newLeaderNode conf
-  fiber <- forkAff $ leaderLoop node
-  pure $ fiber /\ node
-
-leaderLoop
-  :: forall actionType. Show actionType => LeaderNode actionType -> Aff Unit
-leaderLoop leaderNode = do
-  log "Leader: New leader loop begins"
-  setStage WaitingForActions
-  waitForRequests leaderNode
-  log "Leader: Taking batch to process"
-  batchToProcess <- getBatchOfResponses leaderNode
-  setToRefAtLeaderState leaderNode batchToProcess _.processing
-  log $ "Leader: Batch to process: " <> showUUIDs batchToProcess
-  setStage BuildingChain
-  eitherBuiltChain <- buildChain leaderNode batchToProcess
-  case eitherBuiltChain of
-    Left e -> do
-      log $ "Leader: fail to built chain of size "
-        <> show (OrderedMap.length batchToProcess)
-        <> " "
-        <> e
-      -- TODO : We are discarting all the processing actions if the builder 
-      -- fails, we can't add them to the prioritaryPendingActions since 
-      -- the builder either sucess in all the chain or fails.
-      leaderLoop leaderNode
-    Right builtChain -> do
-      setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
-  -- getFromRefAtLeaderState leaderNode _.waitingForSignature
-  --   >>= log <<< ("Leader: builder result: " <> _) <<< show
-  setStage WaitingForChainSignatures
-  signatureResults <- waitForChainSignatures leaderNode
-  let
-    { sucess: signatureSucess, failures: signatureFailures } = purgeResponses
-      batchToProcess
-      ( ( OrderedMap.fromFoldable <<< ((<$>) (\(k /\ v) -> (k /\ note unit v)))
-            <<< OrderedMap.toArray
-        ) signatureResults
-      )
-  log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
-  log $ "Leader: for priority list (after signing): " <> showUUIDs
-    signatureFailures
-  log $ "Leader: setting failures and submission list"
-  setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
-  setToRefAtLeaderState leaderNode signatureSucess _.waitingForSubmission
-  setStage SubmittingChain
-  { succeeded: submissionSucess
-  , failedOne: failedAction
-  , toRetry: priorityRetry
-  } <- submitChain leaderNode batchToProcess signatureSucess
-  -- } <- submitChainBr leaderNode batchToProcess signatureSucess
-  log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
-  log $ "Leader: failed chain breaking action: " <> show failedAction
-  log $ "Leader: to priority list (after submitting): " <> showUUIDs
-    priorityRetry
-  let newPrioritary = OrderedMap.union signatureFailures priorityRetry
-  log $ "Leader: setting prioritary list. Total: " <> show
-    (OrderedMap.length newPrioritary)
-  setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
-  resetLeaderState leaderNode
-  -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
-  setToRefAtLeaderState leaderNode submissionSucess _.submitted
-  maybeAddToFailed failedAction
-  log $ "Leader: awaiting chain confirmed"
-  awaitChainConfirmed leaderNode submissionSucess
-  log "Leader: chain loop complete!"
-  leaderLoop leaderNode
-
-  where
-
-  maybeAddToFailed maybeFailedAction =
-    maybe
-      (pure unit)
-      ( \failed -> setToRefAtLeaderState leaderNode
-          (OrderedMap.singleton failed)
-          _.submissionFailed
-      )
-      maybeFailedAction
-
-  setStage :: LeaderServerStage -> Aff Unit
-  setStage stage = do
-    log $ "Leader: begining stage " <> show stage
-    setToRefAtLeaderState leaderNode stage _.stage
-
-  showUUIDs :: forall b. OrderedMap UUID b -> String
-  showUUIDs _map = show $ OrderedMap.orderedKeys _map
-
 awaitChainConfirmed
   :: forall a. LeaderNode a -> OrderedMap UUID TransactionHash -> Aff Unit
 awaitChainConfirmed node chainMap = do
@@ -669,9 +689,6 @@ awaitChainConfirmed node chainMap = do
         (encodeAeson txHash)
       runContract $ awaitTxConfirmed txHash
   log "Leader: chain confirmed"
-
-stopLeaderNode :: forall a. LeaderNode a -> Aff Unit
-stopLeaderNode = undefined
 
 -- | To build a new `LeaderState`
 newLeaderState :: forall a. Int -> Aff $ LeaderState a

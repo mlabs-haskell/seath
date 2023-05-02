@@ -26,8 +26,4 @@ type RunnerSetup =
   , adminWallet :: KeyWallet
   , leaderWallet :: KeyWallet
   , userWallets :: Array KeyWallet
-
   }
-
--- type SeathRunner =
---   ContractEnv -> KeyWallet -> KeyWallet -> Array KeyWallet -> Aff Unit

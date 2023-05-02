@@ -39,13 +39,12 @@ startLeaderSeathNode setup = do
 
     testLeaderConfig =
       mkLeaderConfig
-        3000
-        4
-        3000
+        3000 -- timeout for building chain
+        4 -- number of pending actions in queue
+        3000 -- timeout for signatures awaiting
         coreConfig
         (mkRunner leader)
 
-  let
     serverConf :: SeathServerConfig
     serverConf = { port: leaderPort }
 
@@ -56,6 +55,7 @@ startLeaderSeathNode setup = do
       (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
 
   liftEffect $ onSignal SIGINT $ launchAff_ do
+    log "Shutting down Seath leader node"
     SeathNode.stop seathNode
 
   delay (wrap 3000000.0)

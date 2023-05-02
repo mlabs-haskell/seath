@@ -43,7 +43,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Fiber)
 import Effect.Ref (Ref)
 import Queue as Queue
 import Seath.Common.Types (UID(UID))
@@ -251,6 +251,7 @@ derive instance Newtype (LeaderConfiguration a) _
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
+  , _leaderFibers :: Ref (Array (Fiber Unit))
   }
 
 derive instance Newtype (LeaderNode a) _
@@ -304,6 +305,7 @@ derive instance Newtype (UserConfiguration a) _
 newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
+  , _userFibers :: Ref (Array (Fiber Unit))
   }
 
 derive instance Newtype (UserNode a) _
