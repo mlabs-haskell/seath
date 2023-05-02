@@ -19,7 +19,7 @@ main = do
   args <- argv
   case args !! 2 of
     Just "preprod" -> case args !! 3 of
-      Just "e2e-test" -> PreprodRunner.run AutoE2E.mainTest
+      Just "auto-e2e-test" -> PreprodRunner.run AutoE2E.mainTest
       Just "start-server" -> PreprodRunner.run DemoServer.startLeaderSeathNode
       Just "start-users" -> PreprodRunner.run DemoUsers.startScenario
       other -> throw $ "Unknown args: " <> show other
