@@ -1,4 +1,4 @@
-module Test.Examples.Addition.SeathNetwork
+module Test.Examples.Addition.AutomatedEndToEndTest
   ( mainTest
   ) where
 

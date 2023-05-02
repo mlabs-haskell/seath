@@ -9,7 +9,7 @@ import Effect.Aff (supervise)
 import Prelude (($))
 import Seath.Test.Utils (makeDistribution)
 import Seath.Test.Utils as Test.Utils
-import Test.Examples.Addition.SeathNetwork (mainTest)
+import Test.Examples.Addition.AutomatedEndToEndTest (mainTest)
 
 run :: Effect Unit
 run = launchAff_
