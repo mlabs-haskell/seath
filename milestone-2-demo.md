@@ -4,6 +4,8 @@ It is strongly recommended to use Nix to run this demo and following description
 
 Main entry point of the demo is [Seath.Test.Main module](./off-chain/test/Main.purs).
 
+🎦 Recording of the demo is available [here](https://drive.google.com/drive/folders/1uBvU1d5iAWRd7IvStLEiip83yS8kh5i5?usp=sharing).
+
 ## Running on local private network
 
 Local network capabilities are integrated into current setup. Local network provided by [Plutip](https://github.com/mlabs-haskell/plutip). Network is started from scratch on each run. Slot length is is to 1 second - see [config :: PlutipConfig](./off-chain/test/PlutipRunner.purs).

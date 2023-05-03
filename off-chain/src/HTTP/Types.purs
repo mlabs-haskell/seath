@@ -44,9 +44,6 @@ instance encIncludeReq ::
 instance includeContentType :: HasContentType (IncludeRequest a) where
   getContentType _ = json
 
-instance EncodeParam (IncludeRequest a) where
-  encodeParam = undefined
-
 -- Phantom types to make Spec and Handlers more readable
 -- Went with Record coz couldn't make `DecodeResponse` instance for custom `data` type
 type JSend :: forall err a. err -> a -> Type

@@ -1,5 +1,5 @@
 module Seath.Network.OrderedMap
-  ( OrderedMap(OrderedMap)
+  ( OrderedMap(..)
   , delete
   , drop
   , empty
@@ -8,9 +8,11 @@ module Seath.Network.OrderedMap
   , lookup
   , lookupPosition
   , lookupWithPosition
+  , mapValues
   , orderedElems
   , orderedKeys
   , push
+  , singleton
   , take
   , toArray
   , union
@@ -78,6 +80,9 @@ push key value (OrderedMap ordMap) =
 empty :: forall a b. OrderedMap a b
 empty = OrderedMap { map: Map.empty, array: [] }
 
+singleton :: forall k v. Ord k => (k /\ v) -> OrderedMap k v
+singleton (k /\ v) = push k v empty
+
 orderedElems :: forall k v. OrderedMap k v -> Array (k /\ v)
 orderedElems (OrderedMap oMap) = oMap.array
 
@@ -92,6 +97,13 @@ drop n (OrderedMap oMap) = fromFoldable (Array.drop n oMap.array)
 
 orderedKeys :: forall k v. OrderedMap k v -> Array k
 orderedKeys (OrderedMap oMap) = fst <$> oMap.array
+
+mapValues
+  :: forall k v v'. Ord k => (v -> v') -> OrderedMap k v -> OrderedMap k v'
+mapValues g (OrderedMap oMap) =
+  fromFoldable (map f oMap.array)
+  where
+  f (k /\ v) = (k /\ g v)
 
 fromFoldable
   :: forall f k v

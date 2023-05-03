@@ -1,27 +1,27 @@
 module Seath.Test.PlutipRunner (run) where
 
-import Contract.Config (LogLevel(Info), emptyHooks)
 import Contract.Monad (launchAff_)
-import Contract.Test.Plutip (PlutipConfig, withPlutipContractEnv)
-import Data.Maybe (Maybe(Nothing))
+import Contract.Test.Plutip (withPlutipContractEnv)
 import Data.Tuple.Nested ((/\))
-import Data.UInt (fromInt) as UInt
 import Data.Unit (Unit)
 import Effect (Effect)
 import Effect.Aff (supervise)
 import Prelude (($))
 import Seath.Test.Utils (makeDistribution)
 import Seath.Test.Utils as Test.Utils
-import Test.Examples.Addition.SeathNetwork (mainTest)
+import Test.Examples.Addition.AutomatedEndToEndTest (mainTest)
 
 run :: Effect Unit
 run = launchAff_
   $ withPlutipContractEnv Test.Utils.plutipConfig (makeDistribution 4)
   $
-    \env ((adminWallet /\ leaderWallet) /\ participantsWallets) -> do
-      ( supervise -- ! misha: I've added it here so we get the same behavior as with `withContractEnv``
+    \env ((adminWallet /\ leaderWallet) /\ userWallets) -> do
+      ( supervise -- added it here so we get the same behavior as with `withContractEnv`
 
-          $ mainTest env adminWallet leaderWallet
-              participantsWallets
+          $ mainTest
+              { contractEnv: env
+              , adminWallet
+              , leaderWallet
+              , userWallets
+              }
       )
-

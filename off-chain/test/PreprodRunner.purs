@@ -16,18 +16,23 @@ import Data.Unit (Unit)
 import Effect.Aff (error)
 import Node.FS.Aff (readdir)
 import Node.Path as Path
+import Seath.Test.Types (RunnerSetup)
 import Seath.Test.Utils (makeKeyWallet)
-import Test.Examples.Addition.SeathNetwork as SeathNet
 
-run :: Effect Unit
-run = launchAff_ $ do
+run :: (RunnerSetup -> Aff Unit) -> Effect Unit
+run runSeath = launchAff_ $ do
   seathKeys <- mekeSeathKeys "./test/keys/seath_keys"
   (admin /\ leader /\ users) <-
     liftMaybe (error "Could not build runner config") $ mkRunnerConf
       seathKeys
 
   withContractEnv config $ \env -> do
-    SeathNet.mainTest env admin leader users
+    runSeath
+      { contractEnv: env
+      , adminWallet: admin
+      , leaderWallet: leader
+      , userWallets: users
+      }
 
   where
   mekeSeathKeys keysDir = do

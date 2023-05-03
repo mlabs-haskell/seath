@@ -169,6 +169,7 @@ action2Transaction
               (unwrap userAction).userUTxOs
           )
         <> mustBeSignedBy (wrap (unwrap userAction).publicKey)
+        <> mustBeSignedBy (wrap config.leader)
     unbalancedTx <- liftedE $ Lookups.mkUnbalancedTx
       (handlerResult.lookups <> unspentOutputs (unwrap userAction).userUTxOs)
       constraints
