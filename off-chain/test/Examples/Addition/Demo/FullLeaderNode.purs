@@ -1,5 +1,5 @@
-module Test.Examples.Addition.Demo.SeathServerNode
-  ( startLeaderSeathNode
+module Test.Examples.Addition.Demo.FullLeaderNode
+  ( startNode
   ) where
 
 import Contract.Prelude
@@ -7,6 +7,7 @@ import Contract.Prelude
 import Contract.Monad (launchAff_, runContractInEnv)
 import Contract.Test (withKeyWallet)
 import Contract.Wallet (KeyWallet)
+import Control.Monad.Rec.Class (forever)
 import Data.Posix.Signal (Signal(..))
 import Data.Unit (Unit)
 import Effect.Aff (delay)
@@ -19,9 +20,9 @@ import Seath.Network.Types (RunContract(RunContract))
 import Seath.Test.Examples.Addition.ContractUtils (buildAdditionCoreConfig) as Addition
 import Seath.Test.Types (RunnerSetup)
 
-startLeaderSeathNode
+startNode
   :: RunnerSetup -> Aff Unit
-startLeaderSeathNode setup = do
+startNode setup = do
 
   let
     env = setup.contractEnv
@@ -37,7 +38,7 @@ startLeaderSeathNode setup = do
     mkRunner :: KeyWallet -> RunContract
     mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
 
-    testLeaderConfig =
+    leaderNodeConfig =
       mkLeaderConfig
         3000 -- timeout for building chain
         4 -- number of pending actions in queue
@@ -45,18 +46,19 @@ startLeaderSeathNode setup = do
         coreConfig
         (mkRunner leader)
 
+    userNodeConfig = mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right)
+
     serverConf :: SeathServerConfig
     serverConf = { port: leaderPort }
 
-  seathNode <-
-    SeathNode.start
-      serverConf
-      testLeaderConfig
-      (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
+  seathNode <- SeathNode.start serverConf leaderNodeConfig userNodeConfig
 
   liftEffect $ onSignal SIGINT $ launchAff_ do
     log "Shutting down Seath leader node"
     SeathNode.stop seathNode
+    log "server - done"
 
-  delay (wrap 3000000.0)
-  log "server done"
+  waitFrever
+
+waitFrever :: Aff Unit
+waitFrever = forever $ delay (wrap 3000000.0)

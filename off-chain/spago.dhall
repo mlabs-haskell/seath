@@ -34,6 +34,7 @@ You can edit this file as you like.
   , "refs"
   , "spec"
   , "strings"
+  , "tailrec"
   , "transformers"
   , "tuples"
   , "typelevel-prelude"
