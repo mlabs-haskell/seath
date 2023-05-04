@@ -53,7 +53,17 @@ import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.TxHex as TxHex
 import Seath.Network.Types
-  ( ActionStatus(..)
+  ( ActionStatus
+      ( AskForSignature
+      , ToBeProcessed
+      , ToBeSubmitted
+      , Processing
+      , WaitingOtherChainSignatures
+      , PrioritaryToBeProcessed
+      , Submitted
+      , SubmissionFailed
+      , NotFound
+      )
   , IncludeActionError(RejectedServerBussy)
   , LeaderConfiguration
   , LeaderNode(LeaderNode)

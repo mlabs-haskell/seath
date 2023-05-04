@@ -24,7 +24,7 @@ import Data.Newtype (class Newtype, wrap)
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.Unit (unit)
 import Prelude (discard, ($))
-import Seath.Core.Types (CoreConfiguration(..))
+import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.Types

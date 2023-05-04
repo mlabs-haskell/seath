@@ -1,5 +1,5 @@
 module Seath.Network.OrderedMap
-  ( OrderedMap(..)
+  ( OrderedMap(OrderedMap)
   , delete
   , drop
   , empty
