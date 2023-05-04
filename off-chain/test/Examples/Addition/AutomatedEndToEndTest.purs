@@ -133,7 +133,7 @@ buildAdditionCoreConfig = do
   leaderPkh <- getPublicKeyHash
   pure $ CoreConfiguration
     { leader: leaderPkh
-    , stateVaildatorHash: vaildatorHash
+    , stateValidatorHash: vaildatorHash
     , actionHandler: Addition.handleAction
     , queryBlockchainState: Addition.queryBlockchainState
     }

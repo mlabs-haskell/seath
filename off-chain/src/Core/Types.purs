@@ -102,7 +102,7 @@ newtype CoreConfiguration
   (datumType :: Type)
   (redeemerType :: Type) = CoreConfiguration
   { leader :: PubKeyHash
-  , stateVaildatorHash :: ValidatorHash
+  , stateValidatorHash :: ValidatorHash
   , actionHandler ::
       DatumType validatorType datumType
       => RedeemerType validatorType redeemerType
