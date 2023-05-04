@@ -7,11 +7,15 @@
     - [Off-chain](#off-chain)
       - [Developing with real network](#developing-with-real-network)
   - [Seath technical overview](#seath-technical-overview)
+    - [How transaction chainig is handled](#how-transaction-chainig-is-handled)
   - [Addition protocol demo](#addition-protocol-demo)
     - [Core functionality](#core-functionality)
     - [User and Leader logic](#user-and-leader-logic)
-  - [Users demo setup](#users-demo-setup)
-  - [Running the demo](#running-the-demo)
+      - [Contract runner](#contract-runner)
+      - [Leader node config](#leader-node-config)
+      - [User node config](#user-node-config)
+    - [Web-server config](#web-server-config)
+    - [Users demo scenario](#users-demo-scenario)
 
 This documents describes simple stateful protocol that can be run on-chain and the way how to integrate and run it with Seath framework.
 
@@ -141,6 +145,8 @@ Dependency graph: `Core` <- `Network` <- `HTTP`
 
 All this parts will be explained in more details below in parallel with demo setup explanation.
 
+### How transaction chainig is handled
+
 ## Addition protocol demo
 
 Modules required to run the demo located in [Demo directory of Addition example](./off-chain/test/Examples/Addition/Demo/).
@@ -219,44 +225,116 @@ Thats it for `Core` part. Having `CoreConfiguration` Seath node will be able to 
 
 ### User and Leader logic
 
+If we look further into `FullLeaderNode.purs` we'll see
 
+```haskell
+    mkRunner :: KeyWallet -> RunContract
+    mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
 
+    leaderNodeConfig =
+      Seath.mkLeaderConfig
+        3000 -- timeout for building chain
+        4 -- number of pending actions in queue
+        3000 -- timeout for signatures awaiting
+        coreConfig
+        (mkRunner leader)
 
+    userNodeConfig = Seath.mkUserConfig leaderUrl (mkRunner leader)
+      (pure <<< Right)
+```
 
+#### Contract runner
 
+First thing to note here is creation of `RunContract` which is further used in making leader and user configs. Both leader and user logic uses CTL Contracts to interact with blockchain, thus it need a way to run Contracts. CTL can execute contracts in several environments, using cardano-cli generated keys or integration with light wallets. Here we are using cardano-cli generated keys and `KeyWallet` CTL feature to run contracts using them. And we construct function that can use `KeyWallet` and current CTL environment (see docs for CTL `withContractEnv`) to build the function that will be able to execute Contract using provided key inside `Seath node`.
 
-To start the full Seath node we'll need to provide some configurations data.
-  - IPv4 network layer options
-    - Port for web-server layer
-    - Leader url - internal user node will use this URL to make requests to the leader. At the moment, there is no functionality to choose or leader dynamically, but it can be implemented in a pretty straight forawrd way with existing architecture
-  - Transaction chaining options
-    - Number of user actions in leader's "mailbox" that will trigger chain building and submission. When leader receives request from user to submit his action to chain, the action is added to leader's queue first. When number of actions reqches configureble treshold, leader pulls action from this queue and starts processing them
-    - Timeout before leader start processing user actions. Even if there is not enough actions in the leader's mailbox queue, after configureble period of time leader will start processing anyway
-    - Time that leader will wait for signatures. After leader started processing user actions, it will build chain of transactions from them accrdong to provided core configuration (more on this below) and then after chain is ready, it will wait for users to sign their transactions. OFter this timeout (in milliseconds) leader will check signen transactions it received from users and submit them. If transaction was not signed on time or user rejected to sign transaction, it will be discarded from processing pipeline, and if this transaction breaks the chain, proper measure will be applied (more on this in the following sections)
-  - Contract runner and Core options
-    - Running both leader and user logic requires interactions with blockhain. At the moment, Seath uses `Contract` functionality provided by CTL (which was inspired by IOG PAB). Some steps that require creation of user actions, signing, building chains of transactions and chain submission are made as CTL contracts. So node need a way to execute those contracts, but contract execution depends on various environments that CTL capable to provide. For the demo we are using `KeyWallet` wallets and CTL runtime to execute contracts and function that will execute CTL contracts is built to support that (more options can be found in CTL documentation)
-    - Seath `CoreConfiguration`. Core configuration contains core logic for on-chain protocol state machine. Here user of Seath framework should describe what it means to perform a step on state machine and how to query initial script state. Config contains following fields:
-      - `stateValidatorHash` - hash of the validator that holds state UTXOs
-      - `queryBlockchainState` - CTL `Contract` that describes how to query current state of the state machine form blockchain. This call is requered to build chain of transactions, so whole chain will perform actions starting from the latest valid state of protocol's state machine
-      - `actionHandler` - crucial part of the framework. It is Contract defined by framework user that describes how to perform step on the state machine of the protocol. Type of `actionHandler` defines the function, which provides to the user of framework  access to the current action that is performed on the protocol, current protocol state and handler that can query UTXOs from validator script of the protocol state machine. With this in hand user able build transaction that can execute step on the protocol, but in case of the Seath insted of full transaction, user need to provide lookups, constrants and new expected state (which will be submitted with new Datum of the output that will create new state UTXO). Real transaction will be built by Seath from this data. In the demo there is only one action to perform on protocol - `AddAmount` that describes our intention to add some number to the current state. We are getting amount from `AddAmount`, building Redeemer and Datum and use them to build lookups and constraints. Then get new amount from new Datum to return it as new "current" state . It is important to note, that function that get UTXOs from the script in `actionHandler` returns real UTXOs from the cblockhain only for first transaction in chain. For further transactions it would return pre-calulculated UTXOs as if we would submit transactions one by one and wait each of them to be confirmed. So for most of the actions in chain this fucntion can't be the source of the real UTXOs that are currently on-chain. In other words, it returns UTXOs that script will have after previous transaction in chain.
-      - `leader` - hash of the public key that leader node uses. Currently, Seath doesn't support dynamic leader change, but this can be improved in further development.
+#### Leader node config
 
-It is advised to use framework provided functions to build configs for leader and user nodes: `mkLeaderConfig` and `mkUserConfig`. Nodes configs are pretty involved and this functions simplify creation of configs by making some required wiring under the hood in way that is 100% correct.
+`Seath.mkLeaderConfig` will build configuration for internal `LeaderNode` that `Seath node` will run. It si strongly recommended to use this framework provided function to build config. Nodes configs are pretty involved and this functions simplify creation of config by making some required wiring under the hood in way that is 100% correct.
 
-## Users demo setup
+Current configurable options are:
 
-Unlike Leader setup, nodes that will play role of users are not started as full Seath nodes in the demo. This is made only for convinisence - this way output of all users can be observed in one terminal and there will be no distracting logs from the processes executed by the leader node inside full Seath node. Also, this way it is easer to automate and run demo scenarios.
+- Timeout before leader start processing user actions - milliseconds. Even if there is not enough actions in the leader's mailbox queue, after this period of time leader will start processing anyway
 
-We are using framowrk function `mkUserConfig` to make config same way as we did in `Leader Setup`. Besides of already metnioned url of the leader server and contract runner, user config also accepts the function that can check chained transaction. After leader finish building, balancing and chainig of transactions, it marks them as ready to be signed. When user detects this status, it pulls transaction with corresponding seath-id from the leader and signs it. But before signing, it runs transaction check function. If this function returns an error, user node will refuse to sign transaction and notify the leader about that. Users of the seath framework can implement any checking function that conforms the type in config. Whole transaction built by the leader is supplied as an argument to this function.
+- Number of user `actions` in leader's "mailbox" that will trigger chain building and submission. When leader receives request from user to submit his `action` to chain, the action is added to leader's queue first. When number of actions reaches this threshold, leader pulls action from the queue and starts processing them
 
-After config is ready, we can call `startUserNode` with it and launch all processes required to act as a user. This is exact same procedure that full Seath node perfors during launch. So this "internal" user node can be used alone as fully functional unit for user interactions. And this is exactly how things arranged for the demo.
+- Time that leader waits for signatures - milliseconds. After leader started processing user actions, it will build chain of transactions from them according to provided `CoreConfiguration` and then after chain is ready, it will wait for users to sign their transactions. After this timeout leader will check signed transactions it received from users and submit them. If transaction was not signed on time or user rejected to sign transaction, it will be discarded from processing pipeline, and if this transaction breaks the chain, proper measure will be applied (more on this in the following sections)
 
--- TODO
-- add links to modules
-- add code and command snippets
-- extend `Running the demo` section
+And in addition we need to provide `CoreConfiguration` and contract runner to get config for `UserNode`.
 
-## Running the demo
-Execution options:
-- Auto test: `auto-e2e-test` - full seath node launched for leader, "internal" user nodes launched to simulate users. Each user submit single action. Test runs for 30 seconds, then shut down all nodes and exit.
-- Manual test: `start-server` - to start full seath node that will be used as leader, `start-users` - to start "internal" user nodes and perform scenario.
+#### User node config
+
+To make user config we use `Seath.mkUserConfig`. It is also strongly advised to use this framework provided function instead of building config by hand using constructor.
+
+`UserNode` config accepts:
+
+- Leader url - `mkUserConfig` will create necessary handlers to enable network communication required by user logic
+- Contract runner function - we use hereleader key again, as we are creating full `Seath node` that can act both as leader and user, but it will play the role of leader for the demo
+- Function to check transaction - this function should be defined by the user of Seath framework. When leader will build chain of transactions it mark them as ready to be signed. User will pull his transaction from the leader, but before signing it, user can examine whole transaction, and if something doesn't look correct, refuse to sign it by returning error (`Left`) from this function. Node will notify the leader that user refused to sign transaction and it will be excluded from further processing.
+
+### Web-server config
+
+Further in `FullLeaderNode.purs` we see last required part
+
+```haskell
+    serverConf :: SeathServerConfig
+    serverConf = { port: leaderPort }
+```
+
+To start web-server we need only port. Web-server wil serve REST API that will enable node that acts as leader to receive requests from user nodes.
+
+With all that prepared we can start `Seath node`
+
+```haskell
+seathNode <- SeathNode.start serverConf leaderNodeConfig userNodeConfig
+```
+
+To stop the node
+
+```haskell
+SeathNode.stop seathNode
+```
+
+In the demo we leave leader node to run forever until interruption.
+
+As a reminder, to start leader node from CLI
+
+```shell
+```shell
+nix develop .#off-chain
+# when Nix shell is up and ready
+cd off-chain
+spago run -m Seath.Test.Main -b preprod -b start-leader 
+```
+
+(CTL runtime should be up and running)
+
+### Users demo scenario
+
+[Test.Examples.Addition.Demo.SeathUsers](./off-chain/test/Examples/Addition/Demo/SeathUsers.purs)
+
+Unlike Leader setup, nodes that will play role of users in the demo are not started as full `Seath nodes`. This is made only for convenience - this way output of all users can be observed in one terminal and there will be no distracting logs from the processes executed by the leader logic. Also, this way it is easer to automate and run demo scenarios.
+
+We are using framework function `mkUserConfig` to make config same way as we did in `Leader Setup` - `mkUserConfig` will install all required network handlers.
+
+`mkUserConfig` is wrapped into helper function `mkNumeratedUserNodes` that accepts `refuser` flag
+
+```haskell
+  let
+    refuser = Just 2
+
+  numeratedNodes <- mkNumeratedUserNodes leaderUrl mkRunner refuser setup
+```
+
+Current demo setup for preprod network submits actions from 4 users. By setting `refuser = Just 2` we force user `2` to refuse to sign transaction and cause chain break and recovery. To make all users sign their transactions set flag to `Nothing`.
+
+`mkNumeratedUserNodes` will start 4 `UserNode`s that are still capable to send actions to the leader and track status of transaction. They were chosen to run demo scenarios instead of full `Seath node`s to make scenarios a bit simpler to handle and easier to tweak when needed.
+
+`mkNumeratedUserNodes` returns `Array` of already running `UserNode`'s together with their indexes. From here we can submit `action` directly to the node and node will process `action`, send request to the leader and start to monitor status of transaction:
+
+```haskell
+  for_ numeratedNodes $ \(ix /\ node) -> do
+    log $ ixName ix <> ": preform include action request"
+    node `Users.performAction` (AddAmount $ BigInt.fromInt ix)
+```
+
+After this point process will run until interruption. After interruption scenario will output results for submitted `actions` for each user. It could be an error or info about successfully submitted transaction.

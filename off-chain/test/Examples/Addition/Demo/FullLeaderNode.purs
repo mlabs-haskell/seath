@@ -15,7 +15,7 @@ import Node.Process (onSignal)
 import Prelude (show)
 import Seath.HTTP.SeathNode as SeathNode
 import Seath.HTTP.Server (SeathServerConfig)
-import Seath.HTTP.Utils (mkLeaderConfig, mkUserConfig)
+import Seath.HTTP.Utils as Seath
 import Seath.Network.Types (RunContract(RunContract))
 import Seath.Test.Examples.Addition.ContractUtils (buildAdditionCoreConfig) as Addition
 import Seath.Test.Types (RunnerSetup)
@@ -39,14 +39,15 @@ startNode setup = do
     mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
 
     leaderNodeConfig =
-      mkLeaderConfig
+      Seath.mkLeaderConfig
         3000 -- timeout for building chain
         4 -- number of pending actions in queue
         3000 -- timeout for signatures awaiting
         coreConfig
         (mkRunner leader)
 
-    userNodeConfig = mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right)
+    userNodeConfig = Seath.mkUserConfig leaderUrl (mkRunner leader)
+      (pure <<< Right)
 
     serverConf :: SeathServerConfig
     serverConf = { port: leaderPort }

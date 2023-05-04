@@ -31,7 +31,7 @@ import Seath.Test.Examples.Addition.Types
   ( AdditionAction
   , AdditionDatum(AdditionDatum)
   , AdditionParams
-  , AdditionRedeemer(..)
+  , AdditionRedeemer
   , AdditionState
   , AdditionValidator
   , initialState
@@ -82,11 +82,11 @@ buildAdditionCoreConfig
           AdditionRedeemer
       )
 buildAdditionCoreConfig = do
-  vaildatorHash <- Addition.fixedValidatorHash
+  validatorHash <- Addition.fixedValidatorHash
   leaderPkh <- getPublicKeyHash
   pure $ CoreConfiguration
     { leader: leaderPkh
-    , stateVaildatorHash: vaildatorHash
+    , stateValidatorHash: validatorHash
     , actionHandler: Addition.handleAction
     , queryBlockchainState: Addition.queryBlockchainState
     }
