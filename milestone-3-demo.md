@@ -1,5 +1,16 @@
 # Milestone 3 demo
 
+- [Milestone 3 demo](#milestone-3-demo)
+  - [Demo protocol](#demo-protocol)
+  - [Repository structure](#repository-structure)
+    - [On-chain](#on-chain)
+    - [Off-chain](#off-chain)
+      - [Developing with real network](#developing-with-real-network)
+  - [Seath technical overview](#seath-technical-overview)
+  - [Leader Demo setup](#leader-demo-setup)
+  - [Users demo setup](#users-demo-setup)
+  - [Running the demo](#running-the-demo)
+
 This documents describes simple stateful protocol that can be run on-chain and the way how to integrate and run it with Seath framework.
 
 ## Demo protocol
@@ -28,7 +39,7 @@ Repository is divided into two main parts represented by `on-chain` and `off-cha
 
 As was mentioned before, `on-chain` directory contains validation script written in PlutusTx. Also directory contains tools written in Haskell to compile and serialize the script into CBOR format. Serialized script can then be integrated into `off-chain` part to build transactions.
 
-If you want to change validator script, it is possible to start nix environment with Haskell dependencies required for PlutusTx - from the root of the repository run 
+If you want to change validator script, it is possible to start nix environment with Haskell dependencies required for PlutusTx - from the root of the repository run
 
 ```shell
 nix develop .#on-chain
@@ -61,7 +72,6 @@ From here you can run tests with
 
 ```shell
 spago run -m Seath.Test.Main
-
 ```
 
 or run automated end-to-end test for addition protocol with disposable local cluster with (see details on [testing with Plutip tool](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/plutip-testing.md))
@@ -74,7 +84,7 @@ Or run demo on preproduction testnet.
 
 #### Developing with real network
 
-To be able to communicate with blockchain Seath (CTL under the hood) requires some additional runtime - Kupo and Ogmios (see [more details in CTL documentation](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/runtime.md)). `flake.nix` in current repo provides command to start required all runtime. The only requirement is - installed and Set up Docker. To start runtime, from the **root** of the repo run
+To be able to communicate with blockchain Seath (CTL under the hood) requires some additional runtime - Kupo and Ogmios (see [more details in CTL documentation](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/runtime.md)). `flake.nix` in current repo provides command to start all required services. The only requirement is - installed and set up Docker. To start runtime, from the **root** of the repo run (to stop runtime - `Ctrl/Cmd+C` it the same terminal)
 
 ```shell
  nix run .#preprod-ctl-runtime
@@ -89,24 +99,46 @@ docker ps
 docker exec -ti [id_or_name] sh -c "CARDANO_NODE_SOCKET_PATH=/ipc/node.socket cardano-cli query tip --testnet-magic=1"
 ```
 
-After node is synced, you can start developing or running demo wit preproduction network:
+After node is synced, you can start developing or running demo with preproduction network:
+
+-> automated end-to-end test with single leader node and 4 users submitting actions simultaneously
 
 ```shell
-# automated end-to-end test with single leader node and 4 users submitting action simultaneously
 spago run -m Seath.Test.Main -b preprod -b auto-e2e-test 
 ```
 
+-> start full Seath node that can accept user requests via IPv4
+
 ```shell
-# start full Seath node that can accept user requests via IPv4
 spago run -m Seath.Test.Main -b preprod -b start-leader 
 ```
 
+-> start separate scenario, where 4 users will send their action simultaneously (currently users are set to send requests to the node started with `start-leader` option shown above)
+
 ```shell
-# start separate scenario, where 4 users will send ther action simultaneously (currently users are set to send requests to the node started with `start-leader` option shown above)
 spago run -m Seath.Test.Main -b preprod -b start-users 
 ```
 
+## Seath technical overview
 
+The main working unit of the Seath framework is `Seath node`. `Seath node` can be both leader and user.
+
+Under the hood `Seath node` runs following components:
+
+- `LeaderNode` - process, that responsible for running leader logic: accepting `actions` from users, translating them into chain of transactions, handling signing process, submitting chain of transactions to blockchain. `UserNode` uses `core functionality` of Seath framework, that need to be extended by the users of Seath according to the specifics of particular protocol (more on that below).
+- `UserNode` - process, that is responsible for running user logic: creating `actions` and sending them to the leader, monitoring current action status and reacting to status change: inspect nad sign transaction when needed (or refuse to sign), detect if transaction was submitted successfully or failed.
+- web-server - provides REST API for the `LeaderNode` to accept user requests. `UserNode` under the good uses this known REST API of the leader to enable communication between `Seath nodes` over the network.
+
+In terms of architecture, Seath framework devided into 3 main parts (see [src dir](./off-chain/src/)):
+
+- `Core` - `core functionality` of Seath
+- `Network` - logic of `LeaderNode` and `UserNode`
+- `HTTP` - logic of web-server part
+
+Dependency graph: `Core` <- `Network` <- `HTTP`
+
+
+-- TODO LINE --
 ## Leader Demo setup
 
 Leader setup shows how to run full Seath node. Full node can act both as a leader and user. 
