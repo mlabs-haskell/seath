@@ -26,7 +26,7 @@ main = do
       Just "auto-e2e-test" -> PreprodRunner.run AutoE2E.mainTest
       other -> throw $ "Unknown args: " <> show other
 
-    Just "addition-plutip" -> PlutipRunner.run
+    Just "addition-e2e-plutip" -> PlutipRunner.run
     Just "seath-test" -> Seath.test
     Nothing -> Seath.test -- default for CI
     other -> throw $ "Unknown args: " <> show other

@@ -32,9 +32,10 @@ If you want to change validator script, it is possible to start nix environment 
 
 ```shell
 nix develop .#on-chain
+# when Nix shell is up and ready
+cd on-chain
+# now you have environment with cabal and HLS
 ```
-
-When Nix shell is up and ready you can `cd on-chain` and start developing.
 
 After changes are made and ready to go, run this command **from the root of the repo**:
 
@@ -45,6 +46,65 @@ nix run .#script-export
 It will compile the script, serialize it to CBOR and insert in the correct place inside `off-chain` directory, from where Seath framework will be able to pick it up and use in transactions.
 
 ### Off-chain
+
+`Off-chain` part contains Seath framework logic. It is built on top of [Cardano Transaction Library](https://github.com/Plutonomicon/cardano-transaction-lib) written in PureScript and have all required capabilities for Cardano blockchain.
+
+To get into development shell with `spago` from the **root** of the repository run
+
+```shell
+nix develop .#off-chain
+# when Nix shell is up and ready
+cd off-chain
+```
+
+From here you can run tests with
+
+```shell
+spago run -m Seath.Test.Main
+
+```
+
+or run automated end-to-end test for addition protocol with disposable local cluster with (see details on [testing with Plutip tool](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/plutip-testing.md))
+
+```shell
+spago run -m Seath.Test.Main -b addition-e2e-plutip
+```
+
+Or run demo on preproduction testnet.
+
+#### Developing with real network
+
+To be able to communicate with blockchain Seath (CTL under the hood) requires some additional runtime - Kupo and Ogmios (see [more details in CTL documentation](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/runtime.md)). `flake.nix` in current repo provides command to start required all runtime. The only requirement is - installed and Set up Docker. To start runtime, from the **root** of the repo run
+
+```shell
+ nix run .#preprod-ctl-runtime
+```
+
+Then wait till node will sync to 100%. You can check current sync progress:
+
+```shell
+# find id or name of thhe node container with command
+docker ps
+# then use id or name to execute command in the node container
+docker exec -ti [id_or_name] sh -c "CARDANO_NODE_SOCKET_PATH=/ipc/node.socket cardano-cli query tip --testnet-magic=1"
+```
+
+After node is synced, you can start developing or running demo wit preproduction network:
+
+```shell
+# automated end-to-end test with single leader node and 4 users submitting action simultaneously
+spago run -m Seath.Test.Main -b preprod -b auto-e2e-test 
+```
+
+```shell
+# start full Seath node that can accept user requests via IPv4
+spago run -m Seath.Test.Main -b preprod -b start-leader 
+```
+
+```shell
+# start separate scenario, where 4 users will send ther action simultaneously (currently users are set to send requests to the node started with `start-leader` option shown above)
+spago run -m Seath.Test.Main -b preprod -b start-users 
+```
 
 
 ## Leader Demo setup
