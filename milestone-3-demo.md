@@ -324,7 +324,11 @@ spago run -m Seath.Test.Main -b preprod -b start-leader
 
 [Test.Examples.Addition.Demo.SeathUsers](./off-chain/test/Examples/Addition/Demo/SeathUsers.purs)
 
-Unlike the leader setup, nodes that will act as users in the demo are not started as full `Seath nodes`. This is done for convenience, so that the output of all users can be observed in one terminal and there will be no distracting logs from the processes executed by the leader logic. Additionally, it is easier to automate and run demo scenarios this way.
+In contrast to the leader setup, nodes that will act as users in the demo are not started as full `Seath nodes`. Instead, only "internal" `UserNodes` are started. This approach has several benefits:
+
+- Simplified demo scenario setup, as there is no need to configure a full `Seath node`.
+- Only logs from user logic are printed to the terminal. Leader logic generates a lot of logs while running, and there is no logging configuration in Seath yet.
+- Easier building of automated scenarios for demo purposes, which can be fine-tuned this way.
 
 We use the framework function `mkUserConfig` to configure the nodes in the same way as we did in the leader setup. `mkUserConfig` will install all required network handlers.
 
@@ -339,7 +343,7 @@ We use the framework function `mkUserConfig` to configure the nodes in the same 
 
 The current demo setup for the preproduction network involves actions from four users. By setting `refuser = Just 2`, we force user `2` to refuse to sign the transaction, causing a chain break and recovery. To make all users sign their transactions, set the flag to `Nothing`.
 
-`mkNumeratedUserNodes` will start four `UserNode`s that are still capable of sending actions to the leader and tracking the status of the transaction. They were chosen to run demo scenarios instead of full `Seath node`s to make scenarios a bit simpler to handle and easier to tweak when needed.
+`mkNumeratedUserNodes` will start four `UserNode`s that are still capable of sending actions to the leader and tracking the status of the transaction.
 
 `mkNumeratedUserNodes` returns an `Array` of already running `UserNode`'s together with their indexes. From here, we can submit an `action` directly to the node, and the node will process the `action`, send a request to the leader, start monitoring the status of the transaction and sign it when needed (or refuse signing).
 
@@ -349,7 +353,23 @@ The current demo setup for the preproduction network involves actions from four 
     node `Users.performAction` (AddAmount $ BigInt.fromInt ix)
 ```
 
-After this, process will continue running until it is interrupted. After interruption, the scenario will output the results for each user's submitted actions. This output can include information about successfully submitted transactions or errors encountered during the process.
+After this, process will continue running until it is interrupted. After interruption, the scenario will output the results for each user's submitted actions. This output can include information about successfully submitted transactions or errors encountered during the process:
+
+```haskell
+  liftEffect $ onSignal SIGINT $ launchAff_ do
+    for_ numeratedNodes $ \(ix /\ node) -> do
+      log $ ixName ix <> " results"
+      readResults node >>= log <<< show
+```
+
+As a reminder, to start leader node from terminal (CTL runtime and leader node  should be up and running):
+
+```shell
+nix develop .#off-chain
+# when Nix shell is up and ready
+cd off-chain
+spago run -m Seath.Test.Main -b preprod -b start-users 
+```
 
 ## Some limitations
 
