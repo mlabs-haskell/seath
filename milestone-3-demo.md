@@ -16,6 +16,7 @@
       - [User node config](#user-node-config)
     - [Web-server config](#web-server-config)
     - [Users demo scenario](#users-demo-scenario)
+  - [Some limitations](#some-limitations)
 
 This documents describes simple stateful protocol that can be run on-chain and the way how to integrate and run it with Seath framework.
 
@@ -279,7 +280,7 @@ To make user config we use `Seath.mkUserConfig`. It is also strongly advised to 
 `UserNode` config accepts:
 
 - Leader url - `mkUserConfig` will create necessary handlers to enable network communication required by user logic
-- Contract runner function - we use hereleader key again, as we are creating full `Seath node` that can act both as leader and user, but it will play the role of leader for the demo
+- Contract runner function - we use here leader key again, as we are creating full `Seath node` that can act both as leader and user, but it will play the role of leader for the demo
 - Function to check transaction - this function should be defined by the user of Seath framework. When leader will build chain of transactions it mark them as ready to be signed. User will pull his transaction from the leader, but before signing it, user can examine whole transaction, and if something doesn't look correct, refuse to sign it by returning error (`Left`) from this function. Node will notify the leader that user refused to sign transaction and it will be excluded from further processing.
 
 ### Web-server config
@@ -350,4 +351,10 @@ Current demo setup for preprod network submits actions from 4 users. By setting 
 
 After this point process will run until interruption. After interruption scenario will output results for submitted `actions` for each user. It could be an error or info about successfully submitted transaction.
 
+## Some limitations
 
+There are some limitations in current version. They are not fundamental or unsolvable and can be eliminated during further development.
+
+- User can't send another `action` till previous action is still in progress. When user submits his action, data that sent to the leader includes user's public key hash. This way leader can detect that there is already an `action` in process from this user. The reason for that is: when user submits action, it also submits inputs from his address to balance transaction. At the moment algorithm just grabs all UTXOS from user address. Sending same UTXOs twice will cause 2nd transaction from same user in chain to fail. So problem can be solved by smarter way of picking input UTXOs on user side
+- Leader must be known upfront. With current state we need to know leader url and public key upfront before starting the node. This makes impossible to change the leader dynamically w/o node restart. This may be improved during further development - the current architecture does not introduce any blockers for this.
+- Whn user refuses to sign transaction, rest transactions in chain a moved to priority queue for the next round which can potentially slow down `action`'s submission. During further development we could try to continue the chain from breakage point by re-building and re-signing such transactions right away, w/o putting them in the queue for the next round.
