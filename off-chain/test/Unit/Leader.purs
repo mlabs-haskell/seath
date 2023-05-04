@@ -17,8 +17,8 @@ import Seath.Core.Utils as Core.Utils
 import Seath.Network.Leader as Leader
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( FunctionToPerformContract(FunctionToPerformContract)
-  , LeaderConfiguration(LeaderConfiguration)
+  ( LeaderConfiguration(LeaderConfiguration)
+  , RunContract(RunContract)
   )
 import Seath.Network.Utils (getFromLeaderState, setToRefAtLeaderState)
 import Seath.Test.Examples.Addition.Types (AdditionAction(AddAmount))
@@ -30,10 +30,10 @@ testLeaderConfig :: LeaderConfiguration AdditionAction
 testLeaderConfig =
   LeaderConfiguration
     { maxWaitingTimeForSignature: 5000
-    , maxQueueSize: 4
     , numberOfActionToTriggerChainBuilder: 3
-    , maxWaitingTimeBeforeBuildChain: 5
-    , fromContract: FunctionToPerformContract undefined
+    , maxWaitingTimeBeforeBuildChain: 5000
+    , runContract: RunContract undefined -- not used in this test case scenario
+    , buildChain: \_ -> undefined -- not used in this test case scenario
     }
 
 suite :: TestPlanM PlutipTest Unit
@@ -54,7 +54,7 @@ testDuplicateUserAddition = do
     user1 <- liftMaybe (error "No user wallet") (users !! 0)
     let
       newNode = liftAff
-        $ Leader.newLeaderNode testLeaderConfig (const $ pure undefined)
+        $ Leader.newLeaderNode testLeaderConfig
 
     node1 <- newNode
 

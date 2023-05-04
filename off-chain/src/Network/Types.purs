@@ -1,38 +1,25 @@
 module Seath.Network.Types
-  ( MilliSeconds
-  , IncludeActionError(RejectedServerBussy)
-  , AcceptSignedTransactionError(AcceptSignedTransactionError)
-  , LeaderServerStage
-      ( WaitingForActions
-      , BuildingChain
-      , WaitingForChainSignatures
-      , SubmittingChain
-      )
-  , SignedTransaction(SignedTransaction)
-  , LeaderServerInfo(LeaderServerInfo)
-  , GetActionStatus(GetActionStatus)
-  , ActionStatus
-      ( AskForSignature
-      , ToBeProcessed
-      , ToBeSubmitted
-      , Processing
-      , WaitingOtherChainSignatures
-      , PrioritaryToBeProcessed
-      , Submitted
-      , NotFound
-      )
-  , SendSignedTransaction(SendSignedTransaction)
-  , LeaderStateInner
-  , LeaderState(LeaderState)
-  , FunctionToPerformContract(FunctionToPerformContract)
+  ( AcceptSignedTransactionError(..)
+  , ActionResult
+  , ActionStatus(..)
+  , RunContract(..)
+  , GetActionStatus(..)
+  , IncludeActionError(..)
+  , LeaderConfiguration(..)
   , LeaderConfigurationInner
-  , LeaderConfiguration(LeaderConfiguration)
-  , LeaderNode(LeaderNode)
+  , LeaderNode(..)
+  , LeaderServerInfo(..)
+  , LeaderServerStage(..)
+  , LeaderState(..)
+  , LeaderStateInner
+  , MilliSeconds
+  , SendSignedTransaction(..)
+  , SignedTransaction(..)
+  , UserConfiguration(..)
+  , NetworkHandlers
+  , UserNode(..)
+  , UserState(..)
   , UserStateInner
-  , UserState(UserState)
-  , UserHandlers
-  , UserConfiguration(UserConfiguration)
-  , UserNode(UserNode)
   ) where
 
 import Contract.Prelude
@@ -56,7 +43,7 @@ import Data.Generic.Rep (class Generic)
 import Data.Newtype (class Newtype)
 import Data.UUID (UUID)
 import Data.Unit (Unit)
-import Effect.Aff (Aff)
+import Effect.Aff (Aff, Fiber)
 import Effect.Ref (Ref)
 import Queue as Queue
 import Seath.Common.Types (UID(UID))
@@ -140,6 +127,7 @@ data ActionStatus
   | WaitingOtherChainSignatures (Maybe TransactionHash)
   | PrioritaryToBeProcessed Int
   | Submitted TransactionHash
+  | SubmissionFailed String
   | NotFound
 
 derive instance Generic ActionStatus _
@@ -159,6 +147,7 @@ instance encodeAesonActionStatus :: EncodeAeson ActionStatus where
       (encodeAeson txH)
     PrioritaryToBeProcessed i -> encodeTagged' "PrioritaryToBeProcessed" i
     Submitted txH -> encodeTagged' "Submitted" (encodeAeson txH)
+    SubmissionFailed err -> encodeTagged' "SubmissionFailed" (encodeAeson err)
     NotFound -> encodeTagged' "NotFound" ""
 
     where
@@ -188,6 +177,7 @@ instance decodeAesonActionStatus :: DecodeAeson ActionStatus where
       "PrioritaryToBeProcessed" -> PrioritaryToBeProcessed <$> decodeAeson
         contents
       "Submitted" -> Submitted <$> decodeAeson contents
+      "SubmissionFailed" -> SubmissionFailed <$> decodeAeson contents
       "NotFound" -> Right NotFound
       other -> Left
         (TypeMismatch $ "IncludeActionError: unexpected constructor " <> other)
@@ -231,6 +221,7 @@ type LeaderStateInner a =
         (UUID /\ Maybe Transaction)
   , waitingForSubmission :: Ref $ OrderedMap UUID Transaction
   , submitted :: Ref $ OrderedMap UUID TransactionHash
+  , submissionFailed :: Ref $ OrderedMap UUID String
   , stage :: Ref LeaderServerStage
   }
 
@@ -240,19 +231,19 @@ derive instance Newtype (LeaderState a) _
 
 -- Needed to avoid purescript to reject the newtype instance of 
 -- `LeaderConfiguration`.
-newtype FunctionToPerformContract = FunctionToPerformContract
+newtype RunContract = RunContract
   (forall b. Contract b -> Aff b)
 
-type LeaderConfigurationInner :: forall k. k -> Type
 type LeaderConfigurationInner a =
   { maxWaitingTimeForSignature :: MilliSeconds
-  , maxQueueSize :: Int
   , numberOfActionToTriggerChainBuilder :: Int
-  , maxWaitingTimeBeforeBuildChain :: Int
-  , fromContract :: FunctionToPerformContract
+  , maxWaitingTimeBeforeBuildChain :: MilliSeconds
+  , runContract :: RunContract
+  , buildChain ::
+      Array (UserAction a)
+      -> Aff (Array (FinalizedTransaction /\ UserAction a))
   }
 
-newtype LeaderConfiguration :: forall k. k -> Type
 newtype LeaderConfiguration a = LeaderConfiguration (LeaderConfigurationInner a)
 
 derive instance Newtype (LeaderConfiguration a) _
@@ -260,12 +251,17 @@ derive instance Newtype (LeaderConfiguration a) _
 newtype LeaderNode a = LeaderNode
   { state :: LeaderState a
   , configuration :: LeaderConfiguration a
-  , buildChain ::
-      Array (UserAction a)
-      -> Aff (Array (FinalizedTransaction /\ UserAction a))
+  , _leaderFibers :: Ref (Array (Fiber Unit))
   }
 
 derive instance Newtype (LeaderNode a) _
+
+type ActionResult a =
+  { uuid :: UUID
+  , action :: UserAction a
+  -- TODO: Introduce proper type for error instead of String
+  , status :: Either String TransactionHash
+  }
 
 type UserStateInner a =
   { actionsSentQueue ::
@@ -282,18 +278,14 @@ type UserStateInner a =
   , resultsQueue ::
       Queue.Queue (read :: Queue.READ, write :: Queue.WRITE)
         -- TODO: make this a newtype 
-        { uuid :: UUID
-        , action :: UserAction a
-        -- TODO: Introduce proper type for error instead of String
-        , status :: Either String TransactionHash
-        }
+        (ActionResult a)
   }
 
 newtype UserState a = UserState (UserStateInner a)
 
 derive instance Newtype (UserState a) _
 
-type UserHandlers a =
+type NetworkHandlers a =
   { submitToLeader :: UserAction a -> Aff $ Either IncludeActionError UUID
   , sendSignedToLeader ::
       SendSignedTransaction
@@ -303,9 +295,9 @@ type UserHandlers a =
   }
 
 newtype UserConfiguration a = UserConfiguration
-  { maxQueueSize :: Int
-  , clientHandlers :: UserHandlers a
-  , fromContract :: FunctionToPerformContract
+  { networkHandlers :: NetworkHandlers a
+  , runContract :: RunContract
+  , checkChainedTx :: Transaction -> Aff (Either String Transaction)
   }
 
 derive instance Newtype (UserConfiguration a) _
@@ -313,6 +305,7 @@ derive instance Newtype (UserConfiguration a) _
 newtype UserNode a = UserNode
   { state :: UserState a
   , configuration :: UserConfiguration a
+  , _userFibers :: Ref (Array (Fiber Unit))
   }
 
 derive instance Newtype (UserNode a) _

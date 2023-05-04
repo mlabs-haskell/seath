@@ -3,7 +3,6 @@ module Seath.Test.Utils
   , makeDistribution
   , makeKeyWallet
   , plutipConfig
-  , runnerConfInfo
   ) where
 
 import Contract.Prelude
@@ -19,28 +18,16 @@ import Control.Alternative (pure)
 import Control.Monad (bind)
 import Control.Monad.Error.Class (try)
 import Data.Array (replicate)
-import Data.Array.NonEmpty as NE
 import Data.BigInt (BigInt)
 import Data.BigInt as BigInt
 import Data.Either (hush)
 import Data.Function (($))
 import Data.Functor ((<$>))
-import Data.Monoid ((<>))
-import Data.Newtype (unwrap)
-import Data.Show (show)
 import Data.Time.Duration (Seconds(Seconds))
 import Data.Tuple.Nested (type (/\), (/\))
 import Data.UInt as UInt
 import Effect.Aff (Aff)
 import Node.Path as Path
-import Seath.Test.Types (RunnerConfiguration)
-
-runnerConfInfo
-  :: forall s actionType. RunnerConfiguration s actionType -> String
-runnerConfInfo conf =
-  "RunnerConfig { participants = "
-    <> show (NE.length (unwrap conf).participants)
-    <> " }"
 
 makeKeyWallet :: String -> Aff KeyWallet
 makeKeyWallet keysDir = do

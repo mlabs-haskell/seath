@@ -1,19 +1,17 @@
 module Seath.Test.Types
   ( BlockchainState(BlockchainState)
-  , Leader(Leader)
-  , Participant(Participant)
-  , RunnerConfiguration(RunnerConfiguration)
+  , RunnerSetup
   ) where
 
+import Contract.Prelude
+
+import Contract.Monad (ContractEnv)
 import Contract.Utxos (UtxoMap)
 import Contract.Wallet (KeyWallet)
-import Data.Array.NonEmpty (NonEmptyArray)
-import Data.BigInt (BigInt)
-import Data.Log.Level (LogLevel)
+import Ctl.Internal.Wallet.Key (KeyWallet(..))
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))
-import Seath.Network.Types (LeaderNode, UserNode)
 
 newtype BlockchainState s = BlockchainState
   { leaderUTXOs :: Maybe UtxoMap
@@ -23,23 +21,9 @@ newtype BlockchainState s = BlockchainState
 
 derive instance Newtype (BlockchainState s) _
 
-newtype Leader actionType = Leader
-  { wallet :: KeyWallet, node :: LeaderNode actionType }
-
-derive instance Newtype (Leader actionType) _
-
-newtype Participant actionType = Participant
-  { wallet :: KeyWallet, node :: UserNode actionType }
-
-derive instance Newtype (Participant actionType) _
-
-newtype RunnerConfiguration (s :: Type) actionType = RunnerConfiguration
-  { admin :: KeyWallet -- wallet that will run init contract
-  , leader :: Leader actionType
-  , participants :: NonEmptyArray (Participant actionType)
-  , minAdaRequired :: BigInt
-  , expectedStateChange :: s -> s
-  , logLevel :: LogLevel
+type RunnerSetup =
+  { contractEnv :: ContractEnv
+  , adminWallet :: KeyWallet
+  , leaderWallet :: KeyWallet
+  , userWallets :: Array KeyWallet
   }
-
-derive instance Newtype (RunnerConfiguration s actionType) _

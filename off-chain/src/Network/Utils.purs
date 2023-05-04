@@ -1,17 +1,18 @@
 module Seath.Network.Utils
-  ( getChaintriggerTreshold
+  ( actionToTriggerChainBuild
+  , getChaintriggerTreshold
   , getFromLeaderConfiguration
   , getFromLeaderState
   , getFromRefAtLeaderState
+  , getNetworkHandlers
   , getNumberOfPending
   , getPublicKeyHash
-  , getUserHandlers
   , isAnotherActionInProcess
   , lookupActionsSent
-  , maxPendingCapacity
   , modifyActionsSent
   , pushRefMap_
   , putToResults
+  , readResults
   , readSentActions
   , setToRefAtLeaderState
   , signTimeout
@@ -25,7 +26,6 @@ import Contract.Prelude
 
 import Contract.Address (PubKeyHash, getWalletAddresses, toPubKeyHash)
 import Contract.Monad (Contract, liftedM)
-import Contract.Transaction (TransactionHash)
 import Control.Monad.Error.Class (liftMaybe)
 import Data.Array (head)
 import Data.Array as Array
@@ -47,13 +47,14 @@ import Seath.Core.Types (UserAction)
 import Seath.Network.OrderedMap (OrderedMap)
 import Seath.Network.OrderedMap as OrderedMap
 import Seath.Network.Types
-  ( ActionStatus
-  , FunctionToPerformContract
+  ( ActionResult
+  , ActionStatus
   , LeaderConfiguration
   , LeaderConfigurationInner
   , LeaderNode(LeaderNode)
   , LeaderStateInner
-  , UserHandlers
+  , NetworkHandlers
+  , RunContract
   , UserNode(UserNode)
   , UserStateInner
   )
@@ -140,10 +141,7 @@ modifyActionsSent userNode transform =
 putToResults
   :: forall a
    . UserNode a
-  -> { uuid :: UUID
-     , action :: UserAction a
-     , status :: Either String TransactionHash
-     }
+  -> ActionResult a
   -> Aff Unit
 putToResults userNode result =
   let
@@ -151,10 +149,20 @@ putToResults userNode result =
   in
     liftEffect $ Queue.put resultsQueue result
 
+readResults
+  :: forall a
+   . UserNode a
+  -> Aff (Array (ActionResult a))
+readResults userNode =
+  let
+    resultsQueue = (unwrap (unwrap userNode).state).resultsQueue
+  in
+    liftEffect $ Queue.read resultsQueue
+
 userRunContract
-  :: forall a. UserNode a -> FunctionToPerformContract
+  :: forall a. UserNode a -> RunContract
 userRunContract (UserNode node) =
-  (unwrap node.configuration).fromContract
+  (unwrap node.configuration).runContract
 
 getNumberOfPending :: forall a. LeaderNode a -> Aff Int
 getNumberOfPending ln = do
@@ -164,11 +172,12 @@ getNumberOfPending ln = do
     _.pendingActionsRequest
   pure $ numberOfPrioritary + numberOfPending
 
-maxPendingCapacity :: forall a. LeaderConfiguration a -> Int
-maxPendingCapacity conf = (unwrap conf).maxQueueSize
-
 signTimeout :: forall a. LeaderConfiguration a -> Int
 signTimeout conf = (unwrap conf).maxWaitingTimeForSignature
+
+actionToTriggerChainBuild :: forall a. LeaderConfiguration a -> Int
+actionToTriggerChainBuild conf =
+  (unwrap conf).numberOfActionToTriggerChainBuilder
 
 getChaintriggerTreshold :: forall a. LeaderNode a -> Int
 getChaintriggerTreshold (LeaderNode node) =
@@ -181,8 +190,8 @@ readSentActions
 readSentActions (UserNode node) = liftEffect $
   OrderedMap.orderedElems <$> Ref.read (unwrap node.state).actionsSent
 
-getUserHandlers :: forall a. UserNode a -> UserHandlers a
-getUserHandlers (UserNode node) = (unwrap node.configuration).clientHandlers
+getNetworkHandlers :: forall a. UserNode a -> NetworkHandlers a
+getNetworkHandlers (UserNode node) = (unwrap node.configuration).networkHandlers
 
 pushRefMap_
   :: forall k v. Ord k => k -> v -> Ref (OrderedMap k v) -> Effect Unit

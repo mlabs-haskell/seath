@@ -102,7 +102,7 @@ newtype CoreConfiguration
   (datumType :: Type)
   (redeemerType :: Type) = CoreConfiguration
   { leader :: PubKeyHash
-  , stateVaildatorHash :: ValidatorHash
+  , stateValidatorHash :: ValidatorHash
   , actionHandler ::
       DatumType validatorType datumType
       => RedeemerType validatorType redeemerType
@@ -117,7 +117,6 @@ newtype CoreConfiguration
                 (StateReturn validatorType datumType redeemerType userStateType)
          )
   , queryBlockchainState :: Contract (UtxoMap /\ userStateType)
-  , numberOfBuiltChains :: Int
   }
 
 newtype ChainBuilderState actionType userStateType = ChainBuilderState
