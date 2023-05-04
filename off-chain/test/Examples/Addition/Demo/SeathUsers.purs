@@ -4,7 +4,7 @@ module Test.Examples.Addition.Demo.SeathUsers
 
 import Contract.Prelude
 
-import Aeson (class EncodeAeson)
+import Aeson (class EncodeAeson, encodeAeson)
 import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
 import Contract.Monad (Contract, ContractEnv, launchAff_, runContractInEnv)
@@ -14,6 +14,7 @@ import Contract.Test (withKeyWallet)
 import Contract.Transaction (Transaction)
 import Contract.Utxos (getWalletUtxos)
 import Control.Monad.Error.Class (liftMaybe, try)
+import Control.Monad.Rec.Class (forever)
 import Ctl.Internal.Wallet.Key (KeyWallet)
 import Data.Array as Array
 import Data.BigInt as BigInt
@@ -48,38 +49,48 @@ startScenario setup = do
     { waitingTime: 3, maxAttempts: 10 }
 
   let
-    refuser = 2
+    refuser = Just 2
 
-    ixName :: Int -> String
-    ixName i = "User-" <> show i
-    zipFun user ix = do
-      (node :: UserNode AdditionAction) <-
-        mkUser
-          leaderUrl
-          mkRunner
-          ( if ix == refuser then (\_ -> pure $ Left "refuse to sign")
-            else (pure <<< Right)
-          )
-          user
-      pure (ix /\ node)
+  numeratedNodes <- mkNumeratedUserNodes leaderUrl mkRunner refuser setup
 
-  namedNodes <- Array.zipWithA zipFun setup.userWallets
-    (Array.range 1 (length setup.userWallets))
+  log $ "Starting with num of users " <> show (Array.length numeratedNodes)
 
-  log $ "Starting with num of users " <> show (Array.length namedNodes)
-
-  for_ namedNodes $ \(ix /\ node) -> do
+  for_ numeratedNodes $ \(ix /\ node) -> do
     log $ ixName ix <> ": preform include action request"
-    Users.performAction node (AddAmount $ BigInt.fromInt ix)
+    node `Users.performAction` (AddAmount $ BigInt.fromInt ix)
 
   liftEffect $ onSignal SIGINT $ launchAff_ do
-    for_ namedNodes $ \(ix /\ node) -> do
+    for_ numeratedNodes $ \(ix /\ node) -> do
       log $ ixName ix <> " results"
       readResults node >>= log <<< show
-      Users.stopUserNode node
 
-  delay (wrap 3000000.0)
-  log "Users end"
+  waitFrever
+
+  where
+  ixName :: Int -> String
+  ixName i = "User-" <> show i
+
+mkNumeratedUserNodes
+  :: String
+  -> (KeyWallet -> RunContract)
+  -> Maybe Int
+  -> RunnerSetup
+  -> Aff (Array (Tuple Int (UserNode AdditionAction)))
+mkNumeratedUserNodes leaderUrl mkRunner refuser setup = do
+  Array.zipWithA zipFun setup.userWallets
+    (Array.range 1 (length setup.userWallets))
+  where
+  zipFun user ix = do
+    (node :: UserNode AdditionAction) <-
+      mkUser
+        leaderUrl
+        mkRunner
+        ( if Just ix == refuser then
+            (\_ -> pure $ Left "Tx is bad - refuse to sing")
+          else (pure <<< Right)
+        )
+        user
+    pure (ix /\ node)
 
 mkUser
   :: forall a
@@ -112,7 +123,7 @@ checkInitSctipt env admin waitingTime = runContractInEnv env
         Right _scriptState -> do
           logInfo' $ "Addition script state already initialized"
       currentState <- Addition.Actions.queryBlockchainState
-      logInfo' $ "Current script state:\n" <> show currentState
+      logInfo' $ "Current script state:\n" <> show (encodeAeson currentState)
 
 waitForFunding :: { waitingTime :: Int, maxAttempts :: Int } -> Contract Unit
 waitForFunding options = do
@@ -135,3 +146,6 @@ waitForFunding options = do
             waitNSlots slots *> loop slots (remainingAttempts - 1)
           else pure unit
         Nothing -> waitNSlots slots *> loop slots (remainingAttempts - 1)
+
+waitFrever :: Aff Unit
+waitFrever = forever $ delay (wrap 3000000.0)

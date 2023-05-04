@@ -6,35 +6,29 @@ import Contract.Prelude
 
 import Contract.Chain (waitNSlots)
 import Contract.Log (logInfo')
-import Contract.Monad (Contract, ContractEnv, launchAff_, runContractInEnv)
+import Contract.Monad (Contract, ContractEnv, runContractInEnv)
 import Contract.Numeric.Natural (Natural)
 import Contract.Numeric.Natural as Natural
 import Contract.Test (withKeyWallet)
 import Contract.Utxos (getWalletUtxos)
 import Contract.Wallet (KeyWallet)
 import Control.Monad.Error.Class (liftMaybe, try)
-import Data.Array ((!!))
 import Data.BigInt (BigInt)
-import Data.BigInt as BigInt
 import Data.Map as Map
-import Data.Posix.Signal (Signal(..))
-import Data.Time.Duration (Milliseconds(Milliseconds))
 import Data.Unit (Unit)
-import Effect.Aff (delay, error, forkAff, joinFiber, killFiber, launchAff)
-import Node.Process (onSignal)
+import Effect.Aff (delay, error, forkAff, killFiber)
 import Prelude (show)
 import Seath.Core.Types (CoreConfiguration(CoreConfiguration))
 import Seath.HTTP.SeathNode as SeathNode
 import Seath.HTTP.Server (SeathServerConfig)
-import Seath.HTTP.Utils (mkLeaderConfig, mkUserConfig)
-import Seath.Network.Types (RunContract(RunContract), UserNode)
-import Seath.Network.Users as Users
-import Seath.Network.Utils (getPublicKeyHash, readResults)
+import Seath.HTTP.Utils as Seath
+import Seath.Network.Types (RunContract(RunContract))
+import Seath.Network.Utils (getPublicKeyHash)
 import Seath.Test.Examples.Addition.Actions (queryBlockchainState) as Addition.Actions
 import Seath.Test.Examples.Addition.Actions as Addition
 import Seath.Test.Examples.Addition.ContractUtils (initialSeathContract) as Addition.Contract
 import Seath.Test.Examples.Addition.Types
-  ( AdditionAction(AddAmount)
+  ( AdditionAction
   , AdditionDatum
   , AdditionRedeemer
   , AdditionValidator
@@ -48,7 +42,6 @@ mainTest setup = do
     env = setup.contractEnv
     admin = setup.adminWallet
     leader = setup.leaderWallet
-    users = setup.userWallets
 
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
     buildAdditionCoreConfig
@@ -60,24 +53,22 @@ mainTest setup = do
     mkRunner :: KeyWallet -> RunContract
     mkRunner kw = RunContract (\c -> runContractInEnv env $ withKeyWallet kw c)
 
-    testLeaderConfig =
-      mkLeaderConfig
-        3000
-        4
-        3000
-        coreConfig
-        (mkRunner leader)
+    leaderConfig =
+      Seath.mkLeaderConfig
+        3000 -- timeout before launch chain building
+        4 -- numberof actions in queue to trigger chain building
+        3000 -- time to wait for signatures before submitting chain of transactions
+        coreConfig -- core configuration gfor chain builder
+        (mkRunner leader) -- function to execute CTL `Contract`s
+
+    userConfig = Seath.mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right)
 
     serverConf :: SeathServerConfig
     serverConf = { port: leaderPort }
 
   checkInitSctipt env admin { waitingTime: 3, maxAttempts: 10 }
 
-  seathNode <-
-    SeathNode.start
-      serverConf
-      testLeaderConfig
-      (mkUserConfig leaderUrl (mkRunner leader) (pure <<< Right))
+  seathNode <- SeathNode.start serverConf leaderConfig userConfig
 
   usersFiber <- forkAff $ DemoUsers.startScenario setup
   delay (wrap 30000.0)
@@ -142,7 +133,7 @@ buildAdditionCoreConfig = do
   leaderPkh <- getPublicKeyHash
   pure $ CoreConfiguration
     { leader: leaderPkh
-    , stateVaildatorHash: vaildatorHash
+    , stateValidatorHash: vaildatorHash
     , actionHandler: Addition.handleAction
     , queryBlockchainState: Addition.queryBlockchainState
     }

@@ -244,7 +244,7 @@
         docs = self.off-chain.project.${system}.launchSearchablePursDocs { };
         ctl-docs = cardano-transaction-lib.apps.${system}.docs;
         script-export = {
-          # nix run .#script-export -- off-chain/src
+          # nix run .#script-export
           type = "app";
           program = (on-chain.script-export system).outPath;
         };
