@@ -7,7 +7,7 @@
     - [Off-chain](#off-chain)
       - [Developing with real network](#developing-with-real-network)
   - [Seath technical overview](#seath-technical-overview)
-    - [How transaction chainig is handled](#how-transaction-chainig-is-handled)
+    - [How transaction chaining is handled](#how-transaction-chaining-is-handled)
   - [Addition protocol demo](#addition-protocol-demo)
     - [Core functionality](#core-functionality)
     - [User and Leader logic](#user-and-leader-logic)
@@ -145,7 +145,18 @@ Dependency graph: `Core` <- `Network` <- `HTTP`
 
 All this parts will be explained in more details below in parallel with demo setup explanation.
 
-### How transaction chainig is handled
+### How transaction chaining is handled
+
+Seath chains transactions in "rounds":
+
+- Accumulates some number of incoming requests to perform an `action` from users
+- Takes batch of requests and
+  - Translates `actions` into chain of transactions using `Core` functionality
+  - Marks chained transactions as ready to be signed by the users
+  - Waits till users sign transactions. If some users didn't respond or explicitly refused to sign transaction, leader figures out where chain is broken and what transactions can be submitted anyway - this transactions proceed to submission phase. Not-signed transactions are discarded from further processing. Transactions, that were signed but can't be submitted due to chain breakage, are put into special priority queue and will be processed first during next "round" - transactions will be re-built from `action`s from scratch. Users of such transactions will see from the status response that their transaction in priority queue for the next "round"
+  - Submits chain of signed transaction. If any transaction fail then submission is aborted. Already submitted transactions are marked as processed successfully. Failed transaction is discarded - user gets notification that transaction failed. Rest transactions in chain can't be submitted anymore, so they will be put into special priority queue and will be processed first during next "round" - transactions will be re-built from `action`s from scratch. Users of such transactions will see from the status response that their transaction in priority queue for the next "round"
+- After batch is processed leader waits till submitted chain will be confirmed on the blockchain
+- After chain is confirmed leader starts next "round" repeating whole process
 
 ## Addition protocol demo
 
@@ -338,3 +349,5 @@ Current demo setup for preprod network submits actions from 4 users. By setting 
 ```
 
 After this point process will run until interruption. After interruption scenario will output results for submitted `actions` for each user. It could be an error or info about successfully submitted transaction.
+
+
