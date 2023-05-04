@@ -67,7 +67,7 @@ The script will be compiled, serialized to CBOR, and inserted into the correct l
 
 The Off-chain part contains the Seath framework logic, which is built on top of the [Cardano Transaction Library](https://github.com/Plutonomicon/cardano-transaction-lib) written in PureScript. It has all the required capabilities for the Cardano blockchain.
 
-To access the development shell using `spago`, navigate to the **root** of the repository and run:
+To access the development shell with `spago`, navigate to the **root** of the repository and run:
 
 ```shell
 nix develop .#off-chain
@@ -91,13 +91,13 @@ Or run demo on preproduction testnet.
 
 #### Developing with real network
 
-To communicate with the blockchain, Seath (which is implemented using CTL) requires additional runtime components, namely Kupo and Ogmios (more details can be found in the [CTL documentation](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/runtime.md). The `flake.nix` file in the current repository provides a command to start all necessary services. The only requirement is that Docker is installed and running. To start the runtime, navigate to the root of the repository and run the following command (to stop the runtime, press Ctrl/Cmd+C in the same terminal):
+To communicate with the blockchain, Seath (which is implemented using CTL) requires additional runtime components, namely Kupo and Ogmios (more details can be found in the [CTL documentation](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/runtime.md)). The `flake.nix` file in the current repository provides a command to start all necessary services. The only requirement is that Docker is installed and running. To start the runtime, navigate to the root of the repository and run the following command (to stop the runtime, press `Ctrl/Cmd+C` in the same terminal):
 
 ```shell
  nix run .#preprod-ctl-runtime
 ```
 
-Next, wait until the node has synced to 100%. You can check the current sync progress using the docker command:
+Next, wait until the node has synced to 100%. You can check the current sync progress using the `docker` command:
 
 ```shell
 # find id or name of the node container with command
@@ -132,7 +132,7 @@ The primary unit of the Seath framework is the `Seath node`. A `Seath node` can 
 
 Under the hood, a `Seath node` runs the following components (note: `actions` will be further explained):
 
-- `LeaderNode`: the process responsible for running the leader logic. It accepts `actions` from users, translates them into a chain of transactions, handles the signing process, and submits the chain of transactions to the blockchain. The `LeaderNode` uses the core functionality of the Seath framework, which needs to be extended by framework users according to the specifics of the particular protocol (more on that below).
+- `LeaderNode`: the process responsible for running the leader logic. It accepts `actions` from users, translates them into a chain of transactions, handles the signing process, and submits the chain of transactions to the blockchain. The `LeaderNode` uses the `Core` functionality of the Seath framework, which needs to be extended by framework users according to the specifics of the particular protocol (more on that below).
 - `UserNode`: the process responsible for running the user logic. It creates `actions` and sends them to the leader, monitors the current action status, and reacts to status changes by inspecting and signing transactions when necessary (or refusing to sign). It also detects if a transaction was submitted successfully or has failed.
 - Web server: provides a REST API for the `LeaderNode` to accept user requests. The `UserNode` uses this known REST API of the leader to enable communication between `Seath nodes` over the network. Currently, there are no requests from the leader to users. Instead, the leader changes the status of the `action` submitted by the user, and by monitoring `action` status, the user sends the required information to the leader or queries the leader.
 
@@ -167,11 +167,11 @@ The modules required to run the demo are located in the [Demo directory of Addit
 
 ### Core functionality
 
-The `Core functionality` is the central part of the Seath framework. Users of the Seath framework need to integrate their own off-chain logic into Seath to enable transaction chaining.
+The `Core functionality` is the central part of the Seath framework. Users of the Seath framework need to integrate their own off-chain logic into Seath core to enable transaction chaining.
 
-The code required to integrate the Addition protocol into Seath can be found in the [Addition directory inside tests].(./off-chain/test/Examples/Addition/). Most important modules are `Actions.purs` and `Types.purs`
+The code required to integrate the Addition protocol into Seath core can be found in the [Addition directory inside tests](./off-chain/test/Examples/Addition/). Most important modules are `Actions.purs` and `Types.purs`
 
-To create a Seath node in `FullLeaderNode.purs`, we first obtain the CoreConfiguration by running the CTL Contract.:
+To create a Seath node in `FullLeaderNode.purs`, we first obtain the `CoreConfiguration` by running the CTL Contract.:
 
 ```haskell
   coreConfig <- runContractInEnv env $ withKeyWallet leader $
@@ -180,13 +180,13 @@ To create a Seath node in `FullLeaderNode.purs`, we first obtain the CoreConfigu
 
 (for more details on running Contracts in CTL see [related docs](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/getting-started.md#setting-up-a-new-project), and there will be also some explanations below)
 
-The result of this call will provide us with CoreConfiguration data from the [Seath.Core.Types](./off-chain/test/Examples/Addition/Types.purs) module. It contains the necessary "parts" that a user of the Seath framework will need to define in order to integrate a particular protocol into Seath. Let's take a closer look at what is done to integrate the Addition protocol.
+The result of this call will provide us with `CoreConfiguration` data from the [Seath.Core.Types](./off-chain/test/Examples/Addition/Types.purs) module. It contains the necessary "parts" that a user of the Seath framework will need to define in order to integrate a particular protocol into Seath. Let's take a closer look at what is done to integrate the Addition protocol.
 
 To produce `CoreConfiguration`, you will need a total of 4 pieces:
 
 - The public key hash of the leader - `leader` field.
 - The hash of the validator script that will hold state UTXOs of the protocol - `stateValidatorHash` field.
-- A function that can interpret the user's actions into lookups and constraints - `actionHandler`. This function enables transaction chaining.
+- A function that can interpret the user's `actions` into lookups and constraints - `actionHandler`. This function enables transaction chaining.
 - A CTL Contract that can query the state of the protocol from the blockchain - `queryBlockchainState`. To build a new chain, Seath need to determine the current state of the protocol. Once it have that information, it can pass changes to the initial state from one transaction in the chain to another. When the chain is submitted, Seth will use this function again to start building a new chain with the current state acquired from the blockchain.
 
 `Action` refers to a step in the protocol that the user wishes to perform, expressed via a certain type. In the Addition protocol, users want to increment the current state, represented by a number, by a certain amount. To accomplish this, the following type from the `Types.purs` module of the Addition example is used.
@@ -230,7 +230,7 @@ You can find full code in [Seath.Test.Examples.Addition.Actions.handleAction](./
 
 With `handleAction` done, we have one pice for `CoreConfiguration` ready.
 
-The next required piece of code is also located in `Seath.Test.Examples.Addition.Actions` and is called `queryBlockchainState`. In the case of the Addition protocol, it is a simple CTL contract that can query the script validator of the protocol. The script validator was compiled and serialized from the on-chain part and injected as CBOR into [Seath.Test.Examples.Addition.Validator](./off-chain/test/Examples/Addition/Validator.purs). Using several helper functions `queryBlockchainState` can use CBOR from `Seath.Test.Examples.Addition.Validator` to build the CTL contract that can query UTXOs from the script and extract the current Datum, which represents the protocol state.
+The next required piece of code is also located in `Seath.Test.Examples.Addition.Actions` and is named `queryBlockchainState`. In the case of the Addition protocol, it is a simple CTL Contract that can query the script validator of the protocol. The script validator was compiled and serialized from the `on-chain` part and injected as CBOR into [Seath.Test.Examples.Addition.Validator](./off-chain/test/Examples/Addition/Validator.purs). Using several helper functions `queryBlockchainState` can use CBOR from `Seath.Test.Examples.Addition.Validator` to build the CTL Contract that can query UTXOs from the script and extract the current Datum, which represents the protocol state.
 
 The last two pieces needed are much simpler - the hash of the validator script and the hash of the leader public key. You can check out how to obtain them in the case of the Addition example in  [Seath.Test.Examples.Addition.ContractUtils.buildAdditionCoreConfig](./off-chain/test/Examples/Addition/ContractUtils.purs). Getting the script hash is straightforward - we just use helper functions to deserialize CBOR and obtain the script's hash. For the leader key, we get it by running another CTL Contract using the `KeyWallet` feature provided by CTL. Depending on the environment, it can return either the hash of the key generated for pre-production testnet or the hash of the key generated by the plutip tool when Seath runs on a private local cluster. In the current demo, we run Seath on pre-production testnet, and the required keys are located in the [keys dir](./off-chain/test/keys/seath_keys/).
 
@@ -271,7 +271,7 @@ The `Seath.mkLeaderConfig` function builds the configuration for the internal `L
 The current configurable options are:
 
 - Timeout before the leader starts processing user actions - in milliseconds. No matter how many `actions` currently in the leader's mailbox queue (see next option), after this period of time, the leader will start processing them anyway.
-- Number of user `actions` in the leader's "mailbox" that will trigger chain building and submission. When the leader receives a request from the user to submit their `action` to the chain, the action is added to the leader's queue first. When the number of actions reaches this threshold, the leader pulls the actions from the queue and starts processing them.
+- Number of user `actions` in the leader's "mailbox" that will trigger chain building and submission. When the leader receives a request from the user to submit their `action` to the chain, the action is added to the leader's queue first. When the number of `actions` reaches this threshold, the leader pulls the actions from the queue and starts processing them.
 - Time that the leader waits for signatures - in milliseconds. After the leader starts processing user actions, it builds a chain of transactions from them according to the provided `CoreConfiguration`. Once the chain is ready, the leader waits for users to sign their transactions. After this timeout, the leader checks the signed transactions it received from users and submits them. If a transaction was not signed on time or the user rejected signing it, it will be discarded from the processing pipeline.
 
 In addition to options above, we need to provide already explained `CoreConfiguration` and contract runner to get the config for the `LeaderNode`.
