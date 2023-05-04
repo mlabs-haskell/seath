@@ -3,12 +3,9 @@ module Seath.Test.Types
   , RunnerSetup
   ) where
 
-import Contract.Prelude
-
 import Contract.Monad (ContractEnv)
 import Contract.Utxos (UtxoMap)
-import Contract.Wallet (KeyWallet)
-import Ctl.Internal.Wallet.Key (KeyWallet(..))
+import Ctl.Internal.Wallet.Key (KeyWallet)
 import Data.Maybe (Maybe)
 import Data.Newtype (class Newtype)
 import Data.Tuple.Nested (type (/\))

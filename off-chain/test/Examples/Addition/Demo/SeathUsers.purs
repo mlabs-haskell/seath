@@ -19,7 +19,7 @@ import Ctl.Internal.Wallet.Key (KeyWallet)
 import Data.Array as Array
 import Data.BigInt as BigInt
 import Data.Map as Map
-import Data.Posix.Signal (Signal(..))
+import Data.Posix.Signal (Signal(SIGINT))
 import Data.Unit (Unit)
 import Effect.Aff (delay, error)
 import Node.Process (onSignal)

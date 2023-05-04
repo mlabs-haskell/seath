@@ -1,24 +1,39 @@
 module Seath.Network.Types
-  ( AcceptSignedTransactionError(..)
+  ( AcceptSignedTransactionError(AcceptSignedTransactionError)
   , ActionResult
-  , ActionStatus(..)
-  , RunContract(..)
-  , GetActionStatus(..)
-  , IncludeActionError(..)
-  , LeaderConfiguration(..)
+  , ActionStatus
+      ( AskForSignature
+      , ToBeProcessed
+      , ToBeSubmitted
+      , Processing
+      , WaitingOtherChainSignatures
+      , PrioritaryToBeProcessed
+      , Submitted
+      , SubmissionFailed
+      , NotFound
+      )
+  , RunContract(RunContract)
+  , GetActionStatus(GetActionStatus)
+  , IncludeActionError(RejectedServerBussy)
+  , LeaderConfiguration(LeaderConfiguration)
   , LeaderConfigurationInner
-  , LeaderNode(..)
-  , LeaderServerInfo(..)
-  , LeaderServerStage(..)
-  , LeaderState(..)
+  , LeaderNode(LeaderNode)
+  , LeaderServerInfo(LeaderServerInfo)
+  , LeaderServerStage
+      ( WaitingForActions
+      , BuildingChain
+      , WaitingForChainSignatures
+      , SubmittingChain
+      )
+  , LeaderState(LeaderState)
   , LeaderStateInner
   , MilliSeconds
-  , SendSignedTransaction(..)
-  , SignedTransaction(..)
-  , UserConfiguration(..)
+  , SendSignedTransaction(SendSignedTransaction)
+  , SignedTransaction(SignedTransaction)
+  , UserConfiguration(UserConfiguration)
   , NetworkHandlers
-  , UserNode(..)
-  , UserState(..)
+  , UserNode(UserNode)
+  , UserState(UserState)
   , UserStateInner
   ) where
 
