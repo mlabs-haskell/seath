@@ -144,7 +144,7 @@ leaderLoop leaderNode = do
   eitherBuiltChain <- buildChain leaderNode batchToProcess
   case eitherBuiltChain of
     Left e -> do
-      log $ "Leader: fail to built chain of size "
+      log $ "Leader: Fail to built chain of size "
         <> show (OrderedMap.length batchToProcess)
         <> " "
         <> e
@@ -154,6 +154,7 @@ leaderLoop leaderNode = do
       leaderLoop leaderNode
     Right builtChain -> do
       setToRefAtLeaderState leaderNode builtChain _.waitingForSignature
+  -- uncomment next 2 lines to log full chain (there will be a lot of output)
   -- getFromRefAtLeaderState leaderNode _.waitingForSignature
   --   >>= log <<< ("Leader: builder result: " <> _) <<< show
   setStage WaitingForChainSignatures
@@ -165,10 +166,10 @@ leaderLoop leaderNode = do
             <<< OrderedMap.toArray
         ) signatureResults
       )
-  log $ "Leader: successfully signed by users: " <> showUUIDs signatureSucess
-  log $ "Leader: for priority list (after signing): " <> showUUIDs
+  log $ "Leader: Successfully signed by users: " <> showUUIDs signatureSucess
+  log $ "Leader: For priority list (after signing): " <> showUUIDs
     signatureFailures
-  log $ "Leader: setting failures and submission list"
+  log $ "Leader: Setting failures and submission list"
   setToRefAtLeaderState leaderNode signatureFailures _.prioritaryPendingActions
   setToRefAtLeaderState leaderNode signatureSucess _.waitingForSubmission
   setStage SubmittingChain
@@ -177,21 +178,21 @@ leaderLoop leaderNode = do
   , toRetry: priorityRetry
   } <- submitChain leaderNode batchToProcess signatureSucess
   -- } <- submitChainBr leaderNode batchToProcess signatureSucess
-  log $ "Leader: submission sucess: " <> showUUIDs submissionSucess
-  log $ "Leader: failed chain breaking action: " <> show failedAction
-  log $ "Leader: to priority list (after submitting): " <> showUUIDs
+  log $ "Leader: Successfully submitted: " <> showUUIDs submissionSucess
+  log $ "Leader: Failed chain breaking action: " <> show failedAction
+  log $ "Leader: For priority list (after submitting): " <> showUUIDs
     priorityRetry
   let newPrioritary = OrderedMap.union signatureFailures priorityRetry
-  log $ "Leader: setting prioritary list. Total: " <> show
+  log $ "Leader: Setting prioritary list. Total: " <> show
     (OrderedMap.length newPrioritary)
   setToRefAtLeaderState leaderNode newPrioritary _.prioritaryPendingActions
   resetLeaderState leaderNode
   -- To set this matters as we are cleaning up submissions in `resetLeaderNode`
   setToRefAtLeaderState leaderNode submissionSucess _.submitted
   maybeAddToFailed failedAction
-  log $ "Leader: awaiting chain confirmed"
+  log $ "Leader: Awaiting chain confirmed"
   awaitChainConfirmed leaderNode submissionSucess
-  log "Leader: chain loop complete!"
+  log "Leader: Chain loop complete!"
   leaderLoop leaderNode
 
   where
@@ -207,7 +208,7 @@ leaderLoop leaderNode = do
 
   setStage :: LeaderServerStage -> Aff Unit
   setStage stage = do
-    log $ "Leader: begining stage " <> show stage
+    log $ "Leader: Beginning stage " <> show stage
     setToRefAtLeaderState leaderNode stage _.stage
 
   showUUIDs :: forall b. OrderedMap UUID b -> String
@@ -330,7 +331,7 @@ acceptSignedTransaction
   -> Aff (Either String Unit)
 acceptSignedTransaction leaderNode signedTx = do
   let uuid = (unwrap signedTx).uuid
-  log $ "Leader: accepting Signed Transaction " <> show uuid
+  log $ "Leader: Accepting Signed Transaction " <> show uuid
   incomingTx <- try $ TxHex.fromCborHex (unwrap signedTx).txCborHex
   case incomingTx of
     Left e -> do
@@ -338,7 +339,7 @@ acceptSignedTransaction leaderNode signedTx = do
       log msg
       pure $ Left msg
     Right receivedSignedTx -> do
-      log "Leader: received signed tx successfully"
+      log "Leader: Received signed tx successfully"
       waitingMap <- getFromRefAtLeaderState leaderNode _.waitingForSignature
       case OrderedMap.lookup uuid waitingMap of
         Just tx -> do
@@ -544,7 +545,7 @@ submitChain leaderNode batch chain = do
       sginedByLeaderTx <- runContract
         $ signTransaction (wrap tx :: FinalizedTransaction)
       txId <- runContract $ submit sginedByLeaderTx
-      log $ "Leader: Submited chaned Tx ID: " <> show txId
+      log $ "Leader: Submitted chaned Tx ID: " <> show txId
       pure txId
     case lmap message ethTxId of
       Left e -> throwError (uuid /\ e)
@@ -554,6 +555,7 @@ submitChain leaderNode batch chain = do
     Left v' -> Just v'
     Right _ -> Nothing
 
+-- For demo purposes: intentionally fails submission to break chain
 submitChainBr
   :: forall a
    . LeaderNode a
@@ -695,10 +697,10 @@ awaitChainConfirmed node chainMap = do
       _.runContract
   for_ (OrderedMap.toArray chainMap) $
     \(uid /\ txHash) -> do
-      log $ "Leader: awaiting confirmation of " <> show uid <> " | " <> show
+      log $ "Leader: Awaiting confirmation of " <> show uid <> " | " <> show
         (encodeAeson txHash)
       runContract $ awaitTxConfirmed txHash
-  log "Leader: chain confirmed"
+  log "Leader: Chain confirmed"
 
 -- | To build a new `LeaderState`
 newLeaderState :: forall a. Int -> Aff $ LeaderState a
