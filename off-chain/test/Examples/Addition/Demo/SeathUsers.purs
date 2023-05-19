@@ -86,7 +86,7 @@ mkNumeratedUserNodes leaderUrl mkRunner refuser setup = do
         leaderUrl
         mkRunner
         ( if Just ix == refuser then
-            (\_ -> pure $ Left "Tx is bad - refuse to sing")
+            (\_ -> pure $ Left "Tx is bad - refuse to sign")
           else (pure <<< Right)
         )
         user

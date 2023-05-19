@@ -68,3 +68,8 @@ As long as the leader and user have a common (transitive) peer,
 they can communicate.
 This is not part of the MVP, and is likely to be a fallback mechanism, as raw IPv4
 should be more efficient.
+
+## MVP demo and documentation documentation
+
+- [Live demo](https://drive.google.com/drive/folders/1efiaoL8dnCGNOG9cwIW4hA6HwlZqPCco?usp=sharing)
+- [Seath framework documentation](./milestone-3-demo.md)

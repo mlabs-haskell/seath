@@ -32,9 +32,9 @@ Although this protocol is really simple, it suffers from the UTXO contention pro
 You can find more details and explanations of the UTXO contention problem in the introductory sections of the following demo recordings:
 
 - [Milestone 2 demo records](https://drive.google.com/drive/folders/1uBvU1d5iAWRd7IvStLEiip83yS8kh5i5?usp=sharing)
-- Milestone 3 demo record - TODO: add links
+- [Milestone 3 demo record](https://drive.google.com/drive/folders/1efiaoL8dnCGNOG9cwIW4hA6HwlZqPCco?usp=sharing)
 
-Seath aims to help developers mitigate issues by enabling transaction chaining. With Seth, it is possible to run a network of nodes where one node acts as the leader and listen users' requests. Users send their requests to the leader, stating the actions they want to perform on the protocol. The leader then builds a chain of non-conflicting transactions and submits it to the blockchain. Transactions are chained by the Seath in a way that allows users of the protocol to perform their step without the fear of encountering UTXO contention problems.
+Seath aims to help developers mitigate issues by enabling transaction chaining. With Seath, it is possible to run a network of nodes where one node acts as the leader and listen users' requests. Users send their requests to the leader, stating the actions they want to perform on the protocol. The leader then builds a chain of non-conflicting transactions and submits it to the blockchain. Transactions are chained by Seath in a way that allows users of the protocol to perform their step without the fear of encountering UTXO contention problems.
 
 The on-chain part of the protocol is represented by a validator script written in PlutusTx, which can be found in the `on-chain` directory of the repository inside the [AdditionValidator.hs](./on-chain/src/AdditionValidator.hs) Haskell module.
 
@@ -65,7 +65,7 @@ The script will be compiled, serialized to CBOR, and inserted into the correct l
 
 ### Off-chain
 
-The Off-chain part contains the Seath framework logic, which is built on top of the [Cardano Transaction Library](https://github.com/Plutonomicon/cardano-transaction-lib) written in PureScript. It has all the required capabilities for the Cardano blockchain.
+The off-chain part contains the Seath framework logic, which is built on top of the [Cardano Transaction Library](https://github.com/Plutonomicon/cardano-transaction-lib) (CTL) written in PureScript. It has all the required capabilities for the Cardano blockchain.
 
 To access the development shell with `spago`, navigate to the **root** of the repository and run:
 
@@ -87,7 +87,7 @@ or run automated end-to-end test for addition protocol with disposable local clu
 spago run -m Seath.Test.Main -b addition-e2e-plutip
 ```
 
-Or run demo on preproduction testnet.
+Or run demo on pre-production testnet.
 
 #### Developing with real network
 
@@ -154,16 +154,16 @@ Seath chains transactions in "rounds":
 - It then takes a batch of requests and:
   - Translates the `actions` into a chain of transactions using the `Core` functionality.
   - Marks the chained transactions as ready to be signed by the users.
-  - Waits for users to sign the transactions. If some users don't respond or explicitly refuse to sign the transaction, the leader figures out where the chain is broken and which transactions can still be submitted. Not-signed transactions are discarded from further processing. Transactions that were signed but can't be submitted due to chain breakage are put into a special priority queue and will be processed first during the next "round." Such transactions will be rebuilt from `actions` from scratch. Users of such transactions will see in the status response that their transaction is in a priority queue for the next "round."
-  - Submits the chain of signed transactions. If any transaction fails, further submission is aborted. Already submitted transactions are marked as processed successfully. Failed transactions are discarded, and the user receives a notification that the transaction failed. The remaining transactions in the chain can't be submitted anymore, so they will be put into a special priority queue and will be processed first during the next "round." Such transactions will be rebuilt from `actions` from scratch. Users of such transactions will see in the status response that their transaction is in a priority queue for the next "round."
+  - Waits for users to sign the transactions. If some users don't respond or explicitly refuse to sign the transaction, the leader figures out where the chain is broken and which transactions can still be submitted. Not-signed transactions are discarded from further processing. Transactions that were signed but cannot be submitted due to chain breakage are put into a special priority queue and will be processed first during the next "round". Such transactions will be rebuilt from `actions` from scratch. Users of such transactions will see in the status response that their transaction is in a priority queue for the next "round".
+  - Submits the chain of signed transactions. If any transaction fails, further submission is aborted. Already submitted transactions are marked as processed successfully. Failed transactions are discarded, and the user receives a notification that the transaction failed. The remaining transactions in the chain can't be submitted anymore, so they will be put into a special priority queue and will be processed first during the next "round". Such transactions will be rebuilt from `actions` from scratch. Users of such transactions will see in the status response that their transaction is in a priority queue for the next "round".
 - After the batch is processed, the leader waits until the submitted chain is confirmed on the blockchain.
-- After the chain is confirmed, the leader starts the next "round," repeating the whole process.
+- After the chain is confirmed, the leader starts the next "round", repeating the whole process.
 
 ## Addition protocol demo
 
 The modules required to run the demo are located in the [Demo directory of Addition example](./off-chain/test/Examples/Addition/Demo/).
 
- `FullLeaderNode.purs` module contains all the necessary setup to start a full Seath node and handle the Addition protocol. Let's start from here and go layer by layer: first, the core functionality, then user and leader logic, and finally the web server.
+ `FullLeaderNode.purs` module contains all the necessary setup to start a full Seath node and handle the Addition protocol. Let us start from here and go layer by layer: first, the core functionality, then user and leader logic, and finally the web server.
 
 ### Core functionality
 
@@ -180,14 +180,14 @@ To create a Seath node in `FullLeaderNode.purs`, we first obtain the `CoreConfig
 
 (for more details on running Contracts in CTL see [related docs](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/getting-started.md#setting-up-a-new-project), and there will be also some explanations below)
 
-The result of this call will provide us with `CoreConfiguration` data from the [Seath.Core.Types](./off-chain/test/Examples/Addition/Types.purs) module. It contains the necessary "parts" that a user of the Seath framework will need to define in order to integrate a particular protocol into Seath. Let's take a closer look at what is done to integrate the Addition protocol.
+The result of this call will provide us with `CoreConfiguration` data from the [Seath.Core.Types](./off-chain/test/Examples/Addition/Types.purs) module. It contains the necessary "parts" that a user of the Seath framework will need to define in order to integrate a particular protocol into Seath. Let us take a closer look at what is done to integrate the Addition protocol.
 
 To produce `CoreConfiguration`, you will need a total of 4 pieces:
 
 - The public key hash of the leader - `leader` field.
 - The hash of the validator script that will hold state UTXOs of the protocol - `stateValidatorHash` field.
 - A function that can interpret the user's `actions` into lookups and constraints - `actionHandler`. This function enables transaction chaining.
-- A CTL Contract that can query the state of the protocol from the blockchain - `queryBlockchainState`. To build a new chain, Seath need to determine the current state of the protocol. Once it have that information, it can pass changes to the initial state from one transaction in the chain to another. When the chain is submitted, Seth will use this function again to start building a new chain with the current state acquired from the blockchain.
+- A CTL Contract that can query the state of the protocol from the blockchain - `queryBlockchainState`. To build a new chain, Seath need to determine the current state of the protocol. Once it has that information, it can pass changes to the initial state from one transaction in the chain to another. When the chain is submitted, Seath will use this function again to start building a new chain with the current state acquired from the blockchain.
 
 `Action` refers to a step in the protocol that the user wishes to perform, expressed via a certain type. In the Addition protocol, users want to increment the current state, represented by a number, by a certain amount. To accomplish this, the following type from the `Types.purs` module of the Addition example is used.
 
@@ -197,7 +197,7 @@ newtype AdditionAction = AddAmount BigInt
 
 So there is our `action` - add some amount. This type need to be JSON serializable, so nodes can send data over the network.
 
-Now we need to define how to apply this `action` to the current protocol state. Usually, we will create a contract that builds a transaction which gets the current state, modifies it, and creates a new output with the updated state. In the case of Seath, we don't need to build a full transaction. Instead, we need to define how the current `action` should change the state on-chain, make corresponding transaction constraints and lookups (CTL contracts were inspired by `plutus-apps` contracts), and describe the new state.
+Now we need to define how to apply this `action` to the current protocol state. Usually, we will create a contract that builds a transaction which gets the current state, modifies it, and creates a new output with the updated state. In the case of Seath, we do not need to build a full transaction. Instead, we need to define how the current `action` should change the state on-chain, make corresponding transaction constraints and lookups (CTL contracts were inspired by `plutus-apps` contracts), and describe the new state.
 
 In the case of the Addition protocol, the state is described by the `AdditionState` type from `Types.purs` and is simply a number that reflects the state representation on-chain.
 
@@ -205,7 +205,7 @@ In the case of the Addition protocol, the state is described by the `AdditionSta
 type AdditionState = BigInt
 ```
 
-For `actionHandler` we need to provide function with the following type:
+For `actionHandler` we need to provide a function with the following type:
 
 ```haskell
 handleAction
@@ -222,23 +222,23 @@ handleAction userAction lockedValue getScriptUtxos = ...
 
 `userAction` is `AdditionAction` wrapped in `UserAction`. `UserAction` is part of the internal Seath machinery and does not need to be constructed by the user of the framework.
 
-`lockedValue` is representation of on-chain state - `AdditionState` type. It is passed by the State framework under the hood during chaining.
+`lockedValue` is a representation of the on-chain state - `AdditionState` type. It is passed by the State framework under the hood during chaining.
 
 `getScriptUtxos` is a function provided (injected) by the Seath framework. It gives access to the current or predicted outputs at the validator script address, depending on whether the `action` is first in the chain or not.
 
-You can find full code in [Seath.Test.Examples.Addition.Actions.handleAction](./off-chain/test/Examples/Addition/Actions.purs). Here we extract the addition amount from the `AddAmount` constructor of the `action`. We then get the validator script hash and current (or predicted during chaining) UTXOs from the validator script that holds the protocol state. Finally, we build the required parts for a future transaction: Datum, Redeemer, constraints, and lookups. If you familiar with [state machines from Plutus Pioneer Program](https://plutus-pioneer-program.readthedocs.io/en/latest/week7.html#code-example-2), you may see a closely related idea here. We describe how to perform a single step on some state depending on input without building the transaction explicitly by hand.
+You can find the full code in [Seath.Test.Examples.Addition.Actions.handleAction](./off-chain/test/Examples/Addition/Actions.purs). Here we extract the addition amount from the `AddAmount` constructor of the `action`. We then get the validator script hash and current (or predicted during chaining) UTXOs from the validator script that holds the protocol state. Finally, we build the required parts for a future transaction: Datum, Redeemer, constraints, and lookups. If you are familiar with [state machines from Plutus Pioneer Program](https://plutus-pioneer-program.readthedocs.io/en/latest/week7.html#code-example-2), you may see a closely related idea here. We describe how to perform a single step on some state depending on input without building the transaction explicitly by hand.
 
 With `handleAction` done, we have one pice for `CoreConfiguration` ready.
 
 The next required piece of code is also located in `Seath.Test.Examples.Addition.Actions` and is named `queryBlockchainState`. In the case of the Addition protocol, it is a simple CTL Contract that can query the script validator of the protocol. The script validator was compiled and serialized from the `on-chain` part and injected as CBOR into [Seath.Test.Examples.Addition.Validator](./off-chain/test/Examples/Addition/Validator.purs). Using several helper functions `queryBlockchainState` can use CBOR from `Seath.Test.Examples.Addition.Validator` to build the CTL Contract that can query UTXOs from the script and extract the current Datum, which represents the protocol state.
 
-The last two pieces needed are much simpler - the hash of the validator script and the hash of the leader public key. You can check out how to obtain them in the case of the Addition example in  [Seath.Test.Examples.Addition.ContractUtils.buildAdditionCoreConfig](./off-chain/test/Examples/Addition/ContractUtils.purs). Getting the script hash is straightforward - we just use helper functions to deserialize CBOR and obtain the script's hash. For the leader key, we get it by running another CTL Contract using the `KeyWallet` feature provided by CTL. Depending on the environment, it can return either the hash of the key generated for pre-production testnet or the hash of the key generated by the plutip tool when Seath runs on a private local cluster. In the current demo, we run Seath on pre-production testnet, and the required keys are located in the [keys dir](./off-chain/test/keys/seath_keys/).
+The last two pieces needed are much simpler - the hash of the validator script and the hash of the leader public key. You can check out how to obtain them in the case of the Addition example in  [Seath.Test.Examples.Addition.ContractUtils.buildAdditionCoreConfig](./off-chain/test/Examples/Addition/ContractUtils.purs). Getting the script hash is straightforward - we just use helper functions to deserialize CBOR and obtain the script's hash. For the leader key, we get it by running another CTL Contract using the `KeyWallet` feature provided by CTL. Depending on the environment, it can return either the hash of the key generated for pre-production testnet or the hash of the key generated by the Plutip tool when Seath runs on a private local cluster. In the current demo, we run Seath on pre-production testnet, and the required keys are located in the [keys dir](./off-chain/test/keys/seath_keys/).
 
-That's it for the `Core` part. With `CoreConfiguration`, the Seath node will be able to build transactions and chain them to run the Addition protocol.
+That is it for the `Core` part. With `CoreConfiguration`, the Seath node will be able to build transactions and chain them to run the Addition protocol.
 
 ### User and Leader logic
 
-If we further examine `FullLeaderNode.purs` we'll see:
+If we further examine `FullLeaderNode.purs` we will see:
 
 ```haskell
     mkRunner :: KeyWallet -> RunContract
@@ -256,13 +256,13 @@ If we further examine `FullLeaderNode.purs` we'll see:
       (pure <<< Right)
 ```
 
-Lets start from the top.
+Let us start from the top.
 
 #### Contract runner
 
-The first thing to note is the creation of the `RunContract`, which is used then to create leader and user configs. Both the leader and user logic use CTL contracts to interact with the blockchain, so they need a way to run Contracts. CTL can execute contracts in several environments, including using cardano-cli-generated keys or integrating with light wallets. In this case, we're using cardano-cli-generated keys and the `KeyWallet` CTL feature to run Contracts using them.
+The first thing to note is the creation of the `RunContract`, which is then used to create leader and user configs. Both the leader and user logic use CTL contracts to interact with the blockchain, so they need a way to run Contracts. CTL can execute contracts in several environments, including using cardano-cli-generated keys or integrating with light wallets. In this case, we are using cardano-cli-generated keys and the `KeyWallet` CTL feature to run Contracts using them.
 
-We construct a function that can use `KeyWallet` and the current CTL environment (see docs for CTL's `withContractEnv`) to build a function that can execute a contract using the provided key inside the `Seath node`.
+We construct a function that can use `KeyWallet` and the current CTL environment (see docs for CTL's [withContractEnv](https://github.com/Plutonomicon/cardano-transaction-lib/blob/develop/doc/contract-environment.md)) to build a function that can execute a contract using the provided key inside the `Seath node`.
 
 #### Leader node config
 
@@ -270,7 +270,7 @@ The `Seath.mkLeaderConfig` function builds the configuration for the internal `L
 
 The current configurable options are:
 
-- Timeout before the leader starts processing user actions - in milliseconds. No matter how many `actions` currently in the leader's mailbox queue (see next option), after this period of time, the leader will start processing them anyway.
+- Timeout before the leader starts processing user actions - in milliseconds. No matter how many `actions` currently in the leader's "mailbox" queue (see next option), after this period of time, the leader will start processing them anyway.
 - Number of user `actions` in the leader's "mailbox" that will trigger chain building and submission. When the leader receives a request from the user to submit their `action` to the chain, the action is added to the leader's queue first. When the number of `actions` reaches this threshold, the leader pulls the actions from the queue and starts processing them.
 - Time that the leader waits for signatures - in milliseconds. After the leader starts processing user actions, it builds a chain of transactions from them according to the provided `CoreConfiguration`. Once the chain is ready, the leader waits for users to sign their transactions. After this timeout, the leader checks the signed transactions it received from users and submits them. If a transaction was not signed on time or the user rejected signing it, it will be discarded from the processing pipeline.
 
@@ -341,11 +341,11 @@ We use the framework function `mkUserConfig` to configure the nodes in the same 
   numeratedNodes <- mkNumeratedUserNodes leaderUrl mkRunner refuser setup
 ```
 
-The current demo setup for the preproduction network involves actions from four users. By setting `refuser = Just 2`, we force user `2` to refuse to sign the transaction, causing a chain break and recovery. To make all users sign their transactions, set the flag to `Nothing`.
+The current demo setup for the pre-production network involves actions from four users. By setting `refuser = Just 2`, we force user `2` to refuse to sign the transaction, causing a chain break and recovery. To make all users sign their transactions, set the flag to `Nothing`.
 
 `mkNumeratedUserNodes` will start four `UserNode`s that are still capable of sending actions to the leader and tracking the status of the transaction.
 
-`mkNumeratedUserNodes` returns an `Array` of already running `UserNode`'s together with their indexes. From here, we can submit an `action` directly to the node, and the node will process the `action`, send a request to the leader, start monitoring the status of the transaction and sign it when needed (or refuse signing).
+`mkNumeratedUserNodes` returns an `Array` of already running `UserNodes` together with their indexes. From here, we can submit an `action` directly to the node, and the node will process the `action`, send a request to the leader, start monitoring the status of the transaction and sign it when needed (or refuse signing).
 
 ```haskell
   for_ numeratedNodes $ \(ix /\ node) -> do
@@ -353,7 +353,7 @@ The current demo setup for the preproduction network involves actions from four 
     node `Users.performAction` (AddAmount $ BigInt.fromInt ix)
 ```
 
-After this, process will continue running until it is interrupted. After interruption, the scenario will output the results for each user's submitted actions. This output can include information about successfully submitted transactions or errors encountered during the process:
+After this, the process will continue running until it is interrupted. After interruption, the scenario will output the results for each user's submitted actions. This output can include information about successfully submitted transactions or errors encountered during the process:
 
 ```haskell
   liftEffect $ onSignal SIGINT $ launchAff_ do
@@ -377,4 +377,4 @@ There are some limitations in the current version, but they are not fundamental 
 
 - Users cannot send another `action` until the previous action is still in progress. When a user submits an action, the data that is sent to the leader includes the user's public key hash. This way, the leader can detect that there is already an `action` in process from this user. The reason for this is that when a user submits an action, they also submit inputs from their address to balance the transaction. At the moment, the algorithm just grabs all UTXOs from the user's address. Sending the same UTXOs twice will cause the 2nd transaction from the same user in the chain to fail. So the problem can be solved by a smarter way of picking input UTXOs on the user side.
 - The leader must be known upfront. With the current state, we need to know the leader URL and public key upfront before starting the node. This makes it impossible to change the leader dynamically without a node restart. However, this may be improved during further development, and the current architecture does not introduce any blockers for this.
-- When a user refuses to sign a transaction, the rest of the transactions in the chain are moved to a priority queue for the next round, which can potentially slow down the submission of `action`s. During further development, we could try to continue the chain from the breakage point by re-building and re-signing such transactions right away, without putting them in the queue for the next round.
+- When a user refuses to sign a transaction, the rest of the transactions in the chain are moved to a priority queue for the next "round", which can potentially slow down the submission of `action`s. During further development, we could try to continue the chain from the breakage point by re-building and re-signing such transactions right away, without putting them in the queue for the next "round".

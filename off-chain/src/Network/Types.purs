@@ -133,8 +133,8 @@ derive instance Newtype GetActionStatus _
 
 data ActionStatus
   = AskForSignature
-      { uuid :: UUID -- Remove it? we don't need anymore with current types.
-      , txCborHex :: String -- TODO: maybe separate type?
+      { uuid :: UUID
+      , txCborHex :: String
       }
   | ToBeProcessed Int
   | ToBeSubmitted Int

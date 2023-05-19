@@ -115,7 +115,7 @@ sendSignedTransactionToLeader userNode uuid signedTx = do
   cbor <- try $ TxHex.toCborHex tx
   case cbor of
     Left e -> do
-      let msg = "User: could not serialize signed Tx to CBOR: " <> show e
+      let msg = "User: Could not serialize signed Tx to CBOR: " <> show e
       log msg
       pure $ pure msg
     Right (cbor' :: String) -> do
@@ -123,15 +123,15 @@ sendSignedTransactionToLeader userNode uuid signedTx = do
         (wrap { uuid: uuid, txCborHex: cbor' })
       case res of
         Left e -> do
-          let msg = "User: failed to send signed Tx to leader: " <> show e
+          let msg = "User: Failed to send signed Tx to leader: " <> show e
           log $ msg
           pure $ pure msg
         Right (Left e) -> do
-          let msg = "User: failed to send signed Tx to leader: " <> show e
+          let msg = "User: Failed to send signed Tx to leader: " <> show e
           log $ msg
           pure $ pure msg
         Right (Right _) -> do
-          log "User: signed Tx sent successfully"
+          log "User: Signed Tx sent successfully"
           pure Nothing
 
 -- | We refuse to sign the given transaction and inform the server
@@ -143,7 +143,7 @@ sendRejectionToLeader
   -> Aff Unit
 sendRejectionToLeader userNode uuid = do
   res <- try $ (getNetworkHandlers userNode).refuseToSign uuid
-  log $ "User: refusing to sing " <> show uuid <> ", result: " <> show res
+  log $ "User: Refusing to sing " <> show uuid <> ", result: " <> show res
 
 -- | The right function to begin the process of a new action (don't use `sendActionToLeader`)
 performAction :: forall a. UserNode a -> a -> Aff Unit
@@ -163,9 +163,10 @@ performAction userNode action = do
           , previousStatus: ToBeProcessed (-1)
           }
     Right (Left refused) ->
-      log $ "User: leader refused to include action: " <> show refused
-    Left err -> log $ "User: unexpected: failed to submit action to Leader " <>
-      show (message err)
+      log $ "User: Leader refused to include action: " <> show refused
+    Left err -> log $
+      "User: Unexpected error: failed to submit action to Leader " <>
+        show (message err)
 
 startUserNode
   :: forall a
@@ -288,13 +289,13 @@ makeActionsSentHandler userNode record = launchAff_ $
     Submitted txH -> do
       putToResults userNode $ makeResult (Right txH)
       modifyActionsSent userNode (OrderedMap.delete record.uuid)
-      log $ "User: action submited! Removing from status check."
+      log $ "User: Action submitted! Removing from status check."
     SubmissionFailed err -> do
       putToResults userNode $ makeResult (Left err)
       modifyActionsSent userNode (OrderedMap.delete record.uuid)
-      log $ "User: action failed! Removing from status check. Error: " <> err
+      log $ "User: Action failed! Removing from status check. Error: " <> err
     NotFound -> do
-      log $ "User: status for action " <> show record.uuid <> ": " <> show
+      log $ "User: Status for action " <> show record.uuid <> ": " <> show
         NotFound
       case record.previousStatus of
         AskForSignature _ ->
@@ -346,7 +347,6 @@ startActionStatusCheck userNode = do
   check = do
     sent <- readSentActions userNode
     for_ sent $ \(uuid /\ action /\ previousStatus) -> do
-      -- TODO: push to Queue
       res <- try $ getActionStatus userNode uuid
       case res of
         Right status ->
